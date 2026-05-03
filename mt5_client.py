@@ -64,6 +64,11 @@ def get_candles(symbol, timeframe, n):
         # try to find a close match in available symbols
         try:
             syms = mt5.symbols_get()
+            if syms is None:
+                # MT5 desconectado — no intentar iterar sobre None
+                msg = f"MT5 disconnected, cannot get symbols for {symbol}"
+                logger.error(msg)
+                raise RuntimeError(msg)
             matches = [s.name for s in syms if symbol.lower() in s.name.lower()]
             if matches:
                 new_sym = matches[0]
