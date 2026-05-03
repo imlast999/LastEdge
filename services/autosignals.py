@@ -7,6 +7,7 @@ Consolidado desde bot.py para reducir el tamaño del archivo principal.
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 import discord
@@ -279,6 +280,32 @@ class AutoSignalsService:
 
                 # Actualizar cooldown — evitar spam del mismo par
                 self._last_signal_time[symbol] = datetime.now(timezone.utc)
+
+                # ── MODO REAL: ejecutar orden en MT5 si está activo ───────────
+                auto_execute = os.getenv('AUTO_EXECUTE_SIGNALS', '0') == '1'
+                min_confidence = os.getenv('AUTO_EXECUTE_CONFIDENCE', 'HIGH')
+                confidence_rank = {'LOW': 0, 'MEDIUM': 1, 'MEDIUM-HIGH': 2, 'HIGH': 3, 'VERY_HIGH': 4}
+                signal_rank = confidence_rank.get(confidence, 0)
+                required_rank = confidence_rank.get(min_confidence, 3)
+
+                if auto_execute and signal_rank >= required_rank:
+                    try:
+                        from services.execution import get_execution_service
+                        exec_svc = get_execution_service()
+                        exec_result = exec_svc.execute_signal(signal)
+                        if exec_result.success:
+                            log_event(
+                                f"✅ ORDEN REAL ejecutada: {signal_type} {symbol} @ {entry:.5f} "
+                                f"| Ticket: {exec_result.order_id}",
+                                "INFO", "AUTOSIGNAL"
+                            )
+                        else:
+                            log_event(
+                                f"❌ Error ejecutando orden real: {exec_result.message}",
+                                "ERROR", "AUTOSIGNAL"
+                            )
+                    except Exception as exec_err:
+                        log_event(f"❌ Error en ejecución real: {exec_err}", "ERROR", "AUTOSIGNAL")
                 
                 # Actualizar dashboard
                 try:

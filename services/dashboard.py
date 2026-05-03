@@ -79,6 +79,9 @@ class DashboardService:
         self.is_running = False
         self.update_thread = None
         self.lock = threading.Lock()
+        # Estado de ejecución real (sincronizado con autosignals)
+        self.auto_execute_enabled = os.getenv('AUTO_EXECUTE_SIGNALS', '0') == '1'
+        self.auto_execute_confidence = os.getenv('AUTO_EXECUTE_CONFIDENCE', 'HIGH')
         if self.dashboard_config['enable_persistence']:
             self._load_persisted_data()
 
@@ -146,6 +149,55 @@ class DashboardService:
                             self.end_headers()
                             try:
                                 self.wfile.write(csv)
+                            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                pass
+
+                        elif self.path == '/api/execution-status':
+                            # Estado actual del modo de ejecución
+                            status = {
+                                'auto_execute': dashboard_service.auto_execute_enabled,
+                                'confidence': dashboard_service.auto_execute_confidence,
+                            }
+                            body = json.dumps(status).encode('utf-8')
+                            self.send_response(200)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            try:
+                                self.wfile.write(body)
+                            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                pass
+
+                        elif self.path == '/api/enable-real':
+                            # Activar modo real (ejecuta órdenes en MT5)
+                            dashboard_service.auto_execute_enabled = True
+                            dashboard_service.auto_execute_confidence = 'MEDIUM-HIGH'
+                            # Persistir en .env en memoria (no en disco por seguridad)
+                            os.environ['AUTO_EXECUTE_SIGNALS'] = '1'
+                            os.environ['AUTO_EXECUTE_CONFIDENCE'] = 'MEDIUM-HIGH'
+                            logger.warning("MODO REAL ACTIVADO desde el dashboard")
+                            body = json.dumps({'ok': True, 'mode': 'REAL'}).encode('utf-8')
+                            self.send_response(200)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            try:
+                                self.wfile.write(body)
+                            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                pass
+
+                        elif self.path == '/api/disable-real':
+                            # Volver a modo paper trading
+                            dashboard_service.auto_execute_enabled = False
+                            os.environ['AUTO_EXECUTE_SIGNALS'] = '0'
+                            logger.warning("Modo real DESACTIVADO — volviendo a paper trading")
+                            body = json.dumps({'ok': True, 'mode': 'PAPER'}).encode('utf-8')
+                            self.send_response(200)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            try:
+                                self.wfile.write(body)
                             except (ConnectionAbortedError, BrokenPipeError, OSError):
                                 pass
                         else:
@@ -591,19 +643,82 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
     <div class="section-title" style="margin-bottom:0">Señales de esta sesión (P&amp;L en tiempo real)</div>
     <a href="/api/export" class="export-btn" download>⬇ CSV</a>
-  </div>
-  <table>
+  </div>  <table>
     <thead><tr><th>Hora</th><th>Par</th><th>Dir</th><th>Confianza</th><th>Entry</th><th style="color:var(--red)">SL</th><th style="color:var(--green)">TP</th><th>R:R</th><th>Estado</th><th>Enviada</th></tr></thead>
     <tbody>{recent_rows}</tbody>
   </table>
 </div>
 
+<div id="real-mode-banner" style="display:{'none' if not self.auto_execute_enabled else 'flex'};background:rgba(248,81,73,.12);border:1px solid #f85149;border-radius:8px;padding:14px 18px;margin-bottom:20px;align-items:center;gap:12px">
+  <span style="font-size:18px">⚠️</span>
+  <div>
+    <div style="color:#f85149;font-weight:700;font-size:14px">MODO REAL ACTIVO — Las señales se ejecutan automáticamente en MT5</div>
+    <div style="color:#8b949e;font-size:12px;margin-top:2px">Confianza mínima: MEDIUM-HIGH · Las órdenes usan dinero real de la cuenta conectada</div>
+  </div>
+  <button onclick="disableReal()" style="margin-left:auto;background:rgba(248,81,73,.2);color:#f85149;border:1px solid #f85149;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">Desactivar</button>
+</div>
+
 <div class="footer">
   <span>Puerto: <a href="http://localhost:{port}">:{port}</a> · <a href="/api/metrics">API JSON</a> · <a href="/api/export">Export CSV</a></span>
-  <span>Auto-execute: OFF · Solo señales Discord</span>
+  <span id="exec-status">{'🔴 Modo real ACTIVO' if self.auto_execute_enabled else '🟡 Paper trading · Solo señales Discord'}</span>
 </div>
+
+<div style="position:fixed;bottom:24px;right:24px;z-index:999">
+  <button id="real-btn" onclick="{'disableReal()' if self.auto_execute_enabled else 'confirmReal()'}"
+    style="background:{'rgba(248,81,73,.15)' if self.auto_execute_enabled else 'rgba(63,185,80,.15)'};
+           color:{'#f85149' if self.auto_execute_enabled else '#3fb950'};
+           border:1px solid {'#f85149' if self.auto_execute_enabled else '#3fb950'};
+           padding:10px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;
+           box-shadow:0 4px 12px rgba(0,0,0,.4)">
+    {'🔴 Desactivar modo real' if self.auto_execute_enabled else '🟢 Activar modo real'}
+  </button>
 </div>
-<script>setTimeout(()=>location.reload(),30000);</script>
+
+<div id="confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#161b22;border:1px solid #f85149;border-radius:12px;padding:32px;max-width:480px;width:90%;text-align:center">
+    <div style="font-size:32px;margin-bottom:16px">⚠️</div>
+    <div style="font-size:18px;font-weight:700;color:#f0f6fc;margin-bottom:12px">Activar Modo Real</div>
+    <div style="color:#8b949e;font-size:14px;line-height:1.6;margin-bottom:24px">
+      Al activar el modo real, el bot ejecutará órdenes automáticamente en la cuenta de
+      <strong style="color:#e6edf3">MetaTrader 5 conectada</strong>.<br><br>
+      Las señales con confianza <strong style="color:#58a6ff">MEDIUM-HIGH o HIGH</strong> abrirán
+      posiciones reales usando el riesgo configurado (0.5–0.75% por trade).<br><br>
+      <strong style="color:#f85149">Esto implica pérdidas o ganancias reales de dinero.</strong>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:center">
+      <button onclick="cancelReal()"
+        style="background:transparent;color:#8b949e;border:1px solid #30363d;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px">
+        Cancelar
+      </button>
+      <button onclick="enableReal()"
+        style="background:#f85149;color:white;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600">
+        Sí, activar modo real
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+function confirmReal() {{
+  document.getElementById('confirm-modal').style.display = 'flex';
+}}
+function cancelReal() {{
+  document.getElementById('confirm-modal').style.display = 'none';
+}}
+function enableReal() {{
+  document.getElementById('confirm-modal').style.display = 'none';
+  fetch('/api/enable-real').then(r => r.json()).then(d => {{
+    if (d.ok) location.reload();
+  }});
+}}
+function disableReal() {{
+  if (!confirm('¿Desactivar el modo real y volver a paper trading?')) return;
+  fetch('/api/disable-real').then(r => r.json()).then(d => {{
+    if (d.ok) location.reload();
+  }});
+}}
+setTimeout(()=>location.reload(),30000);
+</script>
 </body></html>"""
 
         except Exception as e:
