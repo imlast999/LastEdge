@@ -21,8 +21,6 @@ from strategies import get_strategy
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
-
 # Registry de estrategias disponibles
 # rules_config.json usa eurusd_simple, xauusd_simple, btceur_simple → deben estar registradas
 STRATEGY_REGISTRY = {

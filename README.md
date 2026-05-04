@@ -96,7 +96,7 @@ AUTO_EXECUTE_CONFIDENCE=HIGH
 MT5_RISK_PCT=0.5
 
 # Dashboard
-DASHBOARD_PORT=8080
+DASHBOARD_PORT=5000
 DASHBOARD_HISTORY_HOURS=168   # 7 días de historial
 ```
 
@@ -175,7 +175,7 @@ Para cambiar estrategia: editar `rules_config.json` → campo `"strategy"`.
 
 ## Dashboard
 
-Accesible en `http://localhost:8080` mientras el bot está corriendo. Se actualiza automáticamente cada 30 segundos.
+Accesible en `http://localhost:5000` mientras el bot está corriendo. Se actualiza automáticamente cada 30 segundos.
 
 ### Secciones
 
@@ -315,7 +315,7 @@ BTCEUR no está afectado por noticias macro.
 El bot arranca siempre en **paper trading** (`AUTO_EXECUTE_SIGNALS=0`).
 
 Para activar el modo real:
-1. Abrir el dashboard en `http://localhost:8080`
+1. Abrir el dashboard en `http://localhost:5000`
 2. Pulsar el botón verde **"Activar modo real"** (esquina inferior derecha)
 3. Confirmar el modal de advertencia
 4. Las señales MEDIUM-HIGH y HIGH se ejecutarán automáticamente en MT5

@@ -216,7 +216,7 @@ class DashboardService:
                 def log_message(self, *args):
                     pass
 
-            port = int(os.getenv('DASHBOARD_PORT', '8080'))
+            port = int(os.getenv('DASHBOARD_PORT', '5000'))
 
             def run():
                 try:
@@ -597,7 +597,7 @@ class DashboardService:
                         f'<td>{tot}</td><td>{shw}</td><td>{avg:.2f}</td><td>{ltxt}</td></tr>')
 
             sym_rows = sym_row('EURUSD') + sym_row('XAUUSD') + sym_row('BTCEUR')
-            port = os.getenv('DASHBOARD_PORT', '8080')
+            port = os.getenv('DASHBOARD_PORT', '5000')
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
             return f"""<!DOCTYPE html>

@@ -147,7 +147,7 @@ class BTCEURStrategy(BaseStrategy):
             'expires': datetime.now(timezone.utc) + timedelta(minutes=cfg['expires_minutes']),
             'setup_strength': setup_strength,
             'context': {
-                'strategy': 'btceur_new',
+                'strategy': 'btceur_simple',
                 'confirmations': [
                     {'name': 'EMA_TREND',  'passed': True, 'value': ema_separation, 'description': f'sep={ema_separation:.3f}'},
                     {'name': 'EMA200',     'passed': True, 'value': 1.0,            'description': 'Precio lado EMA200'},
