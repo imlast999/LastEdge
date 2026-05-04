@@ -38,6 +38,9 @@ class DashboardMetrics:
     uptime_seconds: int = 0
     last_signal_time: Optional[datetime] = None
     system_status: str = "RUNNING"
+    # Balance paper acumulado (persiste entre reinicios dentro de la misma semana)
+    paper_balance: float = 0.0          # 0 = usar balance MT5 como base
+    paper_balance_base: float = 0.0     # balance inicial de la sesión de paper
 
 
 @dataclass
@@ -149,6 +152,18 @@ class DashboardService:
                             self.end_headers()
                             try:
                                 self.wfile.write(csv)
+                            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                pass
+
+                        elif self.path == '/api/equity':
+                            # Equity en tiempo real (paper o real)
+                            body = json.dumps(dashboard_service.get_equity_snapshot(), indent=2).encode('utf-8')
+                            self.send_response(200)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            try:
+                                self.wfile.write(body)
                             except (ConnectionAbortedError, BrokenPipeError, OSError):
                                 pass
 
@@ -447,41 +462,45 @@ class DashboardService:
                 else:
                     return 'win' if price <= tp else 'loss' if price >= sl else 'open'
 
-            # Equity simulada
-            risk_pct = 0.0075
-            balance = 5000.0
-            try:
-                import MetaTrader5 as mt5
-                info = mt5.account_info()
-                if info:
-                    balance = float(info.balance)
-            except Exception:
-                pass
+            # ── Equity en tiempo real ─────────────────────────────────────
+            eq_snap      = self.get_equity_snapshot()
+            eq_mode      = eq_snap['mode']
+            eq_balance   = eq_snap['balance']          # cerradas acumuladas
+            eq_floating  = eq_snap['floating_pnl']     # abiertas ahora
+            eq_total     = eq_snap['total_equity']     # lo que se muestra
+            eq_change    = eq_snap['change']
+            eq_pct       = eq_snap['change_pct']
+            eq_base      = eq_snap['base_balance']
+            eq_color     = '#3fb950' if eq_change >= 0 else '#f85149'
+            float_color  = '#3fb950' if eq_floating >= 0 else '#f85149'
+            float_sign   = '+' if eq_floating >= 0 else ''
+            change_sign  = '+' if eq_change >= 0 else ''
 
-            equity = balance; wins_n = losses_n = open_n = 0; eq_pts = [balance]
+            # Winrate (señales cerradas de la sesión)
+            wins_n = sum(1 for e in session_history if e.get('final_status') == 'win')
+            losses_n = sum(1 for e in session_history if e.get('final_status') == 'loss')
+            open_n   = sum(1 for e in session_history if e.get('final_status') == 'open')
+            closed   = wins_n + losses_n
+            wr_pct   = wins_n / closed * 100 if closed > 0 else 0
+            wr_color = '#3fb950' if wr_pct >= 50 else '#d29922' if wr_pct >= 40 else '#f85149'
+
+            # Puntos para el gráfico: balance paper acumulado tras cada señal cerrada
+            eq_pts = [eq_base]
+            risk_pct_val = float(os.getenv('MT5_RISK_PCT', '0.5')) / 100.0
+            running = eq_base
             for ev in session_history:
                 fs = ev.get('final_status')
-                entry = ev.get('entry'); sl = ev.get('sl'); tp = ev.get('tp')
-                if fs == 'win':
-                    wins_n += 1
-                    rr = abs(tp-entry)/abs(entry-sl) if entry and sl and tp and abs(entry-sl)>0 else 1
-                    equity += equity * risk_pct * rr
+                entry = ev.get('entry'); sl_v = ev.get('sl'); tp_v = ev.get('tp')
+                if fs == 'win' and entry and sl_v and tp_v and abs(entry - sl_v) > 0:
+                    rr = abs(tp_v - entry) / abs(entry - sl_v)
+                    running += running * risk_pct_val * rr
+                    eq_pts.append(round(running, 2))
                 elif fs == 'loss':
-                    losses_n += 1; equity -= equity * risk_pct
-                elif fs == 'open':
-                    open_n += 1
-                eq_pts.append(equity)
-
-            eq_change = equity - balance
-            eq_pct    = eq_change / balance * 100 if balance > 0 else 0
-            eq_color  = '#3fb950' if eq_change >= 0 else '#f85149'
-            closed    = wins_n + losses_n
-            wr_pct    = wins_n / closed * 100 if closed > 0 else 0
-            wr_color  = '#3fb950' if wr_pct >= 50 else '#d29922' if wr_pct >= 40 else '#f85149'
-
-            # Sparkline replaced by Chart.js canvas (rendered below)
-            sparkline = ''
-            eq_pts_json = json.dumps([round(v, 2) for v in eq_pts])
+                    running -= running * risk_pct_val
+                    eq_pts.append(round(running, 2))
+            # Añadir punto final con flotante incluido
+            eq_pts.append(round(running + eq_floating, 2))
+            eq_pts_json = json.dumps(eq_pts)
 
             if self.last_mt5_update:
                 d = (datetime.now(timezone.utc) - self.last_mt5_update).total_seconds()
@@ -659,12 +678,20 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
 </div>
 
 <div class="grid-3">
-  <div class="card">
-    <div class="card-title">Equity simulada (paper)</div>
-    <div style="display:flex;align-items:center">
-      <span class="card-value" style="color:{eq_color}">{equity:,.0f} €</span>
+  <div class="card" id="equity-card">
+    <div class="card-title">{'Equity real MT5' if eq_mode == 'real' else 'Equity paper (tiempo real)'}</div>
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span class="card-value" id="eq-total" style="color:{eq_color}">{eq_total:,.2f} €</span>
+      <span style="font-size:13px;color:{eq_color}" id="eq-pct">{change_sign}{eq_pct:.2f}%</span>
     </div>
-    <div class="card-sub">{eq_change:+.2f} € ({eq_pct:+.1f}%) vs balance inicial</div>
+    <div class="card-sub" style="margin-top:6px">
+      Base: {eq_base:,.2f} € &nbsp;·&nbsp;
+      Cerradas: <span style="color:{eq_color}">{change_sign}{eq_change:+.2f} €</span>
+    </div>
+    <div class="card-sub" style="margin-top:2px">
+      Flotante: <span id="eq-float" style="color:{float_color}">{float_sign}{eq_floating:+.2f} €</span>
+      &nbsp;<span style="color:var(--muted);font-size:11px">({open_n} abiertas)</span>
+    </div>
   </div>
   <div class="card">
     <div class="card-title">Winrate paper trading</div>
@@ -679,7 +706,7 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
 </div>
 
 <div class="chart-container-full">
-  <div class="section-title" style="margin-bottom:12px">Curva de Equity (sesión actual)</div>
+  <div class="section-title" style="margin-bottom:12px">Curva de Equity — cerradas + flotante actual</div>
   <canvas id="equityChart" height="80"></canvas>
 </div>
 
@@ -869,6 +896,29 @@ if (Notification && Notification.permission === 'default') {{
 }}
 setInterval(_checkNewSignals, 30000);
 
+// ── Equity en tiempo real (actualiza cada 10s sin recargar) ──────────────
+function _updateEquity() {{
+  fetch('/api/equity').then(function(r) {{ return r.json(); }}).then(function(d) {{
+    var total   = d.total_equity || 0;
+    var change  = d.change || 0;
+    var pct     = d.change_pct || 0;
+    var float_  = d.floating_pnl || 0;
+    var color   = change >= 0 ? '#3fb950' : '#f85149';
+    var fcolor  = float_ >= 0 ? '#3fb950' : '#f85149';
+    var sign    = change >= 0 ? '+' : '';
+    var fsign   = float_ >= 0 ? '+' : '';
+
+    var elTotal = document.getElementById('eq-total');
+    var elPct   = document.getElementById('eq-pct');
+    var elFloat = document.getElementById('eq-float');
+
+    if (elTotal) {{ elTotal.textContent = total.toLocaleString('es-ES', {{minimumFractionDigits:2, maximumFractionDigits:2}}) + ' €'; elTotal.style.color = color; }}
+    if (elPct)   {{ elPct.textContent   = sign + pct.toFixed(2) + '%'; elPct.style.color = color; }}
+    if (elFloat) {{ elFloat.textContent = fsign + float_.toFixed(2) + ' €'; elFloat.style.color = fcolor; }}
+  }}).catch(function() {{}});
+}}
+setInterval(_updateEquity, 10000);
+
 setTimeout(()=>location.reload(),30000);
 </script>
 </body></html>"""
@@ -945,6 +995,7 @@ setTimeout(()=>location.reload(),30000);
                         ev.unrealized_pnl = (move / risk) * 100   # % del riesgo
 
                     # Verificar si tocó TP o SL — estado permanente
+                    prev_status = ev.final_status
                     if ev.signal_type == 'BUY':
                         if price >= ev.tp:
                             ev.final_status = 'win'
@@ -960,8 +1011,103 @@ setTimeout(()=>location.reload(),30000);
                         else:
                             ev.final_status = 'open'
 
+                    # ── Acumular balance paper cuando se cierra una señal ──────
+                    # Solo contabilizar la primera vez que pasa de open→win/loss
+                    if prev_status not in ('win', 'loss') and ev.final_status in ('win', 'loss'):
+                        risk_pct = float(os.getenv('MT5_RISK_PCT', '0.5')) / 100.0
+                        base = self.metrics.paper_balance if self.metrics.paper_balance > 0 else (self.metrics.paper_balance_base or 5000.0)
+                        rr = abs(ev.tp - ev.entry) / risk if risk > 0 else 1.0
+                        if ev.final_status == 'win':
+                            self.metrics.paper_balance = base + base * risk_pct * rr
+                        else:
+                            self.metrics.paper_balance = base - base * risk_pct
+
         except Exception as e:
             logger.debug(f"Simulated positions update error: {e}")
+
+    def get_equity_snapshot(self) -> Dict:
+        """
+        Devuelve un snapshot de la equity actual.
+
+        Modo paper:
+          balance   = balance MT5 base + P&L acumulado de señales cerradas
+          floating  = P&L no realizado de señales OPEN actualmente (en €)
+          total     = balance + floating  ← equity en tiempo real
+
+        Modo real:
+          balance   = balance real MT5
+          floating  = equity MT5 - balance (P&L de posiciones abiertas)
+          total     = equity MT5
+        """
+        try:
+            import MetaTrader5 as mt5
+
+            is_real = self.auto_execute_enabled
+            risk_pct = float(os.getenv('MT5_RISK_PCT', '0.5')) / 100.0
+
+            # Balance base MT5
+            mt5_balance = self.metrics.paper_balance_base or 5000.0
+            mt5_equity  = mt5_balance
+            try:
+                info = mt5.account_info()
+                if info:
+                    mt5_balance = float(info.balance)
+                    mt5_equity  = float(info.equity)
+                    # Inicializar base si aún no está
+                    if self.metrics.paper_balance_base == 0.0:
+                        self.metrics.paper_balance_base = mt5_balance
+                    if self.metrics.paper_balance == 0.0:
+                        self.metrics.paper_balance = mt5_balance
+            except Exception:
+                pass
+
+            if is_real:
+                floating = mt5_equity - mt5_balance
+                base     = mt5_balance
+                return {
+                    'mode': 'real',
+                    'balance': mt5_balance,
+                    'floating_pnl': floating,
+                    'total_equity': mt5_equity,
+                    'change': mt5_equity - base,
+                    'change_pct': ((mt5_equity - base) / base * 100) if base > 0 else 0.0,
+                    'base_balance': base,
+                }
+
+            # ── Modo paper ───────────────────────────────────────────────────
+            paper_balance = self.metrics.paper_balance if self.metrics.paper_balance > 0 else mt5_balance
+            base          = self.metrics.paper_balance_base if self.metrics.paper_balance_base > 0 else mt5_balance
+
+            # P&L flotante de señales OPEN (en €)
+            floating_eur = 0.0
+            with self.lock:
+                for ev in self.signal_history:
+                    if ev.final_status != 'open':
+                        continue
+                    if not (ev.entry and ev.sl and ev.tp and ev.shown and ev.unrealized_pnl is not None):
+                        continue
+                    risk_eur = paper_balance * risk_pct
+                    floating_eur += risk_eur * (ev.unrealized_pnl / 100.0)
+
+            total_equity = paper_balance + floating_eur
+            change       = total_equity - base
+
+            return {
+                'mode': 'paper',
+                'balance': paper_balance,
+                'floating_pnl': floating_eur,
+                'total_equity': total_equity,
+                'change': change,
+                'change_pct': (change / base * 100) if base > 0 else 0.0,
+                'base_balance': base,
+            }
+
+        except Exception as e:
+            logger.debug(f"get_equity_snapshot error: {e}")
+            return {
+                'mode': 'paper', 'balance': 5000.0, 'floating_pnl': 0.0,
+                'total_equity': 5000.0, 'change': 0.0, 'change_pct': 0.0, 'base_balance': 5000.0,
+            }
 
     def _cleanup_old_data(self):
         try:
@@ -1005,6 +1151,8 @@ setTimeout(()=>location.reload(),30000);
                     'symbol_activity': dict(self.metrics.symbol_activity),
                     'symbol_performance': self.metrics.symbol_performance,
                     'confidence_distribution': dict(self.metrics.confidence_distribution),
+                    'paper_balance': self.metrics.paper_balance,
+                    'paper_balance_base': self.metrics.paper_balance_base,
                 },
                 'signal_history': history_serialized,
                 'last_save': datetime.now(timezone.utc).isoformat(),
@@ -1034,6 +1182,10 @@ setTimeout(()=>location.reload(),30000);
             self.metrics.symbol_performance = m.get('symbol_performance', {})
             for conf, cnt in m.get('confidence_distribution', {}).items():
                 self.metrics.confidence_distribution[conf] = cnt
+            # Restaurar balance paper acumulado
+            if m.get('paper_balance', 0) > 0:
+                self.metrics.paper_balance      = float(m['paper_balance'])
+                self.metrics.paper_balance_base = float(m.get('paper_balance_base', m['paper_balance']))
             cutoff = datetime.now(timezone.utc) - timedelta(hours=168)
             for ev_data in data.get('signal_history', []):
                 try:
