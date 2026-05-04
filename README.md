@@ -1,12 +1,16 @@
 # 🤖 BOT MT5 — Trading Automatizado con Discord
 
-Bot de trading para MetaTrader 5 con integración Discord, backtesting histórico y paper trading.
+Bot de trading para MetaTrader 5 con integración Discord, backtesting histórico, paper trading y modo real.
 
 ---
 
 ## Inicio rápido
 
 ```bash
+# Opción 1: script automático (instala dependencias y arranca)
+start_bot.bat
+
+# Opción 2: manual
 pip install -r requirements.txt
 python bot.py
 ```
@@ -36,7 +40,7 @@ core/
   circuit_breaker.py      # Circuit breaker y risk scaling
 
 services/
-  autosignals.py          # Loop de escaneo automático
+  autosignals.py          # Loop de escaneo automático (90s)
   dashboard.py            # Dashboard web (puerto 8080)
   execution.py            # Ejecución de órdenes MT5
   logging.py              # Sistema de logging inteligente
@@ -45,11 +49,14 @@ services/
 
 strategies/
   base.py                 # Clase base con indicadores comunes
-  eurusd.py               # Estrategia EURUSD (activa)
-  xauusd.py               # Estrategia XAUUSD (activa)
-  btceur_new.py           # Estrategia BTCEUR baseline (activa)
-  btc_trend_pullback_v1.py  # Estrategia BTCEUR alternativa
+  eurusd.py               # eurusd_simple (fallback)
+  eurusd_asian_breakout.py  # Estrategia activa EURUSD ⭐
+  xauusd.py               # xauusd_simple (activa)
+  btceur_new.py           # btceur_simple (activa)
+  btc_trend_pullback_v1.py  # Alternativa BTCEUR
+  btceur_weekly_breakout.py # Alternativa BTCEUR
   eurusd_mtf.py           # EURUSD multi-timeframe (experimental)
+  xauusd_psychological.py # Reversión niveles psicológicos (experimental)
 
 tests/
   backtest_runner.py      # Script de backtesting CLI
@@ -72,44 +79,47 @@ AUTHORIZED_USER_ID=...
 # MT5
 MT5_LOGIN=...
 MT5_PASSWORD=...
-MT5_SERVER=...
+MT5_SERVER=...            # ej: ICMarkets-Demo
 
 # Trading
 AUTOSIGNALS=1
-AUTOSIGNAL_INTERVAL=90
+AUTOSIGNAL_INTERVAL=90    # segundos entre escaneos
 AUTOSIGNAL_SYMBOLS=EURUSD,XAUUSD,BTCEUR
 
-# Auto-ejecución — DESACTIVADA para paper trading
-AUTO_EXECUTE_SIGNALS=0
+# Auto-ejecución
+AUTO_EXECUTE_SIGNALS=0    # 0=paper trading, 1=órdenes reales
 AUTO_EXECUTE_CONFIDENCE=HIGH
 
 # Riesgo
 MT5_RISK_PCT=0.5
-MAX_TRADES_PER_PERIOD=5
+
+# Dashboard
+DASHBOARD_PORT=8080
+DASHBOARD_HISTORY_HOURS=168   # 7 días de historial
 ```
 
 ---
 
 ## Estrategias activas
 
-Las estrategias están validadas con backtest histórico (~7 meses de datos H1).
-Configuración en `rules_config.json`.
+Validadas con backtest histórico (~7 meses de datos H1).
 
-### EURUSD — `eurusd_simple`
+### EURUSD — `eurusd_asian_breakout` ⭐ (recomendada)
 
-Tendencia confirmada + retroceso a EMA20.
+Breakout del rango asiático durante sesión de Londres.
 
 | Parámetro | Valor |
 |---|---|
 | Timeframe | H1 |
-| Filtro tendencia | EMA20 > EMA50, precio > EMA200 |
-| Entrada | Retroceso a EMA20 (≤ 0.3%) |
-| RSI | 38–62 |
-| SL | 2.0× ATR |
-| TP | 4.0× ATR |
-| R:R | 2.0 |
-| Riesgo/trade | 0.75% |
-| **Profit factor** | **1.28** (3000 velas H1) |
+| Sesión entrada | Londres 07:00–11:00 UTC |
+| Rango | Asia 00:00–06:00 UTC |
+| Entrada | Cierre > asia_high + buffer (BUY) / < asia_low - buffer (SELL) |
+| SL | Extremo opuesto del rango asiático |
+| TP | entry ± range × 1.5 |
+| Filtros | No viernes, rango mínimo 5 pips, máximo 80 pips |
+| Max señales | 1 por día |
+| **Winrate backtest** | **56.5%** |
+| **Profit factor** | **1.30** (3000 velas H1) |
 
 ### XAUUSD — `xauusd_simple`
 
@@ -126,7 +136,7 @@ Momentum en tendencia con filtro EMA200.
 | Riesgo/trade | 0.60% |
 | **Profit factor** | **1.28** (5000 velas H1) |
 
-### BTCEUR — `btceur_simple` (baseline recomendado)
+### BTCEUR — `btceur_simple` (baseline)
 
 Tendencia EMA + MACD + volatilidad.
 
@@ -141,44 +151,17 @@ Tendencia EMA + MACD + volatilidad.
 | Riesgo/trade | 0.50% |
 | **Profit factor** | **1.30** (5000 velas H1) |
 
-### BTCEUR — `btc_trend_pullback_v1` (alternativa)
+### Estrategias alternativas disponibles
 
-Trend following H4 + pullback a EMA20 H1.
+| Estrategia | Par | Estado |
+|---|---|---|
+| `eurusd_simple` | EURUSD | Fallback (PF 1.28) |
+| `btc_trend_pullback_v1` | BTCEUR | Alternativa (PF 1.20) |
+| `btceur_weekly_breakout` | BTCEUR | Experimental (PF 3.70, racha 29) |
+| `xauusd_psychological` | XAUUSD | Experimental (WR 70%, PF negativo) |
+| `eurusd_mtf` | EURUSD | Experimental (necesita más histórico) |
 
-| Parámetro | Valor |
-|---|---|
-| Timeframes | H4 (tendencia) + H1 (entrada) |
-| Filtro H4 | EMA50 > EMA200, precio > EMA50 |
-| Entrada H1 | Pullback a EMA20 (≤ 1.2%) + RSI 45–60 |
-| SL | 1.5× ATR H1 |
-| TP | 4.5× ATR H1 |
-| R:R | 3.0 |
-| Riesgo/trade | 0.50% |
-| **Profit factor** | **1.20** (3000 velas H1) |
-
-Para activar: cambiar en `rules_config.json` → `"strategy": "btc_trend_pullback_v1"`
-
----
-
-## Backtesting
-
-```bash
-# Modo interactivo (pregunta par, estrategia y velas)
-python tests/backtest_runner.py
-
-# Directo
-python tests/backtest_runner.py --symbol EURUSD --bars 3000
-python tests/backtest_runner.py --symbol XAUUSD --strategy xauusd_simple --bars 5000
-python tests/backtest_runner.py --symbol BTCEUR --strategy btc_trend_pullback_v1 --bars 3000
-python tests/backtest_runner.py --all --bars 3000 --save
-
-# Estrategias disponibles por par
-# EURUSD : eurusd_simple, eurusd_advanced, eurusd_mtf
-# XAUUSD : xauusd_simple, xauusd_reversal, xauusd_momentum
-# BTCEUR : btceur_simple, btc_trend_pullback_v1
-```
-
-Los resultados se guardan en `backtest_results/` como CSV.
+Para cambiar estrategia: editar `rules_config.json` → `"strategy": "nombre"`
 
 ---
 
@@ -186,7 +169,75 @@ Los resultados se guardan en `backtest_results/` como CSV.
 
 Accesible en `http://localhost:8080` mientras el bot está corriendo.
 
-Muestra: estado del sistema, señales del día, circuit breaker, pares monitoreados, historial de señales (48h).
+### Secciones
+
+**KPIs superiores**
+- Estado del sistema y uptime
+- Señales de la sesión actual
+- Posiciones abiertas en MT5
+- Profit total (paper o real)
+
+**Equity simulada**
+- Calcula cómo habría evolucionado el balance si se hubieran ejecutado todas las señales
+- Sparkline visual con la curva de equity
+- Winrate paper trading en tiempo real (WIN/LOSS/OPEN)
+
+**Circuit Breaker**
+- Estado actual (activo/pausado)
+- Pérdidas y wins consecutivos
+- Multiplicador de riesgo actual
+
+**Pares monitoreados**
+- Estado de cada par (🟢/🟡/🔴)
+- Total de señales y score promedio
+- Tiempo desde última señal
+
+**Tabla de señales (sesión actual)**
+- Entry, SL, TP con colores
+- R:R calculado
+- Estado en tiempo real: WIN ✅ / LOSS ❌ / OPEN +45% (P&L como % del riesgo)
+- Estado persistente — una vez WIN/LOSS no cambia aunque MT5 se desconecte
+
+**Botón modo real** (esquina inferior derecha)
+- 🟢 Activar modo real — abre modal de confirmación con aviso de dinero real
+- 🔴 Desactivar — vuelve a paper trading
+- Sin reinicio necesario
+
+**Exportar CSV**
+- Botón en la tabla y endpoint `/api/export`
+- Descarga todas las señales de los últimos 7 días
+
+### APIs disponibles
+
+| Endpoint | Descripción |
+|---|---|
+| `GET /` | Dashboard HTML |
+| `GET /api/metrics` | Métricas en JSON |
+| `GET /api/history` | Historial de señales (7 días) |
+| `GET /api/export` | Descarga CSV |
+| `GET /api/enable-real` | Activa modo real |
+| `GET /api/disable-real` | Desactiva modo real |
+
+---
+
+## Backtesting
+
+```bash
+# Modo interactivo
+python tests/backtest_runner.py
+
+# Directo
+python tests/backtest_runner.py --symbol EURUSD --strategy eurusd_asian_breakout --bars 3000
+python tests/backtest_runner.py --symbol XAUUSD --bars 5000
+python tests/backtest_runner.py --all --bars 3000 --save
+
+# Estrategias disponibles
+# EURUSD : eurusd_simple, eurusd_advanced, eurusd_mtf, eurusd_asian_breakout
+# XAUUSD : xauusd_simple, xauusd_reversal, xauusd_momentum, xauusd_psychological
+# BTCEUR : btceur_simple, btc_trend_pullback_v1, btceur_weekly_breakout
+```
+
+Los resultados se guardan en `backtest_results/` como CSV.
 
 ---
 
@@ -198,9 +249,23 @@ Implementado en `core/circuit_breaker.py`. Se activa automáticamente:
 |---|---|
 | 2 pérdidas seguidas | Riesgo × 0.8 |
 | 3 pérdidas seguidas | Riesgo × 0.5 |
-| 4 pérdidas seguidas | **Pausa 24h** |
+| 4 pérdidas seguidas | **Pausa 24h automática** |
 | 3 wins seguidos | Riesgo × 1.4 |
 | 5 wins seguidos | Riesgo × 1.8 |
+
+---
+
+## Modo real vs Paper trading
+
+El bot arranca siempre en **paper trading** (`AUTO_EXECUTE_SIGNALS=0`).
+
+Para activar el modo real:
+1. Abrir el dashboard en `http://localhost:8080`
+2. Pulsar el botón verde **"Activar modo real"** (esquina inferior derecha)
+3. Confirmar el modal de advertencia
+4. Las señales MEDIUM-HIGH y HIGH se ejecutarán automáticamente en MT5
+
+Para desactivar: pulsar el botón rojo o reiniciar el bot.
 
 ---
 
@@ -217,9 +282,12 @@ Implementado en `core/circuit_breaker.py`. Se activa automáticamente:
 
 ---
 
-## Notas para paper trading
+## Notas operativas
 
-- `AUTO_EXECUTE_SIGNALS=0` — el bot solo envía señales a Discord, no ejecuta
+- El bot no genera señales de forex/oro el fin de semana (mercados cerrados)
+- BTCEUR opera 24/7 y puede generar señales cualquier día
+- EURUSD Asian Breakout solo opera lunes-jueves, sesión de Londres (07:00–11:00 UTC)
 - Cooldown de 60 minutos por par — máximo 1 señal/hora por símbolo
 - Límite de 5 trades por período de 12h (global)
 - Los logs se guardan en `logs/` con rotación automática por sesión
+- El dashboard persiste el historial de señales 7 días entre reinicios
