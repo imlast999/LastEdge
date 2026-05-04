@@ -555,6 +555,10 @@ async def on_ready():
     if RECONNECTION_AVAILABLE:
         bot.loop.create_task(_mt5_watchdog_loop())
         log_event("Sistema de reconexión MT5 iniciado (watchdog ligero)")
+
+    # start weekly summary background task
+    bot.loop.create_task(_weekly_summary_loop())
+    log_event("Weekly summary loop iniciado (lunes 08:00 UTC)")
     
     # Print helpful invite URL for adding the bot with application commands scope
     try:
@@ -695,6 +699,18 @@ async def _mt5_watchdog_loop():
                         "Verifica que MT5 esté abierto.",
                         "ERROR"
                     )
+                    # Send Discord notification to signals channel
+                    try:
+                        channel = await _find_signals_channel()
+                        if channel:
+                            await channel.send(
+                                "🔴 **ALERTA MT5**: El bot ha fallado **5 veces consecutivas** al "
+                                "intentar reconectarse a MetaTrader 5.\n"
+                                "Las señales automáticas pueden estar interrumpidas. "
+                                "Por favor verifica que MT5 esté abierto y conectado."
+                            )
+                    except Exception as notify_err:
+                        logger.error(f"MT5 watchdog Discord notification error: {notify_err}")
                     _consecutive_failures = 0  # reset para no spamear
             else:
                 _consecutive_failures = 0  # conexión ok
@@ -704,6 +720,97 @@ async def _mt5_watchdog_loop():
         except Exception as e:
             logger.error(f"MT5 watchdog error: {e}")
             await asyncio.sleep(60)
+
+# ======================
+# WEEKLY SUMMARY LOOP
+# ======================
+
+async def _weekly_summary_loop():
+    """
+    Background task: sends a weekly summary embed to the signals channel
+    every Monday between 08:00-09:00 UTC.
+    """
+    await bot.wait_until_ready()
+    log_event("Weekly summary loop iniciado")
+
+    _last_summary_monday: Optional[str] = None  # ISO date of last Monday we sent
+
+    while True:
+        try:
+            await asyncio.sleep(3600)  # check every hour
+
+            now = datetime.now(timezone.utc)
+            # Monday = weekday 0, between 08:00 and 09:00
+            if now.weekday() != 0 or not (8 <= now.hour < 9):
+                continue
+
+            today_str = now.date().isoformat()
+            if _last_summary_monday == today_str:
+                continue  # already sent this Monday
+
+            # Gather last 7 days of signal history
+            try:
+                from services.dashboard import get_dashboard_service
+                history = get_dashboard_service().get_signal_history(hours=168)
+            except Exception as e:
+                logger.error(f"Weekly summary: error getting history: {e}")
+                continue
+
+            total = len(history)
+            wins = sum(1 for s in history if s.get('final_status') == 'win')
+            losses = sum(1 for s in history if s.get('final_status') == 'loss')
+            closed = wins + losses
+            winrate = (wins / closed * 100) if closed > 0 else 0.0
+
+            # Best/worst pair by win rate
+            pair_stats: dict = {}
+            for s in history:
+                sym = s.get('symbol', 'UNKNOWN')
+                fs = s.get('final_status')
+                if sym not in pair_stats:
+                    pair_stats[sym] = {'wins': 0, 'losses': 0}
+                if fs == 'win':
+                    pair_stats[sym]['wins'] += 1
+                elif fs == 'loss':
+                    pair_stats[sym]['losses'] += 1
+
+            best_pair = worst_pair = '—'
+            best_wr = -1.0; worst_wr = 101.0
+            for sym, ps in pair_stats.items():
+                c = ps['wins'] + ps['losses']
+                if c == 0:
+                    continue
+                wr = ps['wins'] / c * 100
+                if wr > best_wr:
+                    best_wr = wr; best_pair = f"{sym} ({wr:.0f}%)"
+                if wr < worst_wr:
+                    worst_wr = wr; worst_pair = f"{sym} ({wr:.0f}%)"
+
+            channel = await _find_signals_channel()
+            if channel:
+                embed = discord.Embed(
+                    title="📊 Resumen Semanal — Trading Bot",
+                    description=f"Semana del {(now - timedelta(days=7)).strftime('%d/%m')} al {now.strftime('%d/%m/%Y')}",
+                    color=0x58a6ff,
+                    timestamp=now,
+                )
+                embed.add_field(name="📈 Señales totales", value=str(total), inline=True)
+                embed.add_field(name="✅ Wins", value=str(wins), inline=True)
+                embed.add_field(name="❌ Losses", value=str(losses), inline=True)
+                embed.add_field(name="🎯 Winrate", value=f"{winrate:.1f}%", inline=True)
+                embed.add_field(name="🏆 Mejor par", value=best_pair, inline=True)
+                embed.add_field(name="📉 Peor par", value=worst_pair, inline=True)
+                embed.set_footer(text="Auto-Signal System | Resumen semanal automático")
+                await channel.send(embed=embed)
+                log_event(f"📊 Resumen semanal enviado: {total} señales, WR={winrate:.1f}%")
+
+            _last_summary_monday = today_str
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Weekly summary loop error: {e}")
+            await asyncio.sleep(3600)
 
 # ======================
 # COMANDOS

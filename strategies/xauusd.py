@@ -57,6 +57,13 @@ class XAUUSDStrategy(BaseStrategy):
     def detect_setup(self, df: pd.DataFrame, config: Dict = None) -> Optional[Dict]:
         cfg = {**self.default_config, **(config or {})}
 
+        # ── 0. Session filter: no trading 22:00-06:00 UTC ────────────────────
+        if 'time' in df.columns:
+            last_hour = int(pd.to_datetime(df.iloc[-1]['time']).hour)
+            if last_hour >= 22 or last_hour < 6:
+                logger.debug("[XAUUSD][REJECT] outside_active_session | hour=%d", last_hour)
+                return None
+
         if not self.validate_data(df) or len(df) < cfg['ema_trend']:
             logger.debug("[XAUUSD][REJECT] insufficient_data | len=%d", len(df))
             return None

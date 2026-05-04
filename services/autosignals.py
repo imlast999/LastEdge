@@ -25,7 +25,14 @@ class AutoSignalsService:
         # Cooldown por símbolo: guarda el timestamp de la última señal enviada
         # Evita spam cuando el mercado está en tendencia fuerte
         self._last_signal_time: dict = {}   # {symbol: datetime}
-        self._cooldown_minutes = 60         # mínimo 60 min entre señales del mismo par
+        # Cooldown per-symbol (minutes)
+        self._cooldown_minutes = {
+            'EURUSD': 60,    # 1 hour - Asian breakout is once per day anyway
+            'XAUUSD': 240,   # 4 hours - prevent same-direction spam
+            'BTCEUR': 60,    # 1 hour
+        }
+        # Watchdog: track last successful scan time
+        self.last_scan_time: Optional[datetime] = None
         
     async def find_signals_channel(self) -> Optional[discord.TextChannel]:
         """Encuentra el canal de señales"""
@@ -63,6 +70,32 @@ class AutoSignalsService:
                     else:
                         await self._scan_symbols()
 
+                    # Second-level watchdog: check if scan is stuck (>30 min without scanning)
+                    if self.last_scan_time is not None:
+                        elapsed_since_scan = (datetime.now(timezone.utc) - self.last_scan_time).total_seconds() / 60
+                        if elapsed_since_scan > 30:
+                            logger.critical(
+                                "AUTOSIGNAL WATCHDOG: No scan in %.1f minutes! Bot may be stuck.",
+                                elapsed_since_scan
+                            )
+                            log_event(
+                                f"🚨 WATCHDOG: Sin escaneo en {elapsed_since_scan:.0f} minutos. "
+                                f"El bot puede estar bloqueado.",
+                                "CRITICAL", "AUTOSIGNAL"
+                            )
+                            try:
+                                channel = await self.find_signals_channel()
+                                if channel:
+                                    await channel.send(
+                                        f"🚨 **ALERTA WATCHDOG**: El bot no ha escaneado señales en "
+                                        f"**{elapsed_since_scan:.0f} minutos**. "
+                                        f"Puede estar bloqueado. Revisa los logs."
+                                    )
+                            except Exception as wde:
+                                logger.error(f"Watchdog Discord notification error: {wde}")
+                            # Reset to avoid repeated alerts
+                            self.last_scan_time = datetime.now(timezone.utc)
+
                 self._consecutive_errors = 0  # reset en cada iteración exitosa
                 await asyncio.sleep(self.config['AUTOSIGNAL_INTERVAL'])
 
@@ -87,6 +120,9 @@ class AutoSignalsService:
     async def _scan_symbols(self):
         """Escanea todos los símbolos configurados"""
         from services.logging import log_event
+
+        # Update last scan time for watchdog
+        self.last_scan_time = datetime.now(timezone.utc)
 
         self.scan_count += 1
         if self.scan_count % 10 == 1:
@@ -181,13 +217,25 @@ class AutoSignalsService:
                         log_event(f"{symbol} signal rejected: LOW confidence", "INFO", "AUTOSIGNAL")
                     return False
 
+                # NEWS FILTER: pause during high-impact news blackout windows
+                try:
+                    from services.news_filter import NewsFilter
+                    news_filter = NewsFilter()
+                    is_blackout, blackout_reason = news_filter.is_news_blackout(symbol)
+                    if is_blackout:
+                        logger.debug(f"[{symbol}] News blackout: {blackout_reason}")
+                        return False
+                except Exception as nfe:
+                    logger.debug(f"News filter error for {symbol}: {nfe}")
+
                 # COOLDOWN POR SÍMBOLO: evitar spam del mismo par
                 now = datetime.now(timezone.utc)
                 last_sent = self._last_signal_time.get(symbol)
+                cooldown_min = self._cooldown_minutes.get(symbol, 60)
                 if last_sent is not None:
                     elapsed_min = (now - last_sent).total_seconds() / 60
-                    if elapsed_min < self._cooldown_minutes:
-                        remaining = int(self._cooldown_minutes - elapsed_min)
+                    if elapsed_min < cooldown_min:
+                        remaining = int(cooldown_min - elapsed_min)
                         if self.scan_count % 20 == 1:
                             log_event(
                                 f"⏳ {symbol}: cooldown activo, {remaining} min restantes",
@@ -299,6 +347,43 @@ class AutoSignalsService:
                                 f"| Ticket: {exec_result.order_id}",
                                 "INFO", "AUTOSIGNAL"
                             )
+                            # ── Slippage tracking ─────────────────────────────
+                            try:
+                                exec_price = exec_result.details.get('mt5_result', {}).get('price', entry) if hasattr(exec_result, 'details') and exec_result.details else entry
+                                if exec_price and entry:
+                                    # Calculate slippage in pips (approximate: 1 pip = 0.0001 for forex, 0.01 for gold)
+                                    pip_size = 0.01 if symbol == 'XAUUSD' else (1.0 if symbol == 'BTCEUR' else 0.0001)
+                                    slippage_pips = abs(float(exec_price) - float(entry)) / pip_size
+                                    slippage_note = f"Slippage: {slippage_pips:.1f} pips"
+                                    log_event(
+                                        f"📊 SLIPPAGE {symbol}: entry={entry:.5f} exec={exec_price:.5f} "
+                                        f"slippage={slippage_pips:.1f} pips",
+                                        "INFO", "AUTOSIGNAL"
+                                    )
+                            except Exception as slip_err:
+                                logger.debug(f"Slippage tracking error: {slip_err}")
+                                slippage_note = None
+
+                            # ── Trailing stop integration ─────────────────────
+                            try:
+                                import bot as _bot_module
+                                TRAILING_STOPS_AVAILABLE = getattr(_bot_module, 'TRAILING_STOPS_AVAILABLE', False)
+                                trailing_manager = getattr(_bot_module, 'trailing_manager', None)
+                                if TRAILING_STOPS_AVAILABLE and trailing_manager and exec_result.order_id:
+                                    trailing_manager.add_position_to_trail(
+                                        ticket=exec_result.order_id,
+                                        symbol=symbol,
+                                        entry_price=float(entry),
+                                        original_sl=float(sl),
+                                        original_tp=float(tp),
+                                        trade_type=signal_type
+                                    )
+                                    log_event(
+                                        f"🔄 Trailing stop activado para ticket {exec_result.order_id}",
+                                        "INFO", "AUTOSIGNAL"
+                                    )
+                            except Exception as trail_err:
+                                logger.debug(f"Trailing stop integration error: {trail_err}")
                         else:
                             log_event(
                                 f"❌ Error ejecutando orden real: {exec_result.message}",

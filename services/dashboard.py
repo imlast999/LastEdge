@@ -382,6 +382,36 @@ class DashboardService:
         except Exception:
             return 'pending'
 
+    def _get_real_positions(self) -> list:
+        """Fetches open MT5 positions and returns a list of dicts."""
+        try:
+            import MetaTrader5 as mt5
+            positions = mt5.positions_get()
+            if not positions:
+                return []
+            result = []
+            for pos in positions:
+                try:
+                    tick = mt5.symbol_info_tick(pos.symbol)
+                    current_price = (tick.bid + tick.ask) / 2 if tick else pos.price_open
+                    result.append({
+                        'symbol': pos.symbol,
+                        'type': 'BUY' if pos.type == 0 else 'SELL',
+                        'volume': pos.volume,
+                        'open_price': pos.price_open,
+                        'current_price': current_price,
+                        'profit': pos.profit,
+                        'sl': pos.sl,
+                        'tp': pos.tp,
+                        'ticket': pos.ticket,
+                    })
+                except Exception:
+                    pass
+            return result
+        except Exception as e:
+            logger.debug(f"Error getting real positions: {e}")
+            return []
+
     def get_dashboard_html(self) -> str:
         try:
             metrics   = self.get_current_metrics()
@@ -449,14 +479,9 @@ class DashboardService:
             wr_pct    = wins_n / closed * 100 if closed > 0 else 0
             wr_color  = '#3fb950' if wr_pct >= 50 else '#d29922' if wr_pct >= 40 else '#f85149'
 
-            if len(eq_pts) > 1:
-                mn = min(eq_pts); mx = max(eq_pts); rng = mx - mn if mx != mn else 1
-                W = 120; H = 30
-                pts = " ".join(f"{int(i/(len(eq_pts)-1)*W)},{int(H-(v-mn)/rng*H)}" for i,v in enumerate(eq_pts))
-                sparkline = (f'<svg width="{W}" height="{H}" style="vertical-align:middle;margin-left:8px">'
-                             f'<polyline points="{pts}" fill="none" stroke="{eq_color}" stroke-width="1.5"/></svg>')
-            else:
-                sparkline = ''
+            # Sparkline replaced by Chart.js canvas (rendered below)
+            sparkline = ''
+            eq_pts_json = json.dumps([round(v, 2) for v in eq_pts])
 
             if self.last_mt5_update:
                 d = (datetime.now(timezone.utc) - self.last_mt5_update).total_seconds()
@@ -525,6 +550,36 @@ class DashboardService:
             cb_w  = cb_status.get('consecutive_wins', 0); cb_m = cb_status.get('risk_multiplier', 1.0)
             cb_lbl = 'ACTIVO' if cb_ok else 'PAUSADO'; cb_rsn = cb_status.get('reason', '')
 
+            # Real MT5 positions
+            real_positions = self._get_real_positions()
+            real_pos_rows = ""
+            for rp in real_positions:
+                pnl_color = '#3fb950' if rp['profit'] >= 0 else '#f85149'
+                pnl_sign = '+' if rp['profit'] >= 0 else ''
+                type_cls = 'dir-buy' if rp['type'] == 'BUY' else 'dir-sell'
+                sl_str = f"{rp['sl']:.5f}" if rp['sl'] else '—'
+                tp_str = f"{rp['tp']:.5f}" if rp['tp'] else '—'
+                real_pos_rows += (
+                    f'<tr><td class="sym">{rp["symbol"]}</td>'
+                    f'<td class="{type_cls}">{rp["type"]}</td>'
+                    f'<td>{rp["volume"]:.2f}</td>'
+                    f'<td>{rp["open_price"]:.5f}</td>'
+                    f'<td>{rp["current_price"]:.5f}</td>'
+                    f'<td style="color:{pnl_color};font-weight:600">{pnl_sign}{rp["profit"]:.2f} €</td>'
+                    f'<td style="color:var(--red)">{sl_str}</td>'
+                    f'<td style="color:var(--green)">{tp_str}</td></tr>\n'
+                )
+            real_positions_section = ""
+            if real_positions:
+                real_positions_section = f"""
+<div class="card" id="real-positions-section" style="margin-bottom:20px">
+  <div class="section-title">Posiciones Abiertas en MT5</div>
+  <table>
+    <thead><tr><th>Par</th><th>Dir</th><th>Volumen</th><th>Precio apertura</th><th>Precio actual</th><th>P&amp;L</th><th style="color:var(--red)">SL</th><th style="color:var(--green)">TP</th></tr></thead>
+    <tbody>{real_pos_rows}</tbody>
+  </table>
+</div>"""
+
             def sym_row(sym):
                 perf = sp.get(sym, {}); tot = perf.get('total_signals',0); shw = perf.get('shown_signals',0)
                 avg  = perf.get('avg_confidence_score', 0.0)
@@ -549,6 +604,7 @@ class DashboardService:
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Trading Bot — Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--blue:#58a6ff;--green:#3fb950;--yellow:#d29922;--red:#f85149;--purple:#a371f7}}
 *{{box-sizing:border-box;margin:0;padding:0}}
@@ -565,6 +621,7 @@ a{{color:var(--blue);text-decoration:none}}
 .card-title{{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px}}
 .card-value{{font-size:28px;font-weight:700;line-height:1}}.card-sub{{font-size:12px;color:var(--muted);margin-top:4px}}
 .section-title{{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}}
+.chart-container-full {{ background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 20px; }}
 table{{width:100%;border-collapse:collapse}}
 th{{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--border);text-align:left}}
 td{{padding:7px 10px;border-bottom:1px solid rgba(48,54,61,.5);font-size:12px}}
@@ -580,9 +637,11 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
 .footer{{margin-top:24px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px}}
 .dot-live{{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:5px;animation:pulse 2s infinite}}
 @keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:.3}}}}
+.filter-bar{{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}}
+.filter-btn{{background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:20px;font-size:12px;cursor:pointer;transition:all .15s}}
+.filter-btn.active{{background:var(--blue);color:#0d1117;border-color:var(--blue);font-weight:600}}
 </style></head>
 <body><div class="page">
-
 <div class="topbar">
   <h1>🤖 Trading Bot <span style="color:var(--muted);font-weight:400">/ Dashboard</span></h1>
   <div class="meta">
@@ -603,7 +662,7 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
   <div class="card">
     <div class="card-title">Equity simulada (paper)</div>
     <div style="display:flex;align-items:center">
-      <span class="card-value" style="color:{eq_color}">{equity:,.0f} €</span>{sparkline}
+      <span class="card-value" style="color:{eq_color}">{equity:,.0f} €</span>
     </div>
     <div class="card-sub">{eq_change:+.2f} € ({eq_pct:+.1f}%) vs balance inicial</div>
   </div>
@@ -619,6 +678,12 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
   </div>
 </div>
 
+<div class="chart-container-full">
+  <div class="section-title" style="margin-bottom:12px">Curva de Equity (sesión actual)</div>
+  <canvas id="equityChart" height="80"></canvas>
+</div>
+
+{real_positions_section}
 <div class="grid-2">
   <div class="card">
     <div class="section-title">Circuit Breaker</div>
@@ -643,7 +708,14 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
     <div class="section-title" style="margin-bottom:0">Señales de esta sesión (P&amp;L en tiempo real)</div>
     <a href="/api/export" class="export-btn" download>⬇ CSV</a>
-  </div>  <table>
+  </div>
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filterSignals('ALL')">ALL</button>
+    <button class="filter-btn" onclick="filterSignals('EURUSD')">EURUSD</button>
+    <button class="filter-btn" onclick="filterSignals('XAUUSD')">XAUUSD</button>
+    <button class="filter-btn" onclick="filterSignals('BTCEUR')">BTCEUR</button>
+  </div>
+  <table id="signals-table">
     <thead><tr><th>Hora</th><th>Par</th><th>Dir</th><th>Confianza</th><th>Entry</th><th style="color:var(--red)">SL</th><th style="color:var(--green)">TP</th><th>R:R</th><th>Estado</th><th>Enviada</th></tr></thead>
     <tbody>{recent_rows}</tbody>
   </table>
@@ -717,6 +789,86 @@ function disableReal() {{
     if (d.ok) location.reload();
   }});
 }}
+
+// ── Equity Chart (Chart.js) ───────────────────────────────────────────────
+(function() {{
+  try {{
+    var eqData = {eq_pts_json};
+    var eqColor = '{eq_color}';
+    var ctx = document.getElementById('equityChart');
+    if (!ctx || !eqData || eqData.length < 2) return;
+    new Chart(ctx, {{
+      type: 'line',
+      data: {{
+        labels: eqData.map(function(_, i) {{ return i === 0 ? 'Inicio' : 'T+' + i; }}),
+        datasets: [{{
+          label: 'Equity (€)',
+          data: eqData,
+          borderColor: eqColor,
+          backgroundColor: eqColor + '22',
+          borderWidth: 2,
+          pointRadius: eqData.length > 20 ? 0 : 3,
+          fill: true,
+          tension: 0.3,
+        }}]
+      }},
+      options: {{
+        responsive: true,
+        plugins: {{
+          legend: {{ display: false }},
+          tooltip: {{
+            callbacks: {{
+              label: function(ctx) {{ return ctx.parsed.y.toLocaleString('es-ES', {{minimumFractionDigits:2}}) + ' €'; }}
+            }}
+          }}
+        }},
+        scales: {{
+          x: {{ ticks: {{ color: '#8b949e', maxTicksLimit: 10 }}, grid: {{ color: '#30363d' }} }},
+          y: {{ ticks: {{ color: '#8b949e', callback: function(v) {{ return v.toLocaleString('es-ES', {{minimumFractionDigits:0}}) + ' €'; }} }}, grid: {{ color: '#30363d' }} }}
+        }}
+      }}
+    }});
+  }} catch(e) {{ console.warn('Chart.js error:', e); }}
+}})();
+
+// ── Symbol filter ─────────────────────────────────────────────────────────
+function filterSignals(sym) {{
+  document.querySelectorAll('.filter-btn').forEach(function(b) {{
+    b.classList.toggle('active', b.textContent === sym);
+  }});
+  var rows = document.querySelectorAll('#signals-table tbody tr');
+  rows.forEach(function(row) {{
+    if (sym === 'ALL') {{
+      row.style.display = '';
+    }} else {{
+      var symCell = row.querySelector('td:nth-child(2)');
+      row.style.display = (symCell && symCell.textContent.trim() === sym) ? '' : 'none';
+    }}
+  }});
+}}
+
+// ── Browser push notifications ────────────────────────────────────────────
+var _lastSignalCount = {s_today};
+function _checkNewSignals() {{
+  fetch('/api/metrics').then(function(r) {{ return r.json(); }}).then(function(data) {{
+    var count = (data.signals || {{}}).today || 0;
+    if (count > _lastSignalCount) {{
+      var diff = count - _lastSignalCount;
+      _lastSignalCount = count;
+      if (Notification && Notification.permission === 'granted') {{
+        new Notification('🎯 Nueva señal detectada', {{
+          body: diff + ' nueva(s) señal(es) en el bot de trading.',
+          icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="28" font-size="28">🤖</text></svg>'
+        }});
+      }}
+    }}
+  }}).catch(function() {{}});
+}}
+if (Notification && Notification.permission === 'default') {{
+  Notification.requestPermission();
+}}
+setInterval(_checkNewSignals, 30000);
+
 setTimeout(()=>location.reload(),30000);
 </script>
 </body></html>"""
