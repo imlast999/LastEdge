@@ -1022,6 +1022,24 @@ setTimeout(()=>location.reload(),30000);
                         else:
                             self.metrics.paper_balance = base - base * risk_pct
 
+                        # ── Notificar al circuit breaker ──────────────────────
+                        # Calcular pips aproximados para el registro
+                        try:
+                            from core.circuit_breaker import get_circuit_breaker
+                            pip_sizes = {'EURUSD': 0.0001, 'XAUUSD': 0.1, 'BTCEUR': 1.0}
+                            pip_size  = pip_sizes.get(ev.symbol, 0.0001)
+                            if ev.final_status == 'win':
+                                pips = abs(ev.tp - ev.entry) / pip_size
+                            else:
+                                pips = -abs(ev.entry - ev.sl) / pip_size
+                            get_circuit_breaker().record_result(
+                                outcome=ev.final_status.upper(),
+                                pips=pips,
+                                symbol=ev.symbol,
+                            )
+                        except Exception as cb_err:
+                            logger.debug(f"Circuit breaker record error: {cb_err}")
+
         except Exception as e:
             logger.debug(f"Simulated positions update error: {e}")
 

@@ -49,14 +49,19 @@ class CircuitBreaker:
     - El drawdown diario supera el límite configurado
 
     También implementa risk scaling dinámico basado en rachas.
+    El estado se persiste en disco para sobrevivir reinicios del bot.
     """
+
+    # Ruta del archivo de estado persistente
+    _STATE_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'circuit_breaker_state.json')
 
     def __init__(self):
         self._load_config()
         self.results: List[TradeResult] = []
-        self.daily_pips: Dict[str, float] = {}   # fecha → pips acumulados
+        self.daily_pips: Dict[str, float] = {}
         self.paused_until: Optional[datetime] = None
         self.pause_reason: str = ""
+        self._load_state()   # restaurar estado desde disco
 
     def _load_config(self):
         """Carga configuración desde rules_config.json"""
@@ -101,6 +106,91 @@ class CircuitBreaker:
                 'losing_streak_4':  0.3,
             }
 
+    # ── Persistencia ─────────────────────────────────────────────────────────
+
+    def _save_state(self):
+        """Guarda el estado del circuit breaker en disco."""
+        try:
+            data = {
+                'results': [
+                    {'outcome': r.outcome, 'pips': r.pips, 'symbol': r.symbol,
+                     'timestamp': r.timestamp.isoformat()}
+                    for r in self.results[-50:]   # solo los últimos 50
+                ],
+                'daily_pips': self.daily_pips,
+                'paused_until': self.paused_until.isoformat() if self.paused_until else None,
+                'pause_reason': self.pause_reason,
+                'saved_at': datetime.now(timezone.utc).isoformat(),
+            }
+            with open(self._STATE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.warning(f"CircuitBreaker: no se pudo guardar estado: {e}")
+
+    def _load_state(self):
+        """Restaura el estado del circuit breaker desde disco."""
+        try:
+            if not os.path.exists(self._STATE_FILE):
+                return
+
+            with open(self._STATE_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            # No cargar estado de más de 48h (puede ser obsoleto)
+            saved_at_str = data.get('saved_at', '')
+            if saved_at_str:
+                saved_at = datetime.fromisoformat(saved_at_str)
+                if saved_at.tzinfo is None:
+                    saved_at = saved_at.replace(tzinfo=timezone.utc)
+                age_hours = (datetime.now(timezone.utc) - saved_at).total_seconds() / 3600
+                if age_hours > 48:
+                    logger.info("CircuitBreaker: estado guardado tiene >48h, empezando limpio")
+                    return
+
+            # Restaurar resultados
+            for r in data.get('results', []):
+                try:
+                    ts = datetime.fromisoformat(r['timestamp'])
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    self.results.append(TradeResult(
+                        outcome=r['outcome'], pips=float(r['pips']),
+                        symbol=r.get('symbol', 'UNKNOWN'), timestamp=ts
+                    ))
+                except Exception:
+                    pass
+
+            # Restaurar pips diarios
+            self.daily_pips = data.get('daily_pips', {})
+
+            # Restaurar pausa activa
+            paused_until_str = data.get('paused_until')
+            if paused_until_str:
+                paused_until = datetime.fromisoformat(paused_until_str)
+                if paused_until.tzinfo is None:
+                    paused_until = paused_until.replace(tzinfo=timezone.utc)
+                # Solo restaurar si la pausa sigue vigente
+                if paused_until > datetime.now(timezone.utc):
+                    self.paused_until = paused_until
+                    self.pause_reason = data.get('pause_reason', '')
+                    logger.warning(
+                        "CircuitBreaker: pausa restaurada desde disco — %s | hasta %s",
+                        self.pause_reason,
+                        self.paused_until.strftime('%Y-%m-%d %H:%M UTC')
+                    )
+
+            cons_losses = self._consecutive_losses()
+            cons_wins   = self._consecutive_wins()
+            logger.info(
+                "CircuitBreaker: estado restaurado | %d resultados | "
+                "racha pérdidas=%d | racha wins=%d | pausado=%s",
+                len(self.results), cons_losses, cons_wins,
+                self.paused_until is not None
+            )
+
+        except Exception as e:
+            logger.warning(f"CircuitBreaker: no se pudo cargar estado: {e}")
+
     def record_result(self, outcome: str, pips: float = 0.0, symbol: str = 'UNKNOWN'):
         """
         Registra el resultado de un trade cerrado.
@@ -131,6 +221,9 @@ class CircuitBreaker:
             self._consecutive_losses(),
             self.daily_pips.get(today, 0.0)
         )
+
+        # Persistir estado tras cada resultado
+        self._save_state()
 
     def can_trade(self, symbol: str = None) -> Tuple[bool, str]:
         """
@@ -282,6 +375,9 @@ class CircuitBreaker:
             "🔴 CIRCUIT BREAKER ACTIVADO: %s | Pausa hasta %s",
             reason, self.paused_until.strftime('%Y-%m-%d %H:%M UTC')
         )
+
+        # Persistir inmediatamente para que el reinicio respete la pausa
+        self._save_state()
 
 
 # ── Instancia global ──────────────────────────────────────────────────────────
