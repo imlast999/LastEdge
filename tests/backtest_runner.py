@@ -246,10 +246,15 @@ def compute_extra_metrics(signals) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_single_backtest(symbol: str, bars: int, strategy: str = None,
-                        verbose: bool = False) -> Optional[dict]:
+                        verbose: bool = False,
+                        cb_losses: int = 4, cb_pause_bars: int = 168) -> Optional[dict]:
     """
     Ejecuta el replay engine para un símbolo y devuelve un dict con resultados.
-    Retorna None si hay error.
+
+    Args:
+        cb_losses:     Pérdidas consecutivas para activar el circuit breaker simulado.
+                       0 = desactivado (comportamiento anterior).
+        cb_pause_bars: Velas de pausa tras activar el CB (default 168 H1 ≈ 1 semana).
     """
     if strategy is None:
         strategy = DEFAULT_STRATEGY.get(symbol, 'eurusd_simple')
@@ -257,7 +262,8 @@ def run_single_backtest(symbol: str, bars: int, strategy: str = None,
     pip_size  = PIP_SIZE.get(symbol, 0.0001)
     timeframe = TIMEFRAME_BY_STRATEGY.get(strategy, DEFAULT_TIMEFRAME)
 
-    print(f"\n  ⏳  Analizando {symbol} ({bars} velas {timeframe}, estrategia: {strategy})...")
+    cb_label = f"CB={cb_losses}L/{cb_pause_bars}v" if cb_losses > 0 else "sin CB"
+    print(f"\n  ⏳  Analizando {symbol} ({bars} velas {timeframe}, estrategia: {strategy}, {cb_label})...")
 
     try:
         from core.replay_engine import ReplayEngine
@@ -269,9 +275,8 @@ def run_single_backtest(symbol: str, bars: int, strategy: str = None,
             lookback = 900
             forward  = 120
         elif strategy == 'btceur_weekly_breakout':
-            # Necesita ~5 semanas de histórico para calcular rango semanal anterior
             lookback = 900
-            forward  = 300   # trades semanales pueden durar días
+            forward  = 300
         elif strategy in ('eurusd_asian_breakout', 'xauusd_psychological'):
             lookback = 210
             forward  = 120
@@ -279,7 +284,12 @@ def run_single_backtest(symbol: str, bars: int, strategy: str = None,
             lookback = 210
             forward  = 120
 
-        engine = ReplayEngine(lookback_window=lookback, max_forward_bars=forward)
+        engine = ReplayEngine(
+            lookback_window=lookback,
+            max_forward_bars=forward,
+            cb_consecutive_losses=cb_losses,
+            cb_pause_bars=cb_pause_bars,
+        )
         t0 = time.time()
 
         stats = engine.run_replay(
@@ -317,6 +327,12 @@ def run_single_backtest(symbol: str, bars: int, strategy: str = None,
             'pip_size':        pip_size,
             'elapsed':         elapsed,
             'signals':         signals,
+            # Circuit breaker simulado
+            'cb_losses':            cb_losses,
+            'cb_pause_bars':        cb_pause_bars,
+            'cb_activations':       stats.cb_activations,
+            'cb_bars_paused':       stats.bars_paused,
+            'cb_signals_blocked':   stats.signals_blocked_by_cb,
             **extra,
         }
 
@@ -387,6 +403,17 @@ def print_result(r: dict, verbose: bool = False):
     # Señales insuficientes
     if r['signals_final'] < MIN_SIGNALS:
         _warn(f"Solo {r['signals_final']} señales cerradas. Aumenta --bars para resultados más fiables.")
+
+    # Circuit breaker simulado
+    if r.get('cb_losses', 0) > 0:
+        print()
+        print(f"  ── Circuit Breaker simulado (activación tras {r['cb_losses']} pérdidas / pausa {r['cb_pause_bars']} velas) ──")
+        _info(f"Activaciones CB  : {r['cb_activations']}")
+        _info(f"Velas en pausa   : {r['cb_bars_paused']}")
+        _info(f"Señales bloqueadas: {r['cb_signals_blocked']}")
+        if r['cb_activations'] > 0:
+            pct_blocked = r['cb_signals_blocked'] / (r['signals_final'] + r['cb_signals_blocked']) * 100 if (r['signals_final'] + r['cb_signals_blocked']) > 0 else 0
+            _info(f"% señales bloqueadas: {pct_blocked:.1f}%")
 
     print(f"\n  ⏱️   Tiempo de ejecución: {r['elapsed']:.1f}s")
 
@@ -566,6 +593,10 @@ Ejemplos:
                         help='Mostrar detalle de cada señal')
     parser.add_argument('--save',     action='store_true',
                         help='Guardar resultados en CSV')
+    parser.add_argument('--cb-losses', type=int, default=4,
+                        help='Pérdidas consecutivas para activar el CB simulado (0=desactivado, default: 4)')
+    parser.add_argument('--cb-pause',  type=int, default=168,
+                        help='Velas de pausa tras activar el CB (default: 168 H1 ≈ 1 semana)')
     return parser.parse_args()
 
 
@@ -637,6 +668,21 @@ def interactive_mode() -> dict:
     save_raw = _ask("Guardar resultados en CSV? (s/N)", "N").lower()
     save = save_raw in ('s', 'si', 'sí', 'y', 'yes')
 
+    # ── Circuit breaker simulado ──────────────────────────────────────────────
+    print()
+    print("  Circuit Breaker simulado: pausa el backtest N velas tras X pérdidas seguidas.")
+    cb_losses_raw = _ask("Pérdidas consecutivas para activar CB (0=desactivado)", "4")
+    try:
+        cb_losses = int(cb_losses_raw)
+    except ValueError:
+        cb_losses = 4
+
+    cb_pause_raw = _ask("Velas de pausa tras activar CB (168 H1 ≈ 1 semana)", "168")
+    try:
+        cb_pause = int(cb_pause_raw)
+    except ValueError:
+        cb_pause = 168
+
     print()
     return {
         'symbols':   symbols,
@@ -645,6 +691,8 @@ def interactive_mode() -> dict:
         'verbose':   verbose,
         'save':      save,
         'run_all':   run_all,
+        'cb_losses': cb_losses,
+        'cb_pause':  cb_pause,
     }
 
 
@@ -664,17 +712,21 @@ def main():
         _header("BACKTEST RUNNER — Validación Histórica de Estrategias")
         cfg = interactive_mode()
         symbols_to_run = cfg['symbols']
-        strategy_override = cfg['strategy']   # None si --all
+        strategy_override = cfg['strategy']
         bars    = cfg['bars']
         verbose = cfg['verbose']
         save    = cfg['save']
+        cb_losses = cfg['cb_losses']
+        cb_pause  = cfg['cb_pause']
     else:
         # Modo CLI: usar argumentos con defaults
         symbols_to_run   = SYMBOLS if args.all else [args.symbol or 'EURUSD']
-        strategy_override = args.strategy   # None = usar default por símbolo
+        strategy_override = args.strategy
         bars    = args.bars or 500
         verbose = args.verbose
         save    = args.save
+        cb_losses = args.cb_losses
+        cb_pause  = args.cb_pause
 
         _header("BACKTEST RUNNER — Validación Histórica de Estrategias")
 
@@ -703,7 +755,8 @@ def main():
                   f"Usando default: {DEFAULT_STRATEGY[sym]}")
             strat = None
 
-        r = run_single_backtest(sym, bars, strategy=strat, verbose=verbose)
+        r = run_single_backtest(sym, bars, strategy=strat, verbose=verbose,
+                                cb_losses=cb_losses, cb_pause_bars=cb_pause)
         if r:
             print_result(r, verbose=verbose)
             results.append(r)

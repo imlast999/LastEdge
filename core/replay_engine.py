@@ -54,6 +54,10 @@ class ReplayStatistics:
     avg_rr: float = 0.0
     total_pips: float = 0.0
     execution_time: float = 0.0
+    # Circuit breaker simulado
+    cb_activations: int = 0        # veces que se activó el CB
+    bars_paused: int = 0           # velas totales en pausa por CB
+    signals_blocked_by_cb: int = 0 # señales que habrían salido pero el CB las bloqueó
 
 class ReplayEngine:
     """
@@ -66,14 +70,21 @@ class ReplayEngine:
     - Modo diagnóstico (sin filtro de duplicados)
     """
     
-    def __init__(self, lookback_window: int = 100, max_forward_bars: int = 120):
+    def __init__(self, lookback_window: int = 100, max_forward_bars: int = 120,
+                 cb_consecutive_losses: int = 4, cb_pause_bars: int = 168):
         """
         Args:
-            lookback_window: Número de velas a usar para análisis de indicadores
-            max_forward_bars: Máximo de velas a revisar hacia adelante para TP/SL
+            lookback_window:       Número de velas a usar para análisis de indicadores
+            max_forward_bars:      Máximo de velas a revisar hacia adelante para TP/SL
+            cb_consecutive_losses: Pérdidas consecutivas para activar el circuit breaker
+                                   (0 = desactivado)
+            cb_pause_bars:         Velas de pausa tras activar el CB
+                                   (168 H1 ≈ 1 semana; 24 H1 ≈ 1 día)
         """
         self.lookback_window = lookback_window
         self.max_forward_bars = max_forward_bars
+        self.cb_consecutive_losses = cb_consecutive_losses
+        self.cb_pause_bars = cb_pause_bars
         self.signals: List[ReplaySignal] = []
         
     def run_replay(self, symbol: str, bars: int, strategy: str = None,
@@ -137,40 +148,58 @@ class ReplayEngine:
             # Estadísticas
             stats = ReplayStatistics()
             self.signals = []
-            
+
+            # ── Circuit breaker simulado ──────────────────────────────────────
+            cb_enabled          = self.cb_consecutive_losses > 0
+            cb_consecutive      = 0    # pérdidas consecutivas actuales
+            cb_paused_until_bar = -1   # índice de vela hasta la que está pausado
+
             # Recorrer velas una a una
             bars_to_analyze = min(bars, len(df_full) - self.lookback_window)
             logger.info(f"Analizando {bars_to_analyze} velas...")
             
             for i in range(self.lookback_window, self.lookback_window + bars_to_analyze):
+
+                # ── Verificar si el CB está activo ────────────────────────────
+                if cb_enabled and i <= cb_paused_until_bar:
+                    stats.bars_paused += 1
+                    stats.bars_analyzed += 1
+                    # Comprobar si habría habido señal (para contabilizar bloqueadas)
+                    window = df_full.iloc[i - self.lookback_window:i].copy()
+                    result = engine.evaluate_signal(
+                        window, symbol, strategy, config,
+                        skip_duplicate_filter=skip_duplicate_filter,
+                        current_index=i
+                    )
+                    if result.signal and result.should_show:
+                        stats.signals_blocked_by_cb += 1
+                    continue
+
                 # Crear ventana de análisis (últimas lookback_window velas)
                 window = df_full.iloc[i - self.lookback_window:i].copy()
                 
-                # Evaluar señal usando el engine completo (pasar current_index para cooldown)
+                # Evaluar señal usando el engine completo
                 result = engine.evaluate_signal(
                     window, 
                     symbol, 
                     strategy, 
                     config,
                     skip_duplicate_filter=skip_duplicate_filter,
-                    current_index=i  # Pasar índice para cooldown
+                    current_index=i
                 )
                 
                 stats.bars_analyzed += 1
                 
-                # Contar setups: cualquier señal detectada (antes de filtros de scoring/confianza)
-                # Un setup se detectó si hay raw_signal, independientemente de si pasa scoring
+                # Contar setups
                 if result.signal is not None:
-                    # Si hay señal final, definitivamente hubo setup
                     stats.setups_detected += 1
                 elif result.rejection_reason and result.rejection_reason not in [
                     "No setup básico detectado",
                     "Símbolo desactivado en configuración dinámica"
                 ]:
-                    # Si fue rechazado por scoring/confianza, también hubo setup
                     stats.setups_detected += 1
                 
-                # Si hay señal final (pasó scoring y confianza)
+                # Si hay señal final
                 if result.signal and result.should_show:
                     stats.signals_final += 1
                     
@@ -202,9 +231,21 @@ class ReplayEngine:
                     if replay_signal.result == 'WIN':
                         stats.tp_hits += 1
                         stats.total_pips += replay_signal.profit_pips or 0
+                        cb_consecutive = 0   # reset racha de pérdidas
                     elif replay_signal.result == 'LOSS':
                         stats.sl_hits += 1
                         stats.total_pips += replay_signal.profit_pips or 0
+                        cb_consecutive += 1
+                        # ── Activar CB si se alcanza el límite ────────────────
+                        if cb_enabled and cb_consecutive >= self.cb_consecutive_losses:
+                            cb_paused_until_bar = i + self.cb_pause_bars
+                            stats.cb_activations += 1
+                            logger.info(
+                                "[CB_SIM] Activado tras %d pérdidas consecutivas en barra %d "
+                                "| Pausa hasta barra %d (%d velas)",
+                                cb_consecutive, i, cb_paused_until_bar, self.cb_pause_bars
+                            )
+                            cb_consecutive = 0   # reset para la siguiente ronda
                     else:
                         stats.pending += 1
             
