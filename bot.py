@@ -475,10 +475,25 @@ if loaded:
 @bot.event
 async def on_ready():
     global bot_start_time
-    bot_start_time = datetime.now(timezone.utc)  # Track bot start time for session metrics
-    
+    bot_start_time = datetime.now(timezone.utc)
+
+    # ── Limpiar estado de sesiones anteriores ─────────────────────────────────
+    # Cada reinicio del bot es una sesión nueva y limpia.
+    # Se borran: circuit breaker (pausa activa), cooldowns de autosignals.
+    _session_state_files = [
+        os.path.join(os.path.dirname(__file__), 'circuit_breaker_state.json'),
+        os.path.join(os.path.dirname(__file__), 'autosignals_state.json'),
+    ]
+    for _f in _session_state_files:
+        try:
+            if os.path.exists(_f):
+                os.remove(_f)
+                logger.info(f"Estado de sesión anterior eliminado: {os.path.basename(_f)}")
+        except Exception as _e:
+            logger.warning(f"No se pudo eliminar {_f}: {_e}")
+
     log_event(f"Conectado como {bot.user}")
-    
+
     # Inicializar gestores de riesgo
     init_risk_managers()
     log_event("Gestores de riesgo inicializados correctamente")
