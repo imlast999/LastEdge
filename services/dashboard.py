@@ -1182,33 +1182,13 @@ setTimeout(()=>location.reload(),30000);
 
     def _load_persisted_data(self):
         """
-        Al arrancar, carga SOLO el balance paper acumulado (para que la equity
-        no empiece desde cero si ya había trades cerrados).
-        El historial de señales siempre empieza vacío — cada sesión es independiente.
-        Las métricas de contadores (signals_today, etc.) también se resetean.
+        Al arrancar, todo empieza desde cero — historial de señales, métricas
+        y balance paper. Cada sesión es completamente independiente.
+        El archivo dashboard_data.json se ignora al arrancar.
         """
-        try:
-            if not os.path.exists(self.dashboard_config['data_file']):
-                return
-            with open(self.dashboard_config['data_file'], 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            last_save = datetime.fromisoformat(data.get('last_save', '2000-01-01T00:00:00+00:00'))
-            if datetime.now(timezone.utc) - last_save > timedelta(hours=168):
-                logger.info("Dashboard data too old, starting fresh")
-                return
-            m = data.get('metrics', {})
-            # Restaurar SOLO el balance paper acumulado — lo demás empieza a 0
-            if m.get('paper_balance', 0) > 0:
-                self.metrics.paper_balance      = float(m['paper_balance'])
-                self.metrics.paper_balance_base = float(m.get('paper_balance_base', m['paper_balance']))
-                logger.info(
-                    "Dashboard: balance paper restaurado — %.2f € (base: %.2f €)",
-                    self.metrics.paper_balance, self.metrics.paper_balance_base
-                )
-            # Historial de señales: NO se carga — cada sesión empieza limpia
-            logger.info("Dashboard: historial de señales iniciado vacío (nueva sesión)")
-        except Exception as e:
-            logger.error(f"Error loading data: {e}")
+        # Intencionalmente vacío: cada sesión empieza limpia.
+        # El balance paper se inicializa desde MT5 en el primer ciclo de _update_simulated_positions.
+        logger.info("Dashboard: nueva sesión — historial y balance paper iniciados desde cero")
 
 
 # ── Instancia global ──────────────────────────────────────────────────────────
