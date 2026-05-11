@@ -1181,6 +1181,12 @@ setTimeout(()=>location.reload(),30000);
             logger.error(f"Error saving data: {e}")
 
     def _load_persisted_data(self):
+        """
+        Al arrancar, carga SOLO el balance paper acumulado (para que la equity
+        no empiece desde cero si ya había trades cerrados).
+        El historial de señales siempre empieza vacío — cada sesión es independiente.
+        Las métricas de contadores (signals_today, etc.) también se resetean.
+        """
         try:
             if not os.path.exists(self.dashboard_config['data_file']):
                 return
@@ -1191,41 +1197,16 @@ setTimeout(()=>location.reload(),30000);
                 logger.info("Dashboard data too old, starting fresh")
                 return
             m = data.get('metrics', {})
-            self.metrics.signals_today    = m.get('signals_today', 0)
-            self.metrics.signals_shown    = m.get('signals_shown', 0)
-            self.metrics.signals_executed = m.get('signals_executed', 0)
-            self.metrics.signals_rejected = m.get('signals_rejected', 0)
-            for sym, cnt in m.get('symbol_activity', {}).items():
-                self.metrics.symbol_activity[sym] = cnt
-            self.metrics.symbol_performance = m.get('symbol_performance', {})
-            for conf, cnt in m.get('confidence_distribution', {}).items():
-                self.metrics.confidence_distribution[conf] = cnt
-            # Restaurar balance paper acumulado
+            # Restaurar SOLO el balance paper acumulado — lo demás empieza a 0
             if m.get('paper_balance', 0) > 0:
                 self.metrics.paper_balance      = float(m['paper_balance'])
                 self.metrics.paper_balance_base = float(m.get('paper_balance_base', m['paper_balance']))
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=168)
-            for ev_data in data.get('signal_history', []):
-                try:
-                    ts = datetime.fromisoformat(ev_data['timestamp'])
-                    if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=timezone.utc)
-                    if ts < cutoff:
-                        continue
-                    self.signal_history.append(SignalEvent(
-                        timestamp=ts, symbol=ev_data.get('symbol',''),
-                        strategy=ev_data.get('strategy',''), signal_type=ev_data.get('signal_type',''),
-                        confidence=ev_data.get('confidence',''), score=float(ev_data.get('score',0)),
-                        shown=bool(ev_data.get('shown',False)), executed=bool(ev_data.get('executed',False)),
-                        rejection_reason=ev_data.get('rejection_reason'),
-                        entry=ev_data.get('entry'), sl=ev_data.get('sl'), tp=ev_data.get('tp'),
-                        final_status=ev_data.get('final_status'),
-                        current_price=ev_data.get('current_price'),
-                        unrealized_pnl=ev_data.get('unrealized_pnl'),
-                    ))
-                except Exception:
-                    pass
-            logger.info(f"Dashboard loaded: {len(self.signal_history)} signals")
+                logger.info(
+                    "Dashboard: balance paper restaurado — %.2f € (base: %.2f €)",
+                    self.metrics.paper_balance, self.metrics.paper_balance_base
+                )
+            # Historial de señales: NO se carga — cada sesión empieza limpia
+            logger.info("Dashboard: historial de señales iniciado vacío (nueva sesión)")
         except Exception as e:
             logger.error(f"Error loading data: {e}")
 

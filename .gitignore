@@ -9,6 +9,7 @@ bot_state.db
 dashboard_data.json
 backtest_data.json
 circuit_breaker_state.json
+autosignals_state.json
 
 # ── Resultados de backtest (CSVs generados localmente) ────────────────────────
 backtest_results/

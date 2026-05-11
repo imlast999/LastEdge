@@ -6,6 +6,7 @@ Consolidado desde bot.py para reducir el tamaño del archivo principal.
 """
 
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime, timezone, timedelta
@@ -23,17 +24,91 @@ class AutoSignalsService:
         self.config = config
         self.scan_count = 0
         # Cooldown por símbolo: guarda el timestamp de la última señal enviada
-        # Evita spam cuando el mercado está en tendencia fuerte
         self._last_signal_time: dict = {}   # {symbol: datetime}
         # Cooldown per-symbol (minutes)
         self._cooldown_minutes = {
-            'EURUSD': 60,    # 1 hour - Asian breakout is once per day anyway
-            'XAUUSD': 240,   # 4 hours - prevent same-direction spam
-            'BTCEUR': 60,    # 1 hour
+            'EURUSD': 60,
+            'XAUUSD': 240,
+            'BTCEUR': 60,
         }
+        # Límite de señales en la misma dirección por par por día
+        # Evita spam de señales correlacionadas durante tendencias fuertes
+        self._daily_direction_count: dict = {}  # {symbol: {'BUY': n, 'SELL': n, 'date': str}}
+        self._max_same_direction_per_day = 3
+
         # Watchdog: track last successful scan time
         self.last_scan_time: Optional[datetime] = None
+
+        # Persistir cooldowns entre reinicios
+        self._cooldown_file = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), 'autosignals_state.json'
+        )
+        self._load_cooldown_state()
         
+    def _load_cooldown_state(self):
+        """Restaura los cooldowns desde disco para sobrevivir reinicios."""
+        try:
+            if not os.path.exists(self._cooldown_file):
+                return
+            with open(self._cooldown_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            # Solo restaurar si el archivo tiene menos de 24h
+            saved_at = datetime.fromisoformat(data.get('saved_at', '2000-01-01T00:00:00+00:00'))
+            if saved_at.tzinfo is None:
+                saved_at = saved_at.replace(tzinfo=timezone.utc)
+            if (datetime.now(timezone.utc) - saved_at).total_seconds() > 86400:
+                return
+            for sym, ts_str in data.get('last_signal_time', {}).items():
+                try:
+                    ts = datetime.fromisoformat(ts_str)
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    self._last_signal_time[sym] = ts
+                except Exception:
+                    pass
+            self._daily_direction_count = data.get('daily_direction_count', {})
+            logger.info("AutoSignals: cooldowns restaurados desde disco")
+        except Exception as e:
+            logger.debug(f"AutoSignals: no se pudo cargar estado de cooldown: {e}")
+
+    def _save_cooldown_state(self):
+        """Guarda los cooldowns en disco."""
+        try:
+            import json as _json
+            data = {
+                'last_signal_time': {
+                    sym: ts.isoformat()
+                    for sym, ts in self._last_signal_time.items()
+                },
+                'daily_direction_count': self._daily_direction_count,
+                'saved_at': datetime.now(timezone.utc).isoformat(),
+            }
+            with open(self._cooldown_file, 'w', encoding='utf-8') as f:
+                _json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.debug(f"AutoSignals: no se pudo guardar estado de cooldown: {e}")
+
+    def _check_direction_limit(self, symbol: str, direction: str) -> bool:
+        """
+        Devuelve True si se puede enviar la señal (no se ha superado el límite
+        de señales en la misma dirección para este par hoy).
+        """
+        today = datetime.now(timezone.utc).date().isoformat()
+        entry = self._daily_direction_count.get(symbol, {})
+        # Resetear si es un día nuevo
+        if entry.get('date') != today:
+            entry = {'date': today, 'BUY': 0, 'SELL': 0}
+            self._daily_direction_count[symbol] = entry
+        return entry.get(direction, 0) < self._max_same_direction_per_day
+
+    def _register_direction(self, symbol: str, direction: str):
+        """Incrementa el contador de señales en esta dirección para hoy."""
+        today = datetime.now(timezone.utc).date().isoformat()
+        entry = self._daily_direction_count.setdefault(symbol, {'date': today, 'BUY': 0, 'SELL': 0})
+        if entry.get('date') != today:
+            entry.update({'date': today, 'BUY': 0, 'SELL': 0})
+        entry[direction] = entry.get(direction, 0) + 1
+
     async def find_signals_channel(self) -> Optional[discord.TextChannel]:
         """Encuentra el canal de señales"""
         for guild in self.bot.guilds:
@@ -71,7 +146,9 @@ class AutoSignalsService:
                         await self._scan_symbols()
 
                     # Second-level watchdog: check if scan is stuck (>30 min without scanning)
-                    if self.last_scan_time is not None:
+                    # Solo alertar si el CB NO está activo — durante pausa es comportamiento normal
+                    cb_active = not self._circuit_breaker.can_trade()[0]
+                    if self.last_scan_time is not None and not cb_active:
                         elapsed_since_scan = (datetime.now(timezone.utc) - self.last_scan_time).total_seconds() / 60
                         if elapsed_since_scan > 30:
                             logger.critical(
@@ -242,7 +319,18 @@ class AutoSignalsService:
                                 "INFO", "AUTOSIGNAL"
                             )
                         return False
-                
+
+                # LÍMITE DE DIRECCIÓN: máximo 3 señales en la misma dirección por par por día
+                signal_direction = result.signal.get('type', 'BUY').upper()
+                if not self._check_direction_limit(symbol, signal_direction):
+                    if self.scan_count % 20 == 1:
+                        log_event(
+                            f"🚫 {symbol}: límite de {self._max_same_direction_per_day} señales "
+                            f"{signal_direction} alcanzado hoy",
+                            "INFO", "AUTOSIGNAL"
+                        )
+                    return False
+
             except Exception as e:
                 if self.scan_count % 50 == 1:
                     log_event(f"Error evaluating signal for {symbol}: {e}", "WARNING", "AUTOSIGNAL")
@@ -255,7 +343,6 @@ class AutoSignalsService:
                 entry = signal.get('entry', 0)
                 sl = signal.get('sl', 0)
                 tp = signal.get('tp', 0)
-                
                 # Determinar si es auto-aprobada (HIGH o VERY_HIGH)
                 auto_approved = confidence in ['HIGH', 'VERY_HIGH']
                 
@@ -328,6 +415,10 @@ class AutoSignalsService:
 
                 # Actualizar cooldown — evitar spam del mismo par
                 self._last_signal_time[symbol] = datetime.now(timezone.utc)
+                # Registrar dirección para el límite diario
+                self._register_direction(symbol, signal_type)
+                # Persistir cooldowns en disco
+                self._save_cooldown_state()
 
                 # ── MODO REAL: ejecutar orden en MT5 si está activo ───────────
                 auto_execute = os.getenv('AUTO_EXECUTE_SIGNALS', '0') == '1'

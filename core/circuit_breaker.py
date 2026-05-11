@@ -344,22 +344,13 @@ class CircuitBreaker:
 
     def _check_triggers(self):
         """Verifica si hay que activar el circuit breaker."""
-        # Trigger 1: pérdidas consecutivas
+        # Único trigger: pérdidas consecutivas
+        # El trigger de pips diarios se eliminó porque mezcla XAUUSD/EURUSD/BTCEUR
+        # con escalas de pips completamente distintas (0.1$ vs 0.0001$ vs 1$)
         consecutive = self._consecutive_losses()
         if consecutive >= self.max_consecutive_losses:
             self._activate_pause(
                 f"{consecutive} pérdidas consecutivas"
-            )
-            return
-
-        # Trigger 2: pérdida diaria excesiva (en pips, aproximación)
-        today = date.today().isoformat()
-        daily = self.daily_pips.get(today, 0.0)
-        # No tenemos balance aquí, usamos pips como proxy
-        # Si las pérdidas del día superan 500 pips, pausar
-        if daily < -500:
-            self._activate_pause(
-                f"Pérdida diaria de {abs(daily):.0f} pips"
             )
 
     def _activate_pause(self, reason: str):
