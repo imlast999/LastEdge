@@ -1145,48 +1145,7 @@ async def slash_autosignals(
     )
 
 
-@bot.tree.command(name="btceur_status")
-async def slash_btceur_status(interaction: discord.Interaction):
-    """Muestra el estado de salud de BTCEUR (solo admin)."""
-    if interaction.user.id != AUTHORIZED_USER_ID:
-        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
-        return
-
-    h = symbol_health.get("BTCEUR", {})
-    status = h.get("status", "OK")
-    last_signal = h.get("last_signal_time")
-    last_error = h.get("last_error")
-
-    # Formatear última señal
-    if last_signal:
-        from datetime import datetime, timezone
-        delta = datetime.now(timezone.utc) - last_signal
-        mins = int(delta.total_seconds() / 60)
-        if mins < 60:
-            signal_str = f"hace {mins} minutos"
-        else:
-            hours = mins // 60
-            signal_str = f"hace {hours}h {mins % 60}min"
-    else:
-        signal_str = "nunca"
-
-    lines = [
-        "**BTCEUR STATUS**",
-        "",
-        f"* Estado: {status}",
-        f"* Última señal: {signal_str}",
-    ]
-    if last_error:
-        lines.append(f"* Último error: {last_error[:150]}{'...' if len(last_error) > 150 else ''}")
-
-    await interaction.response.send_message("\n".join(lines), ephemeral=True)
-
-
 async def build_pairs_overview_text() -> str:
-    """
-    Construye un resumen detallado de los 3 pares principales,
-    suficiente para reemplazar el comando debug_signals.
-    """
     symbols = ["EURUSD", "XAUUSD", "BTCEUR"]
     lines: list[str] = []
 
@@ -1806,58 +1765,6 @@ async def slash_chart(interaction: discord.Interaction, symbol: str = 'EURUSD', 
         await interaction.followup.send(f"❌ Error generando gráfico: {e}")
 
 
-@bot.tree.command(name="scan")
-@discord.app_commands.describe(symbols="Lista de símbolos separados por comas (opcional)", strategy="Estrategia a usar (ema,rsi,macd)")
-async def slash_scan(interaction: discord.Interaction, symbols: str = '', strategy: str = 'ema'):
-    """Escanea varios símbolos (limitado) y reporta señales encontradas."""
-    if interaction.user.id != AUTHORIZED_USER_ID:
-        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
-        return
-
-    await interaction.response.defer(thinking=True)
-    try:
-        connect_mt5()
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error conectando a MT5: {e}")
-        return
-
-    # Build symbol list
-    if symbols:
-        sym_list = [s.strip().upper() for s in symbols.split(',') if s.strip()]
-    else:
-        # try to fetch a small set from MT5 (visible symbols)
-        try:
-            all_syms = mt5.symbols_get()
-            sym_list = [s.name for s in all_syms if getattr(s, 'visible', False)][:10]
-        except Exception:
-            sym_list = ['EURUSD','XAUUSD','BTCEUR']
-
-    results = []
-    for s in sym_list[:10]:
-        try:
-            df = get_candles(s, TIMEFRAME, CANDLES)
-            cfg = RULES_CONFIG.get(s.upper(), {}) or {}
-            strat_used = cfg.get('strategy') or strategy
-
-            # HARDENING BTCEUR: forzar uso de estrategia BTCEUR si hay ambigüedad
-            if s.upper() == 'BTCEUR' and (not strat_used or 'btceur' not in strat_used.lower()):
-                logger.error("[BTCEUR FIX] Strategy corregida automáticamente en /scan: %s → btceur_simple", strat_used)
-                strat_used = 'btceur_simple'
-            sig, _ = detect_signal(df, strategy=strat_used, config=cfg, symbol=s)
-            if sig:
-                results.append((s, sig.get('type'), sig.get('entry')))
-        except Exception:
-            continue
-
-    if not results:
-        await interaction.followup.send('🔎 No se encontraron señales en el conjunto escaneado.')
-    else:
-        lines = ['🔎 Señales encontradas:']
-        for s, t, e in results:
-            lines.append(f"- {s}: {t} @ {e}")
-        await interaction.followup.send('\n'.join(lines))
-
-
 # Large autosignals command moved to services/commands.py
 
 
@@ -2101,164 +2008,6 @@ async def slash_force_autosignal(interaction: discord.Interaction, symbol: str =
         await interaction.followup.send(f"❌ Error forzando señal: {e}")
 
 
-@bot.tree.command(name="test_fallback")
-@discord.app_commands.describe(symbol="Símbolo para probar el sistema de fallback")
-@discord.app_commands.choices(symbol=[
-    discord.app_commands.Choice(name="🇪🇺 EURUSD", value="EURUSD"),
-    discord.app_commands.Choice(name="🥇 XAUUSD", value="XAUUSD"),
-    discord.app_commands.Choice(name="₿ BTCEUR", value="BTCEUR")
-])
-async def slash_test_fallback(interaction: discord.Interaction, symbol: str = 'EURUSD'):
-    """Prueba el sistema de fallback de estrategias (solo admin)."""
-    if interaction.user.id != AUTHORIZED_USER_ID:
-        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
-        return
-
-    await interaction.response.defer(thinking=True)
-    
-    try:
-        bot_logger.command_used(interaction.user.id, f"test_fallback {symbol}")
-        
-        # Obtener datos
-        connect_mt5()
-        df = get_candles(symbol.upper(), TIMEFRAME, CANDLES)
-        
-        # Test del sistema de fallback
-        sig, df_result, risk_info = _detect_signal_wrapper(df, symbol=symbol.upper())
-        
-        embed = discord.Embed(
-            title=f"🧪 Test Sistema Fallback: {symbol}",
-            description="Resultado del sistema de estrategias en cascada",
-            color=0x00ff88 if sig else 0xff4444
-        )
-        
-        # Información de la estrategia usada
-        strategy_used = risk_info.get('strategy_used', 'N/A')
-        is_fallback = risk_info.get('is_fallback', False)
-        is_emergency = risk_info.get('is_emergency', False)
-        
-        if is_emergency:
-            strategy_label = f"🚨 {strategy_used} (EMERGENCY)"
-            color = 0xff9500
-        elif is_fallback:
-            strategy_label = f"🔄 {strategy_used} (FALLBACK)"
-            color = 0xffff00
-        elif sig:
-            strategy_label = f"✅ {strategy_used} (PRINCIPAL)"
-            color = 0x00ff88
-        else:
-            strategy_label = "❌ NINGUNA"
-            color = 0xff4444
-        
-        embed.color = color
-        
-        embed.add_field(
-            name="🎯 **Resultado**",
-            value=(
-                f"**Estado:** {'✅ SEÑAL GENERADA' if sig else '❌ SIN SEÑAL'}\n"
-                f"**Estrategia:** {strategy_label}\n"
-                f"**Confianza:** {sig.get('confidence', 'N/A') if sig else 'N/A'}"
-            ),
-            inline=False
-        )
-        
-        if sig:
-            # Formatear precio según símbolo
-            if symbol == 'XAUUSD':
-                entry_str = f"{sig['entry']:.2f}"
-                sl_str = f"{sig['sl']:.2f}"
-                tp_str = f"{sig['tp']:.2f}"
-            elif symbol == 'BTCEUR':
-                entry_str = f"{sig['entry']:.0f}"
-                sl_str = f"{sig['sl']:.0f}"
-                tp_str = f"{sig['tp']:.0f}"
-            else:  # EURUSD
-                entry_str = f"{sig['entry']:.5f}"
-                sl_str = f"{sig['sl']:.5f}"
-                tp_str = f"{sig['tp']:.5f}"
-            
-            embed.add_field(
-                name="📊 **Detalles de la Señal**",
-                value=(
-                    f"**Tipo:** {sig.get('type', 'N/A')}\n"
-                    f"**Entrada:** {entry_str}\n"
-                    f"**Stop Loss:** {sl_str}\n"
-                    f"**Take Profit:** {tp_str}\n"
-                    f"**Explicación:** {sig.get('explanation', 'N/A')[:100]}..."
-                ),
-                inline=False
-            )
-            
-            # Test de cálculo de lot
-            try:
-                lot, risk_amount, rr = compute_suggested_lot(sig)
-                if lot:
-                    embed.add_field(
-                        name="💰 **Cálculo de Riesgo**",
-                        value=(
-                            f"**Lot sugerido:** {lot:.2f}\n"
-                            f"**Riesgo:** ${risk_amount:.2f}\n"
-                            f"**R:R:** {rr:.2f}" if rr else "**R:R:** N/A"
-                        ),
-                        inline=True
-                    )
-                else:
-                    embed.add_field(
-                        name="💰 **Cálculo de Riesgo**",
-                        value="❌ Error calculando lot",
-                        inline=True
-                    )
-            except Exception as lot_error:
-                embed.add_field(
-                    name="💰 **Cálculo de Riesgo**",
-                    value=f"❌ Error: {str(lot_error)[:50]}",
-                    inline=True
-                )
-        
-        # Información del sistema de fallback
-        if 'strategies_tried' in risk_info:
-            strategies_tried = risk_info['strategies_tried']
-            embed.add_field(
-                name="🔄 **Estrategias Probadas**",
-                value="\n".join([f"• {s}" for s in strategies_tried]),
-                inline=True
-            )
-        
-        if not sig and 'reason' in risk_info:
-            embed.add_field(
-                name="❌ **Razón del Rechazo**",
-                value=risk_info['reason'][:200],
-                inline=False
-            )
-        
-        # Test de generación de gráfico
-        try:
-            # Asegurar que el símbolo sea un string
-            chart_symbol = sig.get('symbol', symbol.upper()) if sig else symbol.upper()
-            if hasattr(chart_symbol, 'iloc'):
-                chart_symbol = str(chart_symbol.iloc[0]) if len(chart_symbol) > 0 else symbol.upper()
-            elif not isinstance(chart_symbol, str):
-                chart_symbol = str(chart_symbol)
-            
-            chart_file = generate_chart(df_result, symbol=chart_symbol, signal=sig)
-            embed.set_footer(text="✅ Gráfico generado correctamente")
-            
-            await interaction.followup.send(embed=embed, file=discord.File(chart_file))
-            
-            # Limpiar archivo
-            try:
-                os.remove(chart_file)
-            except Exception:
-                pass
-                
-        except Exception as chart_error:
-            embed.set_footer(text=f"❌ Error generando gráfico: {str(chart_error)[:100]}")
-            await interaction.followup.send(embed=embed)
-        
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error en test de fallback: {e}")
-
-
 @bot.tree.command(name="debug_signals")
 @discord.app_commands.describe(symbol="Símbolo para debug (EURUSD, XAUUSD, BTCEUR)")
 @discord.app_commands.choices(symbol=[
@@ -2440,78 +2189,6 @@ async def slash_debug_signals(interaction: discord.Interaction, symbol: str = 'E
         await interaction.followup.send(f"❌ Error en debug: {e}")
 
 
-@bot.tree.command(name="test_signal")
-@discord.app_commands.describe(symbol="Símbolo para probar (por defecto: EURUSD)")
-async def slash_test_signal(interaction: discord.Interaction, symbol: str = 'EURUSD'):
-    """Genera una señal de prueba para verificar el sistema (solo admin)."""
-    if interaction.user.id != AUTHORIZED_USER_ID:
-        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
-        return
-
-    await interaction.response.defer(thinking=True)
-    
-    try:
-        from mt5_client import get_candles
-        import MetaTrader5 as mt5
-        
-        # Obtener datos
-        df = get_candles(symbol.upper(), mt5.TIMEFRAME_H1, 100)
-        
-        # Detectar señal
-        signal, df_with_indicators, risk_info = _detect_signal_wrapper(df, symbol=symbol.upper())
-        
-        if signal:
-            # Generar gráfico
-            try:
-                # Asegurar que el símbolo sea un string
-                chart_symbol = signal.get('symbol', symbol.upper())
-                if hasattr(chart_symbol, 'iloc'):
-                    chart_symbol = str(chart_symbol.iloc[0]) if len(chart_symbol) > 0 else symbol.upper()
-                elif not isinstance(chart_symbol, str):
-                    chart_symbol = str(chart_symbol)
-                
-                logger.debug(f"Generating test signal chart for symbol: {chart_symbol}")
-                chart_file = generate_chart(df_with_indicators, symbol=chart_symbol, signal=signal)
-                
-                # Información de la señal
-                text = (
-                    f"🧪 **SEÑAL DE PRUEBA**\n"
-                    f"Activo: {signal['symbol']}\n"
-                    f"Tipo: {signal['type']}\n"
-                    f"Entrada: {signal['entry']:.5f}\n"
-                    f"SL: {signal['sl']:.5f}\n"
-                    f"TP: {signal['tp']:.5f}\n"
-                    f"Explicación: {signal.get('explanation', '-')}\n"
-                )
-                
-                # Añadir información de riesgo si está disponible
-                if risk_info:
-                    if 'suggested_lot' in risk_info:
-                        text += f"Lot sugerido: {risk_info['suggested_lot']:.2f}\n"
-                    if 'rr_ratio' in risk_info:
-                        text += f"R:R: {risk_info['rr_ratio']:.2f}\n"
-                
-                if chart_file:
-                    await interaction.followup.send(text, file=discord.File(chart_file))
-                    try:
-                        import os
-                        os.remove(chart_file)
-                    except Exception:
-                        pass
-                else:
-                    await interaction.followup.send(text)
-                    
-            except Exception as e:
-                await interaction.followup.send(f"✅ Señal detectada pero error en gráfico: {e}\n{text}")
-        else:
-            reason = risk_info.get('reason', 'No hay señal válida') if risk_info else 'No hay señal válida'
-            await interaction.followup.send(f"❌ {reason}")
-            
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error generando señal de prueba: {e}")
-
-
-
 @bot.tree.command(name="diagnose_signals")
 async def slash_diagnose_signals(interaction: discord.Interaction, symbol: str = 'EURUSD', iterations: int = 20):
     """Diagnóstico completo del pipeline de señales analizando ventanas históricas distintas (solo admin)."""
@@ -2629,267 +2306,6 @@ async def slash_diagnose_signals(interaction: discord.Interaction, symbol: str =
     except Exception as e:
         logger.error(f"Error en diagnóstico: {e}", exc_info=True)
         await interaction.followup.send(f"❌ Error en diagnóstico: {e}")
-
-
-@bot.tree.command(name="test_easy_signal")
-async def slash_test_easy_signal(interaction: discord.Interaction, symbol: str = 'EURUSD'):
-    """Genera señal con estrategia de test relajada para verificar pipeline (solo admin)."""
-    if interaction.user.id != AUTHORIZED_USER_ID:
-        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
-        return
-
-    await interaction.response.defer(thinking=True)
-    
-    try:
-        from mt5_client import get_candles
-        import MetaTrader5 as mt5
-        from signals import detect_signal
-        
-        symbol = symbol.upper()
-        
-        # Obtener datos
-        df = get_candles(symbol, mt5.TIMEFRAME_H1, 100)
-        if df is None or len(df) < 50:
-            await interaction.followup.send(f"❌ No se pudieron obtener datos para {symbol}")
-            return
-        
-        # Configuración ultra-relajada para test
-        test_config = {
-            'min_confirmations': 1,  # Solo 1 confirmación
-            'rsi_oversold': 45,  # Muy relajado
-            'rsi_overbought': 55,
-            'atr_threshold': 0.5,  # Muy bajo
-            'range_threshold': 0.001,  # Muy bajo
-            'min_body_ratio': 0.1,  # Muy bajo
-            'ema_distance_max': 0.05,  # Muy amplio
-        }
-        
-        # Detectar señal con config relajada
-        signal, df_with_indicators = detect_signal(df, 'ema50_200', test_config, symbol=symbol)
-        
-        if signal:
-            # Generar gráfico
-            try:
-                from charts import generate_chart
-                chart_file = generate_chart(df_with_indicators, symbol=symbol, signal=signal)
-                
-                text = (
-                    f"🧪 **SEÑAL DE TEST (Config Relajada)**\n"
-                    f"Activo: {signal.get('symbol', symbol)}\n"
-                    f"Tipo: {signal['type']}\n"
-                    f"Entrada: {signal['entry']:.5f}\n"
-                    f"SL: {signal['sl']:.5f}\n"
-                    f"TP: {signal['tp']:.5f}\n"
-                    f"Explicación: {signal.get('explanation', '-')}\n\n"
-                    f"✅ **Pipeline funciona correctamente**\n"
-                    f"El problema está en las condiciones demasiado restrictivas de las estrategias actuales."
-                )
-                
-                if chart_file:
-                    await interaction.followup.send(text, file=discord.File(chart_file))
-                    try:
-                        import os
-                        os.remove(chart_file)
-                    except Exception:
-                        pass
-                else:
-                    await interaction.followup.send(text)
-                    
-            except Exception as e:
-                await interaction.followup.send(f"✅ Señal detectada: {signal['type']} @ {signal['entry']:.5f}\n\n⚠️ Error en gráfico: {e}")
-        else:
-            await interaction.followup.send(
-                f"❌ **Ni siquiera con config ultra-relajada se detectó señal**\n\n"
-                f"Esto indica un problema más profundo:\n"
-                f"- Datos de mercado insuficientes\n"
-                f"- Indicadores no se calculan correctamente\n"
-                f"- Estrategia tiene error de código\n\n"
-                f"Revisa los logs para más detalles."
-            )
-            
-    except Exception as e:
-        logger.error(f"Error en test_easy_signal: {e}", exc_info=True)
-        await interaction.followup.send(f"❌ Error: {e}")
-
-
-@bot.tree.command(name="mt5_login")
-async def slash_mt5_login(interaction: discord.Interaction):
-    """Intenta iniciar sesión en MT5 con las credenciales guardadas en memoria (slash)."""
-    if interaction.user.id != AUTHORIZED_USER_ID:
-        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
-        return
-
-    if not state.mt5_credentials.get('login'):
-        await interaction.response.send_message("No hay credenciales guardadas. Usa `/set_mt5_credentials` primero.", ephemeral=True)
-        return
-
-    await interaction.response.defer(thinking=True)
-
-    try:
-        connect_mt5()
-        ok = mt5.login(state.mt5_credentials.get('login'), state.mt5_credentials.get('password'), server=state.mt5_credentials.get('server'))
-        if ok:
-            await interaction.followup.send("✅ Conectado y logueado en MT5.")
-        else:
-            await interaction.followup.send(f"❌ Login falló: {mt5.last_error()}")
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error al loguear en MT5: {e}")
-
-
-@bot.tree.command(name="accept")
-@log_discord_command
-async def slash_accept(interaction: discord.Interaction, signal_id: int):
-    """Aceptar una señal pendiente por ID (slash)."""
-    if interaction.user.id != AUTHORIZED_USER_ID:
-        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
-        return
-
-    await interaction.response.defer(thinking=True)
-    log_event(f"Usuario intentando aceptar señal ID: {signal_id}")
-
-    signal = state.pending_signals.get(signal_id)
-    if not signal:
-        log_event(f"❌ Señal {signal_id} no encontrada", "WARNING")
-        await interaction.followup.send("❌ Señal no encontrada")
-        return
-
-    if datetime.now(timezone.utc) > signal.get("expires", datetime.now(timezone.utc)):
-        del state.pending_signals[signal_id]
-        log_event(f"⌛ Señal {signal_id} expirada y eliminada", "WARNING")
-        await interaction.followup.send("⌛ Señal expirada")
-        return
-
-    # Present execution options similar to the button flow
-    class ExecModal(discord.ui.Modal, title='Ejecutar señal - Personalizar'):
-        lot = discord.ui.TextInput(label='Lot (ej: 0.01)', required=False, style=discord.TextStyle.short, placeholder='Dejar vacío para usar % de riesgo')
-        risk_pct = discord.ui.TextInput(label='Riesgo % (ej: 0.5)', required=False, style=discord.TextStyle.short, placeholder='Porcentaje de balance a arriesgar')
-
-        def __init__(self, sid):
-            super().__init__()
-            self.sid = sid
-
-        async def on_submit(self, interaction_modal: discord.Interaction):
-            s = state.pending_signals.get(self.sid)
-            if not s:
-                await interaction_modal.response.send_message('❌ Señal no encontrada', ephemeral=True)
-                return
-            lot_val = None
-            try:
-                if self.risk_pct.value:
-                    rp = float(self.risk_pct.value)
-                    lot_val, _, _ = compute_suggested_lot(s, risk_pct=rp)
-                elif self.lot.value:
-                    lot_val = float(self.lot.value)
-            except Exception as e:
-                await interaction_modal.response.send_message(f'❌ Parámetros inválidos: {e}', ephemeral=True)
-                return
-
-            if not lot_val:
-                await interaction_modal.response.send_message('❌ No se pudo calcular un lot válido', ephemeral=True)
-                return
-
-            try:
-                # Asegurar que el símbolo sea un string válido
-                symbol_str = s.get('symbol', 'EURUSD')
-                if hasattr(symbol_str, 'iloc'):
-                    symbol_str = str(symbol_str.iloc[0]) if len(symbol_str) > 0 else 'EURUSD'
-                elif not isinstance(symbol_str, str):
-                    symbol_str = str(symbol_str)
-                
-                logger.debug(f"Ejecutando orden modal: {symbol_str} {s.get('type')} {lot_val}")
-                log_event(f"🎯 EXECUTING ORDER: {symbol_str} {s.get('type')} {lot_val} lots (Modal)")
-                res = place_order(symbol_str, s['type'], lot_val, price=s.get('entry'), sl=s.get('sl'), tp=s.get('tp'))
-                state.trades_today += 1
-                try:
-                    save_trades_today(state.trades_today)
-                except Exception:
-                    logger.exception('Failed to save trades_today')
-                if self.sid in state.pending_signals:
-                    del state.pending_signals[self.sid]
-                log_event(f"✅ ORDER EXECUTED: {res}")
-                await interaction_modal.response.send_message(f'✅ Orden ejecutada: {res}', ephemeral=True)
-            except Exception as e:
-                log_event(f"❌ ORDER FAILED: {e}", "ERROR")
-                await interaction_modal.response.send_message(f'❌ Error ejecutando orden: {e}', ephemeral=True)
-
-    class ExecView(discord.ui.View):
-        def __init__(self, sid):
-            super().__init__(timeout=60)
-            self.sid = sid
-
-        @discord.ui.button(label='Ejecutar ahora', style=discord.ButtonStyle.success)
-        async def execute_now(self, interaction_exec: discord.Interaction, button: discord.ui.Button):
-            if interaction_exec.user.id != AUTHORIZED_USER_ID:
-                await interaction_exec.response.send_message('⛔ No autorizado', ephemeral=True)
-                return
-            s = state.pending_signals.get(self.sid)
-            if not s:
-                await interaction_exec.response.send_message('❌ Señal no encontrada', ephemeral=True)
-                return
-            type_key = s.get('type','').upper()
-            env_key = f'MT5_RISK_{type_key}'
-            try:
-                rp = float(os.getenv(env_key, os.getenv('MT5_RISK_PCT', '0.5')))
-            except Exception:
-                rp = 0.5
-            lot_val, _, _ = compute_suggested_lot(s, risk_pct=rp)
-            if not lot_val:
-                await interaction_exec.response.send_message('❌ No se pudo calcular lot sugerido', ephemeral=True)
-                return
-            try:
-                # Asegurar que el símbolo sea un string válido
-                symbol_str = s.get('symbol', 'EURUSD')
-                if hasattr(symbol_str, 'iloc'):
-                    symbol_str = str(symbol_str.iloc[0]) if len(symbol_str) > 0 else 'EURUSD'
-                elif not isinstance(symbol_str, str):
-                    symbol_str = str(symbol_str)
-                
-                logger.debug(f"Ejecutando orden directa: {symbol_str} {s.get('type')} {lot_val}")
-                log_event(f"🎯 EXECUTING ORDER: {symbol_str} {s.get('type')} {lot_val} lots (Direct)")
-                res = place_order(symbol_str, s['type'], lot_val, price=s.get('entry'), sl=s.get('sl'), tp=s.get('tp'))
-                state.trades_today += 1
-                try:
-                    save_trades_today(state.trades_today)
-                except Exception:
-                    logger.exception('Failed to save trades_today')
-                if self.sid in state.pending_signals:
-                    del state.pending_signals[self.sid]
-                log_event(f"✅ ORDER EXECUTED: {res}")
-                await interaction_exec.response.send_message(f'✅ Orden ejecutada: {res}', ephemeral=True)
-            except Exception as e:
-                log_event(f"❌ ORDER FAILED: {e}", "ERROR")
-                await interaction_exec.response.send_message(f'❌ Error ejecutando orden: {e}', ephemeral=True)
-
-        @discord.ui.button(label='Personalizar', style=discord.ButtonStyle.primary)
-        async def customize(self, interaction_exec: discord.Interaction, button: discord.ui.Button):
-            if interaction_exec.user.id != AUTHORIZED_USER_ID:
-                await interaction_exec.response.send_message('⛔ No autorizado', ephemeral=True)
-                return
-            await interaction_exec.response.send_modal(ExecModal(self.sid))
-
-        @discord.ui.button(label='Cancelar', style=discord.ButtonStyle.secondary)
-        async def cancel(self, interaction_exec: discord.Interaction, button: discord.ui.Button):
-            await interaction_exec.response.send_message('Acción cancelada. La señal permanece pendiente.', ephemeral=True)
-
-    await interaction.followup.send('Selecciona acción: ejecutar ahora, personalizar lotaje o cancelar.', view=ExecView(signal_id), ephemeral=True)
-
-
-@bot.tree.command(name="reject")
-@log_discord_command
-async def slash_reject(interaction: discord.Interaction, signal_id: int):
-    """Rechaza una señal pendiente por ID (slash)."""
-    if interaction.user.id != AUTHORIZED_USER_ID:
-        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
-        return
-
-    if signal_id in state.pending_signals:
-        signal = state.pending_signals[signal_id]
-        del state.pending_signals[signal_id]
-        log_event(f"❌ SIGNAL REJECTED: ID {signal_id} ({signal.get('symbol', 'N/A')} {signal.get('type', 'N/A')})")
-        await interaction.response.send_message(f"❌ Señal {signal_id} rechazada")
-    else:
-        log_event(f"❌ Intento de rechazar señal inexistente: ID {signal_id}", "WARNING")
-        await interaction.response.send_message("❌ Señal no encontrada")
 
 
 @bot.tree.command(name="performance")
@@ -3048,100 +2464,219 @@ async def mt5_login(ctx):
 # Live dashboard command moved to services/commands.py
 
 
+# ── Modal para configurar el backtest desde Discord ───────────────────────────
+
+class ReplayConfigModal(discord.ui.Modal, title="⚙️ Configurar Backtest"):
+    """Modal que recoge los parámetros del backtest antes de ejecutarlo."""
+
+    symbol = discord.ui.TextInput(
+        label="Par (EURUSD / XAUUSD / BTCEUR)",
+        placeholder="EURUSD",
+        default="EURUSD",
+        max_length=10,
+        required=True,
+    )
+    strategy = discord.ui.TextInput(
+        label="Estrategia (dejar vacío = activa del par)",
+        placeholder="eurusd_asian_breakout / xauusd_simple / btceur_simple",
+        required=False,
+        max_length=40,
+    )
+    bars = discord.ui.TextInput(
+        label="Velas H1 a analizar (100 – 10000)",
+        placeholder="3000",
+        default="3000",
+        max_length=5,
+        required=True,
+    )
+    cb_losses = discord.ui.TextInput(
+        label="Circuit Breaker: pérdidas consecutivas (0=off)",
+        placeholder="4",
+        default="4",
+        max_length=2,
+        required=False,
+    )
+    cb_pause = discord.ui.TextInput(
+        label="Circuit Breaker: velas de pausa",
+        placeholder="168",
+        default="168",
+        max_length=4,
+        required=False,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+
+        # ── Parsear y validar parámetros ──────────────────────────────────────
+        sym = self.symbol.value.strip().upper()
+        if sym not in ('EURUSD', 'XAUUSD', 'BTCEUR'):
+            await interaction.followup.send(
+                f"❌ Símbolo `{sym}` no válido. Usa EURUSD, XAUUSD o BTCEUR.", ephemeral=True
+            )
+            return
+
+        try:
+            n_bars = int(self.bars.value.strip())
+            n_bars = max(100, min(10000, n_bars))
+        except ValueError:
+            n_bars = 3000
+
+        try:
+            n_cb_losses = int(self.cb_losses.value.strip()) if self.cb_losses.value.strip() else 4
+            n_cb_losses = max(0, n_cb_losses)
+        except ValueError:
+            n_cb_losses = 4
+
+        try:
+            n_cb_pause = int(self.cb_pause.value.strip()) if self.cb_pause.value.strip() else 168
+            n_cb_pause = max(1, n_cb_pause)
+        except ValueError:
+            n_cb_pause = 168
+
+        # Estrategia: usar la del rules_config si no se especifica
+        strat_input = self.strategy.value.strip().lower() if self.strategy.value.strip() else None
+        strategy_map = {
+            'EURUSD': ['eurusd_simple', 'eurusd_advanced', 'eurusd_mtf', 'eurusd_asian_breakout'],
+            'XAUUSD': ['xauusd_simple', 'xauusd_reversal', 'xauusd_momentum', 'xauusd_psychological'],
+            'BTCEUR': ['btceur_simple', 'btc_trend_pullback_v1', 'btceur_weekly_breakout'],
+        }
+        default_strategy = {
+            'EURUSD': 'eurusd_asian_breakout',
+            'XAUUSD': 'xauusd_simple',
+            'BTCEUR': 'btceur_simple',
+        }
+        if strat_input and strat_input not in strategy_map.get(sym, []):
+            await interaction.followup.send(
+                f"❌ Estrategia `{strat_input}` no válida para {sym}.\n"
+                f"Disponibles: `{'`, `'.join(strategy_map[sym])}`",
+                ephemeral=True
+            )
+            return
+        strat = strat_input or default_strategy[sym]
+
+        cb_label = f"CB {n_cb_losses}L/{n_cb_pause}v" if n_cb_losses > 0 else "sin CB"
+        await interaction.followup.send(
+            f"⏳ Ejecutando backtest...\n"
+            f"**{sym}** · `{strat}` · **{n_bars}** velas · {cb_label}"
+        )
+
+        # ── Ejecutar backtest en thread para no bloquear el event loop ────────
+        try:
+            import asyncio
+            from core.replay_engine import ReplayEngine
+
+            lookback = 210 if strat in ('eurusd_asian_breakout', 'xauusd_psychological') else \
+                       900 if strat in ('btc_trend_pullback_v1', 'btceur_weekly_breakout') else \
+                       1300 if strat == 'eurusd_mtf' else 210
+
+            engine = ReplayEngine(
+                lookback_window=lookback,
+                max_forward_bars=120,
+                cb_consecutive_losses=n_cb_losses,
+                cb_pause_bars=n_cb_pause,
+            )
+
+            def _run():
+                return engine.run_replay(
+                    symbol=sym,
+                    bars=n_bars,
+                    strategy=strat,
+                    timeframe='H1',
+                    skip_duplicate_filter=True,
+                )
+
+            stats = await asyncio.to_thread(_run)
+
+        except Exception as e:
+            logger.error(f"Error en /replay: {e}", exc_info=True)
+            await interaction.followup.send(f"❌ Error ejecutando backtest: {e}")
+            return
+
+        # ── Calcular métricas extra ───────────────────────────────────────────
+        signals = engine.get_signals()
+        wins   = [s for s in signals if s.result == 'WIN']
+        losses = [s for s in signals if s.result == 'LOSS']
+        closed = len(wins) + len(losses)
+        gp = sum(s.profit_pips or 0 for s in wins)
+        gl = abs(sum(s.profit_pips or 0 for s in losses))
+        pf = gp / gl if gl > 0 else float('inf')
+        pf_str = f"{pf:.2f}" if pf != float('inf') else "∞"
+
+        # Racha máxima de pérdidas
+        max_streak = cur = 0
+        for s in signals:
+            if s.result == 'LOSS': cur += 1; max_streak = max(max_streak, cur)
+            elif s.result == 'WIN': cur = 0
+
+        # ── Construir embed de resultados ─────────────────────────────────────
+        has_edge = closed >= 10 and stats.winrate >= 50 and pf >= 1.2 and stats.total_pips > 0
+        color = 0x3fb950 if has_edge else (0xd29922 if closed >= 10 else 0x8b949e)
+
+        embed = discord.Embed(
+            title=f"📊 Backtest — {sym} · {strat}",
+            color=color,
+            description=(
+                f"**{n_bars}** velas H1 · {cb_label} · "
+                f"{'✅ CON EDGE' if has_edge else '⚠️ SIN EDGE CLARO'}"
+            )
+        )
+
+        embed.add_field(
+            name="Señales",
+            value=(
+                f"Total: **{stats.signals_final}**\n"
+                f"BUY: {stats.buy_signals} · SELL: {stats.sell_signals}\n"
+                f"Cerradas: {closed} (TP {stats.tp_hits} / SL {stats.sl_hits})"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="Rendimiento",
+            value=(
+                f"Winrate: **{stats.winrate:.1f}%**\n"
+                f"Profit Factor: **{pf_str}**\n"
+                f"Pips netos: **{stats.total_pips:+.0f}**"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="Riesgo",
+            value=(
+                f"R:R medio: {stats.avg_rr:.2f}\n"
+                f"Racha max pérd.: {max_streak}\n"
+                f"Tiempo: {stats.execution_time:.1f}s"
+            ),
+            inline=True,
+        )
+
+        if n_cb_losses > 0 and stats.cb_activations > 0:
+            embed.add_field(
+                name="Circuit Breaker",
+                value=(
+                    f"Activaciones: **{stats.cb_activations}**\n"
+                    f"Velas pausadas: {stats.bars_paused}\n"
+                    f"Señales bloqueadas: {stats.signals_blocked_by_cb}"
+                ),
+                inline=True,
+            )
+
+        if closed < 10:
+            embed.set_footer(text="⚠️ Pocas señales cerradas — aumenta las velas para más fiabilidad")
+        else:
+            embed.set_footer(text="Mismo pipeline que producción · estrategias, scoring y filtros reales")
+
+        await interaction.followup.send(embed=embed)
+
+
 @bot.tree.command(name="replay")
-@discord.app_commands.describe(
-    symbol="Símbolo a analizar (EURUSD, XAUUSD, BTCEUR)",
-    bars="Número de velas históricas a analizar (ej: 5000)"
-)
-@log_discord_command
-async def slash_replay(interaction: discord.Interaction, symbol: str = 'EURUSD', bars: int = 1000):
-    """Market Replay - Simula miles de velas históricas para validar estrategias (solo admin)."""
+async def slash_replay(interaction: discord.Interaction):
+    """Abre el configurador de backtest y ejecuta el replay con el pipeline real (solo admin)."""
     if interaction.user.id != AUTHORIZED_USER_ID:
         await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
         return
+    await interaction.response.send_modal(ReplayConfigModal())
 
-    await interaction.response.defer(thinking=True)
-    
-    try:
-        from core.replay_engine import get_replay_engine
-        
-        symbol = symbol.upper()
-        
-        # Validar parámetros
-        if bars < 100:
-            await interaction.followup.send("⚠️ Mínimo 100 velas requeridas")
-            return
-        
-        if bars > 10000:
-            await interaction.followup.send("⚠️ Máximo 10000 velas permitidas")
-            return
-        
-        # Mensaje de inicio
-        await interaction.followup.send(f"🔄 Iniciando Market Replay para {symbol}...\n📊 Analizando {bars} velas históricas...")
-        
-        # Ejecutar replay
-        replay_engine = get_replay_engine(lookback_window=100)
-        stats = replay_engine.run_replay(
-            symbol=symbol,
-            bars=bars,
-            skip_duplicate_filter=True  # Desactivar filtro de duplicados en replay
-        )
-        
-        # Generar reporte
-        report = f"📈 **MARKET REPLAY RESULTS — {symbol}**\n\n"
-        
-        report += f"**Configuración:**\n"
-        report += f"- Velas analizadas: `{stats.bars_analyzed}`\n"
-        report += f"- Ventana de análisis: `100 velas`\n"
-        report += f"- Tiempo de ejecución: `{stats.execution_time:.2f}s`\n\n"
-        
-        report += f"**Pipeline de Señales:**\n"
-        report += f"- Setups detectados: `{stats.setups_detected}` ({stats.setups_detected/stats.bars_analyzed*100:.1f}%)\n"
-        report += f"- Señales finales: `{stats.signals_final}` ({stats.signals_final/stats.bars_analyzed*100:.1f}%)\n"
-        report += f"  • BUY: `{stats.buy_signals}`\n"
-        report += f"  • SELL: `{stats.sell_signals}`\n\n"
-        
-        if stats.signals_final > 0:
-            report += f"**Simulación TP/SL:**\n"
-            report += f"- TP alcanzado: `{stats.tp_hits}` ✅\n"
-            report += f"- SL alcanzado: `{stats.sl_hits}` ❌\n"
-            report += f"- Pendientes: `{stats.pending}` ⏳\n"
-            
-            closed_trades = stats.tp_hits + stats.sl_hits
-            if closed_trades > 0:
-                report += f"\n**Métricas:**\n"
-                report += f"- Winrate: `{stats.winrate:.1f}%`\n"
-                report += f"- R:R promedio: `{stats.avg_rr:.2f}`\n"
-                report += f"- Total pips: `{stats.total_pips:+.1f}`\n"
-                report += f"- Pips por trade: `{stats.total_pips/closed_trades:+.1f}`\n"
-            else:
-                report += f"\n⚠️ No hay trades cerrados para calcular winrate\n"
-        else:
-            report += f"⚠️ **No se detectaron señales finales**\n\n"
-            report += f"Posibles causas:\n"
-            report += f"- Condiciones de mercado no favorables en el período analizado\n"
-            report += f"- Estrategia demasiado restrictiva\n"
-            report += f"- Configuración de scoring muy alta\n"
-        
-        report += f"\n💡 **Nota:** Este replay usa el mismo pipeline de producción (estrategias, engine, scoring, filtros)\n"
-        
-        await interaction.followup.send(report)
-        
-        # Si hay señales, ofrecer reporte detallado
-        if stats.signals_final > 0 and stats.signals_final <= 20:
-            detailed_report = replay_engine.get_detailed_report()
-            
-            # Dividir en chunks si es muy largo
-            if len(detailed_report) > 1900:
-                chunks = [detailed_report[i:i+1900] for i in range(0, len(detailed_report), 1900)]
-                for chunk in chunks[:3]:  # Máximo 3 chunks
-                    await interaction.followup.send(f"```\n{chunk}\n```")
-            else:
-                await interaction.followup.send(f"```\n{detailed_report}\n```")
-        
-    except Exception as e:
-        logger.error(f"Error en replay: {e}", exc_info=True)
-        await interaction.followup.send(f"❌ Error ejecutando replay: {e}")
+
 
 
 # ======================

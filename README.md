@@ -326,16 +326,58 @@ Para desactivar: pulsar el botón rojo en el dashboard o reiniciar el bot.
 
 ---
 
-## Comandos Discord principales
+## Comandos Discord
 
-```
-/autosignals on|off|status   — Control del escaneo automático
-/signal [EURUSD]             — Señal manual de un par
-/positions                   — Posiciones abiertas en MT5
-/close_position [ticket]     — Cerrar posición
-/replay EURUSD 1000          — Backtest rápido desde Discord
-/logs_info                   — Archivo de log actual
-```
+### Control del bot
+
+| Comando | Descripción |
+|---|---|
+| `/autosignals on\|off\|status` | Activa, desactiva o consulta el loop de escaneo automático |
+| `/status` | Estado del bot: uptime, MT5, módulos cargados, configuración activa |
+| `/pairs` | Muestra los 3 pares con su estado y permite activar/desactivar cada uno con botones |
+| `/logs_info` | Ruta y tamaño del archivo de log actual |
+
+### MT5 y posiciones
+
+| Comando | Descripción |
+|---|---|
+| `/positions` | Lista posiciones abiertas en MT5 con ticket, símbolo y P&L |
+| `/close_position [ticket]` | Cierra una posición por número de ticket |
+| `/close_positions_ui` | Igual que el anterior pero con desplegable visual |
+| `/set_mt5_credentials` | Modal para introducir login/password/server de MT5 sin tocar el .env |
+
+### Señales y análisis
+
+| Comando | Descripción |
+|---|---|
+| `/signal [symbol]` | Pide una señal manual para un par en ese momento |
+| `/chart [symbol] [timeframe] [candles]` | Genera un gráfico PNG con las últimas velas |
+| `/force_autosignal [symbol]` | Fuerza un escaneo inmediato sin esperar el intervalo |
+| `/debug_signals [symbol]` | Pipeline completo de evaluación con todos los filtros y razones de rechazo |
+| `/diagnose_signals [symbol] [iterations]` | Analiza N ventanas históricas para ver si la estrategia detecta setups |
+
+### Backtest desde Discord
+
+| Comando | Descripción |
+|---|---|
+| `/replay` | Abre un modal con 5 campos configurables y ejecuta el backtest completo con el pipeline real |
+
+El modal de `/replay` permite configurar:
+- **Par**: EURUSD / XAUUSD / BTCEUR
+- **Estrategia**: cualquiera de las disponibles para ese par (vacío = estrategia activa)
+- **Velas**: 100–10000 velas H1
+- **Circuit Breaker**: pérdidas consecutivas para activar la pausa (0 = desactivado)
+- **Pausa CB**: velas de pausa tras activar el circuit breaker
+
+El resultado se muestra como embed con winrate, profit factor, pips netos, R:R medio, racha máxima y estadísticas del circuit breaker simulado.
+
+### Estadísticas y configuración
+
+| Comando | Descripción |
+|---|---|
+| `/performance [days]` | Reporte de rendimiento: señales, winrate, P&L de los últimos N días |
+| `/strategy_performance [days]` | Desglose de rendimiento por estrategia |
+| `/set_strategy [symbol] [strategy]` | Cambia la estrategia activa de un par en caliente sin reiniciar el bot |
 
 ---
 
