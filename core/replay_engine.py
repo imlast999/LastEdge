@@ -89,17 +89,22 @@ class ReplayEngine:
         
     def run_replay(self, symbol: str, bars: int, strategy: str = None,
                    config: Dict = None, skip_duplicate_filter: bool = True,
-                   timeframe: str = 'H1') -> ReplayStatistics:
+                   timeframe: str = 'H1',
+                   df_override: 'pd.DataFrame' = None) -> 'ReplayStatistics':
         """
-        Ejecuta replay sobre datos históricos
-        
+        Ejecuta replay sobre datos históricos.
+
         Args:
-            symbol: Símbolo a analizar (EURUSD, XAUUSD, BTCEUR)
-            bars: Número de velas históricas a analizar
-            strategy: Estrategia a usar (None = auto-detectar por símbolo)
-            config: Configuración específica (opcional)
-            skip_duplicate_filter: Si True, omite filtro de duplicados (recomendado para replay)
-            
+            symbol:               Símbolo a analizar (EURUSD, XAUUSD, BTCEUR)
+            bars:                 Número de velas históricas a analizar
+            strategy:             Estrategia a usar (None = auto-detectar por símbolo)
+            config:               Configuración específica (opcional)
+            skip_duplicate_filter: Si True, omite filtro de duplicados
+            timeframe:            Timeframe de las velas ('H1', 'H4', etc.)
+            df_override:          DataFrame ya descargado. Si se pasa, se omite la
+                                  descarga de MT5. Útil para walk-forward (descarga
+                                  una sola vez y divide en ventanas).
+
         Returns:
             ReplayStatistics con resultados completos
         """
@@ -111,25 +116,27 @@ class ReplayEngine:
         start_time = time.time()
         
         try:
-            # Inicializar MT5
-            mt5_initialize()
-            
-            # Obtener datos históricos (necesitamos lookback + bars)
-            total_bars_needed = self.lookback_window + bars
-            logger.info(f"Cargando {total_bars_needed} velas para {symbol}...")
+            # ── Obtener datos históricos ──────────────────────────────────────
+            if df_override is not None:
+                # Datos ya proporcionados externamente (walk-forward, etc.)
+                df_full = df_override.reset_index(drop=True)
+                logger.info(f"Usando df_override: {len(df_full)} velas para {symbol}")
+            else:
+                # Descargar desde MT5
+                mt5_initialize()
+                total_bars_needed = self.lookback_window + bars
+                logger.info(f"Cargando {total_bars_needed} velas para {symbol}...")
 
-            # Mapear timeframe string a constante MT5
-            tf_map = {
-                'H1': mt5.TIMEFRAME_H1,
-                'H4': mt5.TIMEFRAME_H4,
-                'D1': mt5.TIMEFRAME_D1,
-                'M15': mt5.TIMEFRAME_M15,
-                'M5': mt5.TIMEFRAME_M5,
-            }
-            mt5_timeframe = tf_map.get(timeframe.upper(), mt5.TIMEFRAME_H1)
+                tf_map = {
+                    'H1': mt5.TIMEFRAME_H1,
+                    'H4': mt5.TIMEFRAME_H4,
+                    'D1': mt5.TIMEFRAME_D1,
+                    'M15': mt5.TIMEFRAME_M15,
+                    'M5': mt5.TIMEFRAME_M5,
+                }
+                mt5_timeframe = tf_map.get(timeframe.upper(), mt5.TIMEFRAME_H1)
+                df_full = get_candles(symbol, mt5_timeframe, total_bars_needed)
 
-            df_full = get_candles(symbol, mt5_timeframe, total_bars_needed)
-            
             if df_full is None or len(df_full) < self.lookback_window + 10:
                 logger.error(f"Datos insuficientes para {symbol}: {len(df_full) if df_full is not None else 0} velas")
                 return ReplayStatistics()

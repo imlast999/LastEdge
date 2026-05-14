@@ -517,6 +517,77 @@ def print_recommendations(results: List[dict]):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Walk-Forward Testing
+# ─────────────────────────────────────────────────────────────────────────────
+
+def run_walkforward(symbol: str, strategy: str, total_bars: int,
+                    train_bars: int, test_bars: int, step_bars: int,
+                    cb_losses: int = 4, cb_pause: int = 168,
+                    save: bool = False) -> bool:
+    """
+    Ejecuta walk-forward testing y muestra el reporte.
+    Retorna True si la estrategia es STABLE o MARGINAL.
+    """
+    from core.walkforward import WalkForwardTester
+
+    _section(f"WALK-FORWARD: {symbol}  [estrategia: {strategy}]")
+    print(f"  Train: {train_bars} velas · Test: {test_bars} velas · Step: {step_bars} velas")
+    print(f"  Total: {total_bars} velas · CB: {cb_losses}L/{cb_pause}v")
+    print()
+
+    wf = WalkForwardTester(
+        train_bars=train_bars,
+        test_bars=test_bars,
+        step_bars=step_bars,
+        cb_losses=cb_losses,
+        cb_pause=cb_pause,
+    )
+
+    report = wf.run(
+        symbol=symbol,
+        strategy=strategy,
+        total_bars=total_bars,
+        verbose=True,
+    )
+
+    if not report.windows:
+        _fail("No se generaron ventanas. Aumenta --bars o reduce --wf-train/--wf-test.")
+        return False
+
+    print(report.summary())
+
+    # Guardar CSV si se pide
+    if save:
+        try:
+            import csv
+            from pathlib import Path
+            Path('backtest_results').mkdir(exist_ok=True)
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filepath = f'backtest_results/walkforward_{symbol}_{strategy}_{ts}.csv'
+            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    'window', 'train_start', 'train_end', 'test_start', 'test_end',
+                    'train_signals', 'train_winrate', 'train_pf', 'train_pips',
+                    'test_signals',  'test_winrate',  'test_pf',  'test_pips',
+                    'pf_degradation', 'consistency_score',
+                ])
+                for w in report.windows:
+                    writer.writerow([
+                        w.window_index,
+                        w.train_start, w.train_end, w.test_start, w.test_end,
+                        w.train_signals, f"{w.train_winrate:.1f}", f"{w.train_pf:.3f}", f"{w.train_pips:.1f}",
+                        w.test_signals,  f"{w.test_winrate:.1f}",  f"{w.test_pf:.3f}",  f"{w.test_pips:.1f}",
+                        f"{w.pf_degradation:.3f}", f"{w.consistency_score:.3f}",
+                    ])
+            print(f"\n  💾  Walk-forward guardado en: {filepath}")
+        except Exception as e:
+            _warn(f"No se pudo guardar CSV: {e}")
+
+    return report.stability_rating in ('STABLE', 'MARGINAL')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Guardado de resultados en CSV
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -597,6 +668,14 @@ Ejemplos:
                         help='Pérdidas consecutivas para activar el CB simulado (0=desactivado, default: 4)')
     parser.add_argument('--cb-pause',  type=int, default=168,
                         help='Velas de pausa tras activar el CB (default: 168 H1 ≈ 1 semana)')
+    parser.add_argument('--walkforward', action='store_true',
+                        help='Ejecutar walk-forward testing en lugar de backtest simple')
+    parser.add_argument('--wf-train', type=int, default=4320,
+                        help='Velas de entrenamiento por ventana WF (default: 4320 ≈ 6 meses H1)')
+    parser.add_argument('--wf-test',  type=int, default=720,
+                        help='Velas de validación por ventana WF (default: 720 ≈ 1 mes H1)')
+    parser.add_argument('--wf-step',  type=int, default=720,
+                        help='Avance entre ventanas WF (default: 720 ≈ 1 mes H1)')
     return parser.parse_args()
 
 
@@ -700,7 +779,6 @@ def main():
     args = parse_args()
 
     # ── Decidir si modo interactivo o CLI directo ─────────────────────────────
-    # Modo interactivo: ningún argumento relevante fue pasado
     no_args_given = (
         args.symbol is None and
         not args.all and
@@ -711,27 +789,34 @@ def main():
     if no_args_given:
         _header("BACKTEST RUNNER — Validación Histórica de Estrategias")
         cfg = interactive_mode()
-        symbols_to_run = cfg['symbols']
+        symbols_to_run    = cfg['symbols']
         strategy_override = cfg['strategy']
-        bars    = cfg['bars']
-        verbose = cfg['verbose']
-        save    = cfg['save']
+        bars      = cfg['bars']
+        verbose   = cfg['verbose']
+        save      = cfg['save']
         cb_losses = cfg['cb_losses']
         cb_pause  = cfg['cb_pause']
+        # Walk-forward no disponible en modo interactivo (usar CLI)
+        do_walkforward = False
+        wf_train = args.wf_train
+        wf_test  = args.wf_test
+        wf_step  = args.wf_step
     else:
-        # Modo CLI: usar argumentos con defaults
-        symbols_to_run   = SYMBOLS if args.all else [args.symbol or 'EURUSD']
+        symbols_to_run    = SYMBOLS if args.all else [args.symbol or 'EURUSD']
         strategy_override = args.strategy
-        bars    = args.bars or 500
-        verbose = args.verbose
-        save    = args.save
+        bars      = args.bars or 500
+        verbose   = args.verbose
+        save      = args.save
         cb_losses = args.cb_losses
         cb_pause  = args.cb_pause
+        do_walkforward = args.walkforward
+        wf_train  = args.wf_train
+        wf_test   = args.wf_test
+        wf_step   = args.wf_step
 
         _header("BACKTEST RUNNER — Validación Histórica de Estrategias")
 
     print(f"  Fecha      : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    tf_display = TIMEFRAME_BY_STRATEGY.get(strategy_override or '', DEFAULT_TIMEFRAME) if not (args.all if not no_args_given else cfg.get('run_all')) else 'H1/H4'
     print(f"  Velas      : {bars}  (~{bars // 168} semanas aprox.)")
     print(f"  Símbolos   : {', '.join(symbols_to_run)}")
     if strategy_override:
@@ -739,16 +824,50 @@ def main():
     else:
         strats = [f"{s}→{DEFAULT_STRATEGY[s]}" for s in symbols_to_run]
         print(f"  Estrategia : {', '.join(strats)}")
+    if do_walkforward:
+        print(f"  Modo       : WALK-FORWARD (train={wf_train} / test={wf_test} / step={wf_step})")
     print(f"  Verbose    : {'Sí' if verbose else 'No'}")
 
     # Conectar MT5
     if not init_mt5():
         sys.exit(1)
 
-    # Ejecutar backtests
+    # ── MODO WALK-FORWARD ─────────────────────────────────────────────────────
+    if do_walkforward:
+        wf_results = []
+        for sym in symbols_to_run:
+            strat = strategy_override or DEFAULT_STRATEGY.get(sym, 'eurusd_simple')
+            if strategy_override and strategy_override not in STRATEGIES_BY_SYMBOL.get(sym, []):
+                _warn(f"Estrategia '{strategy_override}' no válida para {sym}. "
+                      f"Usando default: {DEFAULT_STRATEGY[sym]}")
+                strat = DEFAULT_STRATEGY[sym]
+
+            ok = run_walkforward(
+                symbol=sym,
+                strategy=strat,
+                total_bars=bars,
+                train_bars=wf_train,
+                test_bars=wf_test,
+                step_bars=wf_step,
+                cb_losses=cb_losses,
+                cb_pause=cb_pause,
+                save=save,
+            )
+            wf_results.append(ok)
+
+        print()
+        if all(wf_results):
+            print("  ✅  Todas las estrategias son STABLE o MARGINAL en walk-forward.")
+        elif any(wf_results):
+            print("  ⚠️   Algunas estrategias pasan el walk-forward, otras no.")
+        else:
+            print("  ❌  Ninguna estrategia supera el walk-forward. Posible overfitting.")
+        print()
+        sys.exit(0 if any(wf_results) else 1)
+
+    # ── MODO BACKTEST SIMPLE ──────────────────────────────────────────────────
     results = []
     for sym in symbols_to_run:
-        # Si hay override de estrategia, validar que sea compatible con el símbolo
         strat = strategy_override
         if strat and strat not in STRATEGIES_BY_SYMBOL.get(sym, []):
             _warn(f"Estrategia '{strat}' no es válida para {sym}. "
