@@ -378,6 +378,9 @@ El resultado se muestra como embed con winrate, profit factor, pips netos, R:R m
 | `/performance [days]` | Reporte de rendimiento: señales, winrate, P&L de los últimos N días |
 | `/strategy_performance [days]` | Desglose de rendimiento por estrategia |
 | `/set_strategy [symbol] [strategy]` | Cambia la estrategia activa de un par en caliente sin reiniciar el bot |
+| `/bot_status` | Estado del circuit breaker (activo/pausado, racha, multiplicador de riesgo) y cooldowns activos por par |
+| `/news` | Próximos eventos de alto impacto (NFP, CPI, FOMC, ECB) con ventana de blackout y símbolos afectados |
+| `/equity` | Snapshot de la equity paper: balance cerrado + P&L flotante de señales abiertas en tiempo real |
 
 ---
 

@@ -2680,6 +2680,220 @@ async def slash_replay(interaction: discord.Interaction):
 
 
 # ======================
+# NUEVOS COMANDOS
+# ======================
+
+@bot.tree.command(name="bot_status")
+async def slash_bot_status(interaction: discord.Interaction):
+    """Estado del circuit breaker y cooldowns activos por par (solo admin)."""
+    if interaction.user.id != AUTHORIZED_USER_ID:
+        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
+        return
+
+    await interaction.response.defer(thinking=True, ephemeral=True)
+
+    try:
+        from core.circuit_breaker import get_circuit_breaker
+        cb = get_circuit_breaker()
+        cb_status = cb.get_status()
+
+        # ── Circuit Breaker ───────────────────────────────────────────────────
+        can_trade   = cb_status.get('can_trade', True)
+        cons_losses = cb_status.get('consecutive_losses', 0)
+        cons_wins   = cb_status.get('consecutive_wins', 0)
+        risk_mult   = cb_status.get('risk_multiplier', 1.0)
+        paused_until = cb_status.get('paused_until')
+        pause_reason = cb_status.get('pause_reason', '')
+
+        if can_trade:
+            cb_line = f"🟢 **ACTIVO** · pérdidas seguidas: {cons_losses} · wins seguidos: {cons_wins}"
+        else:
+            remaining_h = 0.0
+            if paused_until:
+                from datetime import datetime, timezone
+                pu = datetime.fromisoformat(paused_until)
+                if pu.tzinfo is None:
+                    pu = pu.replace(tzinfo=timezone.utc)
+                remaining_h = max(0, (pu - datetime.now(timezone.utc)).total_seconds() / 3600)
+            cb_line = (
+                f"🔴 **PAUSADO** · {pause_reason}\n"
+                f"  Reanuda en **{remaining_h:.1f}h**"
+            )
+
+        risk_line = f"Multiplicador de riesgo: **×{risk_mult:.1f}**"
+
+        # ── Cooldowns de autosignals ──────────────────────────────────────────
+        cooldown_lines = []
+        try:
+            import json as _json
+            import os as _os
+            cooldown_file = _os.path.join(_os.path.dirname(__file__), 'autosignals_state.json')
+            if _os.path.exists(cooldown_file):
+                with open(cooldown_file, 'r', encoding='utf-8') as f:
+                    cd_data = _json.load(f)
+                last_times = cd_data.get('last_signal_time', {})
+                cooldown_minutes = {'EURUSD': 60, 'XAUUSD': 240, 'BTCEUR': 60}
+                now_utc = datetime.now(timezone.utc)
+                for sym, cd_min in cooldown_minutes.items():
+                    ts_str = last_times.get(sym)
+                    if ts_str:
+                        ts = datetime.fromisoformat(ts_str)
+                        if ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=timezone.utc)
+                        elapsed = (now_utc - ts).total_seconds() / 60
+                        remaining = cd_min - elapsed
+                        if remaining > 0:
+                            cooldown_lines.append(f"  ⏳ **{sym}**: {int(remaining)} min restantes")
+                        else:
+                            cooldown_lines.append(f"  ✅ **{sym}**: libre")
+                    else:
+                        cooldown_lines.append(f"  ✅ **{sym}**: libre")
+            else:
+                cooldown_lines.append("  Sin datos de cooldown (sesión nueva)")
+        except Exception as e:
+            cooldown_lines.append(f"  Error leyendo cooldowns: {e}")
+
+        lines = [
+            "**⚡ Circuit Breaker**",
+            cb_line,
+            risk_line,
+            "",
+            "**⏳ Cooldowns por par**",
+        ] + cooldown_lines
+
+        await interaction.followup.send("\n".join(lines), ephemeral=True)
+
+    except Exception as e:
+        logger.error(f"Error en /bot_status: {e}", exc_info=True)
+        await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="news")
+async def slash_news(interaction: discord.Interaction):
+    """Próximos eventos de alto impacto del calendario económico con ventana de blackout (solo admin)."""
+    if interaction.user.id != AUTHORIZED_USER_ID:
+        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
+        return
+
+    await interaction.response.defer(thinking=True, ephemeral=True)
+
+    try:
+        from services.news_filter import NewsFilter, BLACKOUT_MINUTES
+        from datetime import datetime, timezone, timedelta
+
+        nf = NewsFilter()
+        now = datetime.now(timezone.utc)
+
+        # Recopilar eventos de los próximos 7 días para todos los símbolos
+        all_events = []
+        seen = set()
+        for currencies in [['USD', 'EUR'], ['USD'], ['EUR']]:
+            for offset in range(-1, 8):
+                check = (now + timedelta(days=offset)).date()
+                events = nf._get_events_near(
+                    datetime(check.year, check.month, check.day, 12, tzinfo=timezone.utc),
+                    currencies
+                )
+                for ev in events:
+                    key = (ev['name'], ev['time'].isoformat())
+                    if key not in seen:
+                        seen.add(key)
+                        all_events.append(ev)
+
+        # Ordenar por tiempo y filtrar a los próximos 7 días
+        cutoff = now + timedelta(days=7)
+        upcoming = sorted(
+            [e for e in all_events if now - timedelta(hours=1) <= e['time'] <= cutoff],
+            key=lambda x: x['time']
+        )
+
+        if not upcoming:
+            await interaction.followup.send(
+                "✅ Sin eventos de alto impacto en los próximos 7 días.", ephemeral=True
+            )
+            return
+
+        lines = [f"**📅 Próximos eventos de alto impacto** (±{BLACKOUT_MINUTES} min blackout)\n"]
+        for ev in upcoming[:15]:
+            t = ev['time']
+            delta_min = (t - now).total_seconds() / 60
+            if delta_min < 0:
+                when = f"hace {int(-delta_min)} min"
+                icon = "🔴"
+            elif delta_min < BLACKOUT_MINUTES:
+                when = f"en {int(delta_min)} min ⚠️ BLACKOUT ACTIVO"
+                icon = "🚨"
+            elif delta_min < 60:
+                when = f"en {int(delta_min)} min"
+                icon = "🟡"
+            else:
+                hours = int(delta_min // 60)
+                mins  = int(delta_min % 60)
+                when = f"en {hours}h {mins}m" if mins else f"en {hours}h"
+                icon = "🟢"
+
+            # Símbolos afectados
+            affected = []
+            for sym, curs in nf.SYMBOL_CURRENCIES.items():
+                if ev['currency'] in curs:
+                    affected.append(sym)
+
+            lines.append(
+                f"{icon} **{ev['name']}** ({ev['currency']})\n"
+                f"  {t.strftime('%d/%m %H:%M')} UTC · {when}\n"
+                f"  Afecta: {', '.join(affected) if affected else '—'}"
+            )
+
+        await interaction.followup.send("\n".join(lines), ephemeral=True)
+
+    except Exception as e:
+        logger.error(f"Error en /news: {e}", exc_info=True)
+        await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="equity")
+async def slash_equity(interaction: discord.Interaction):
+    """Snapshot de la equity paper actual: balance cerrado + P&L flotante de señales abiertas (solo admin)."""
+    if interaction.user.id != AUTHORIZED_USER_ID:
+        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
+        return
+
+    await interaction.response.defer(thinking=True, ephemeral=True)
+
+    try:
+        from services.dashboard import get_dashboard_service
+
+        snap = get_dashboard_service().get_equity_snapshot()
+        mode        = snap.get('mode', 'paper')
+        balance     = snap.get('balance', 0.0)
+        floating    = snap.get('floating_pnl', 0.0)
+        total       = snap.get('total_equity', 0.0)
+        change      = snap.get('change', 0.0)
+        change_pct  = snap.get('change_pct', 0.0)
+        base        = snap.get('base_balance', balance)
+
+        sign_ch  = "+" if change  >= 0 else ""
+        sign_fl  = "+" if floating >= 0 else ""
+        mode_lbl = "🔴 REAL" if mode == 'real' else "🟡 PAPER"
+
+        lines = [
+            f"**💰 Equity — {mode_lbl}**",
+            "",
+            f"Balance base:      **{base:,.2f} €**",
+            f"Cerradas (P&L):    **{sign_ch}{change:+.2f} €**",
+            f"Flotante (abiertas): **{sign_fl}{floating:+.2f} €**",
+            f"─────────────────────",
+            f"**Equity total:    {total:,.2f} €**  ({sign_ch}{change_pct:.2f}%)",
+        ]
+
+        await interaction.followup.send("\n".join(lines), ephemeral=True)
+
+    except Exception as e:
+        logger.error(f"Error en /equity: {e}", exc_info=True)
+        await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
+
+
+# ======================
 # START
 # ======================
 
