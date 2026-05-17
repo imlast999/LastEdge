@@ -41,7 +41,8 @@ class BTCEURStrategy(BaseStrategy):
             'sl_atr_multiplier': 2.0,
             'tp_atr_multiplier': 3.0,   # R:R 1.5 — óptimo para BTC (movimientos más cortos)
             'expires_minutes': 90,
-            'min_candles': 210           # suficiente para EMA200
+            'min_candles': 210,          # suficiente para EMA200
+            'overextension_pct': 0.025,  # rechazar si precio movió >2.5% en 3 velas H1
         }
     
     def _add_specific_indicators(self, df: pd.DataFrame, config: Dict) -> pd.DataFrame:
@@ -107,8 +108,22 @@ class BTCEURStrategy(BaseStrategy):
         if atr_current <= atr_mean * cfg['atr_multiplier']:
             logger.debug("[BTCEUR][REJECT] low_volatility")
             return None
-        
-        # ── 6. No entrar con 2 velas consecutivas en contra ──────────────────
+
+        # ── 6. Filtro de sobreextensión — no entrar en impulsos verticales ────
+        # Si el precio ha subido/bajado más del umbral en las últimas 3 velas,
+        # el movimiento está sobreextendido y es probable una reversión.
+        overext_pct = cfg.get('overextension_pct', 0.025)   # 2.5% en 3 velas
+        recent_3 = df.tail(3)
+        move_3 = abs(float(recent_3.iloc[-1]['close']) - float(recent_3.iloc[0]['open']))
+        ref_price = float(recent_3.iloc[0]['open'])
+        if ref_price > 0 and (move_3 / ref_price) > overext_pct:
+            logger.debug(
+                "[BTCEUR][REJECT] overextension | move_3=%.2f%% > threshold=%.2f%%",
+                (move_3 / ref_price) * 100, overext_pct * 100
+            )
+            return None
+
+        # ── 7. No entrar con 2 velas consecutivas en contra ──────────────────
         last_bearish = float(last['close']) < float(last['open'])
         prev_bearish = float(prev['close']) < float(prev['open'])
         last_bullish = float(last['close']) > float(last['open'])

@@ -39,6 +39,11 @@ class AutoSignalsService:
         # Watchdog: track last successful scan time
         self.last_scan_time: Optional[datetime] = None
 
+        # Cooldown de arranque: no enviar señales durante los primeros N segundos
+        # Evita señales falsas generadas justo al iniciar el bot
+        self._startup_cooldown_seconds = 120   # 2 minutos
+        self._startup_time: Optional[datetime] = None   # se fija en start_auto_signal_loop
+
         # Persistir cooldowns entre reinicios
         self._cooldown_file = os.path.join(
             os.path.dirname(os.path.dirname(__file__)), 'autosignals_state.json'
@@ -126,17 +131,34 @@ class AutoSignalsService:
 
         self._circuit_breaker = get_circuit_breaker()
         self._consecutive_errors = 0
-        self._max_consecutive_errors = 5  # pausa el loop tras 5 errores seguidos
+        self._max_consecutive_errors = 5
+        self._startup_time = datetime.now(timezone.utc)   # marcar arranque
 
         log_event(
             f'Auto-signal loop iniciado '
             f'(AUTOSIGNALS={self.state.autosignals}, '
-            f'AUTO_EXECUTE={self.config["AUTO_EXECUTE_SIGNALS"]})'
+            f'AUTO_EXECUTE={self.config["AUTO_EXECUTE_SIGNALS"]}) '
+            f'| Cooldown arranque: {self._startup_cooldown_seconds}s'
         )
 
         while True:
             try:
                 if self.state.autosignals and not self.config['KILL_SWITCH']:
+                    # ── Cooldown de arranque ──────────────────────────────────
+                    if self._startup_time is not None:
+                        elapsed_startup = (datetime.now(timezone.utc) - self._startup_time).total_seconds()
+                        if elapsed_startup < self._startup_cooldown_seconds:
+                            remaining = int(self._startup_cooldown_seconds - elapsed_startup)
+                            if self.scan_count % 6 == 0:   # log cada ~2 min
+                                log_event(
+                                    f"⏳ Cooldown de arranque: {remaining}s restantes — "
+                                    f"señales pausadas para evitar falsas al inicio",
+                                    "INFO", "AUTOSIGNAL"
+                                )
+                            self._consecutive_errors = 0
+                            await asyncio.sleep(self.config['AUTOSIGNAL_INTERVAL'])
+                            continue
+
                     # Verificar circuit breaker antes de escanear
                     can_trade, cb_reason = self._circuit_breaker.can_trade()
                     if not can_trade:
