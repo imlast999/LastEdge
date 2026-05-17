@@ -966,9 +966,12 @@ setTimeout(()=>location.reload(),30000);
         """
         Actualiza el estado y P&L de cada señal abierta consultando MT5.
         Una vez que una señal llega a WIN o LOSS, el estado queda fijo.
+        Los P&L incluyen spread y comisión (costes reales de trading).
         """
         try:
             import MetaTrader5 as mt5
+            from core.trade_costs import get_round_trip_cost_pips
+
             with self.lock:
                 for ev in self.signal_history:
                     # Si ya está cerrada, no recalcular
@@ -985,14 +988,22 @@ setTimeout(()=>location.reload(),30000);
                     ev.current_price = price
                     self.last_mt5_update = datetime.now(timezone.utc)
 
-                    # Calcular P&L no realizado como % del riesgo
+                    # Calcular P&L no realizado como % del riesgo (con costes)
                     risk = abs(ev.entry - ev.sl)
                     if risk > 0:
                         if ev.signal_type == 'BUY':
                             move = price - ev.entry
                         else:
                             move = ev.entry - price
-                        ev.unrealized_pnl = (move / risk) * 100   # % del riesgo
+
+                        # Descontar coste de spread+comisión del movimiento bruto
+                        pip_sizes = {'EURUSD': 0.0001, 'XAUUSD': 0.1, 'BTCEUR': 1.0}
+                        pip_size  = pip_sizes.get(ev.symbol, 0.0001)
+                        cost_pips = get_round_trip_cost_pips(ev.symbol)
+                        cost_price = cost_pips * pip_size   # coste en unidades de precio
+                        move_net  = move - cost_price       # movimiento neto tras costes
+
+                        ev.unrealized_pnl = (move_net / risk) * 100   # % del riesgo
 
                     # Verificar si tocó TP o SL — estado permanente
                     prev_status = ev.final_status
@@ -1012,15 +1023,26 @@ setTimeout(()=>location.reload(),30000);
                             ev.final_status = 'open'
 
                     # ── Acumular balance paper cuando se cierra una señal ──────
-                    # Solo contabilizar la primera vez que pasa de open→win/loss
                     if prev_status not in ('win', 'loss') and ev.final_status in ('win', 'loss'):
                         risk_pct = float(os.getenv('MT5_RISK_PCT', '0.5')) / 100.0
                         base = self.metrics.paper_balance if self.metrics.paper_balance > 0 else (self.metrics.paper_balance_base or 5000.0)
                         rr = abs(ev.tp - ev.entry) / risk if risk > 0 else 1.0
+
+                        # Descontar coste del R:R efectivo
+                        pip_sizes = {'EURUSD': 0.0001, 'XAUUSD': 0.1, 'BTCEUR': 1.0}
+                        pip_size  = pip_sizes.get(ev.symbol, 0.0001)
+                        cost_pips = get_round_trip_cost_pips(ev.symbol)
+                        tp_pips   = abs(ev.tp - ev.entry) / pip_size
+                        sl_pips   = abs(ev.entry - ev.sl) / pip_size
+                        tp_net    = max(0.0, tp_pips - cost_pips)
+                        sl_net    = sl_pips + cost_pips   # pérdida se hace mayor
+
                         if ev.final_status == 'win':
-                            self.metrics.paper_balance = base + base * risk_pct * rr
+                            rr_net = tp_net / sl_pips if sl_pips > 0 else rr
+                            self.metrics.paper_balance = base + base * risk_pct * rr_net
                         else:
-                            self.metrics.paper_balance = base - base * risk_pct
+                            rr_loss = sl_net / sl_pips if sl_pips > 0 else 1.0
+                            self.metrics.paper_balance = base - base * risk_pct * rr_loss
 
                         # ── Notificar al circuit breaker ──────────────────────
                         # Calcular pips aproximados para el registro

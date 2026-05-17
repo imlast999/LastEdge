@@ -320,15 +320,11 @@ class ReplayEngine:
     
     def _simulate_tp_sl(self, signal: ReplaySignal, df_full: pd.DataFrame, start_index: int):
         """
-        Simula el resultado de una señal avanzando velas hasta TP o SL
-        
-        Args:
-            signal: Señal a simular
-            df_full: DataFrame completo con todas las velas
-            start_index: Índice de la vela donde se generó la señal
+        Simula el resultado de una señal avanzando velas hasta TP o SL.
+        Los profit_pips incluyen spread y comisión (costes reales de trading).
         """
         try:
-            # Obtener tamaño de pip correcto para el símbolo
+            from core.trade_costs import apply_costs_to_profit
             pip_size = self._get_pip_size(signal.symbol)
             
             # Máximo de velas a revisar hacia adelante
@@ -346,8 +342,8 @@ class ReplayEngine:
                         signal.result = 'WIN'
                         signal.exit_price = signal.tp
                         signal.exit_bar = i
-                        # Calcular pips correctamente según el símbolo
-                        signal.profit_pips = (signal.tp - signal.entry) / pip_size
+                        raw_pips = (signal.tp - signal.entry) / pip_size
+                        signal.profit_pips = apply_costs_to_profit(raw_pips, signal.symbol)
                         return
                     
                     # Verificar SL (precio baja)
@@ -355,8 +351,8 @@ class ReplayEngine:
                         signal.result = 'LOSS'
                         signal.exit_price = signal.sl
                         signal.exit_bar = i
-                        # Calcular pips correctamente (negativo para pérdida)
-                        signal.profit_pips = (signal.sl - signal.entry) / pip_size
+                        raw_pips = (signal.sl - signal.entry) / pip_size
+                        signal.profit_pips = apply_costs_to_profit(raw_pips, signal.symbol)
                         return
                 
                 else:  # SELL
@@ -365,8 +361,8 @@ class ReplayEngine:
                         signal.result = 'WIN'
                         signal.exit_price = signal.tp
                         signal.exit_bar = i
-                        # Calcular pips correctamente según el símbolo
-                        signal.profit_pips = (signal.entry - signal.tp) / pip_size
+                        raw_pips = (signal.entry - signal.tp) / pip_size
+                        signal.profit_pips = apply_costs_to_profit(raw_pips, signal.symbol)
                         return
                     
                     # Verificar SL (precio sube)
@@ -374,8 +370,8 @@ class ReplayEngine:
                         signal.result = 'LOSS'
                         signal.exit_price = signal.sl
                         signal.exit_bar = i
-                        # Calcular pips correctamente (negativo para pérdida)
-                        signal.profit_pips = (signal.entry - signal.sl) / pip_size
+                        raw_pips = (signal.entry - signal.sl) / pip_size
+                        signal.profit_pips = apply_costs_to_profit(raw_pips, signal.symbol)
                         return
             
             # Si llegamos aquí, la señal sigue pendiente
