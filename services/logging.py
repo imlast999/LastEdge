@@ -123,12 +123,18 @@ class IntelligentLogger:
                     self.terminal = original_stream
                     
                 def write(self, message):
-                    # Escribir a terminal — con protección contra bloqueos
-                    try:
-                        self.terminal.write(message)
-                        self.terminal.flush()
-                    except Exception:
-                        pass  # Si la terminal se bloquea, ignorar y continuar
+                    # Escribir a terminal en un thread separado con timeout
+                    # para evitar bloquear el event loop de asyncio
+                    import threading
+                    def _do_write():
+                        try:
+                            self.terminal.write(message)
+                            self.terminal.flush()
+                        except Exception:
+                            pass
+                    t = threading.Thread(target=_do_write, daemon=True)
+                    t.start()
+                    t.join(timeout=2.0)  # máximo 2s — si tarda más, ignorar
                     
                     # Escribir a archivo con timestamp
                     try:
