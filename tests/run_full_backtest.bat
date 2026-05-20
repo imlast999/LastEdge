@@ -111,6 +111,10 @@ echo [11/11] BTCEUR - btceur_weekly_breakout
 %PYTHON% %SCRIPT% --symbol BTCEUR --strategy btceur_weekly_breakout --bars %BARS% --save --cb-losses %CB_LOSSES% --cb-pause %CB_PAUSE%
 echo.
 
+echo [12/12] BTCEUR - btceur_regime_momentum (nueva estrategia H4+Daily)
+%PYTHON% %SCRIPT% --symbol BTCEUR --strategy btceur_regime_momentum --bars %BARS% --save --cb-losses %CB_LOSSES% --cb-pause %CB_PAUSE%
+echo.
+
 echo ============================================================
 echo   COMPLETADO — Revisa backtest_results\
 echo ============================================================

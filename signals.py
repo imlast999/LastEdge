@@ -43,6 +43,7 @@ STRATEGY_REGISTRY = {
     'btceur_advanced':       lambda: get_strategy('BTCEUR'),
     'btc_trend_pullback_v1': lambda: _get_btc_trend_pullback(),
     'btceur_weekly_breakout': lambda: _get_btceur_weekly_breakout(),
+    'btceur_regime_momentum': lambda: _get_btceur_regime_momentum(),
     'btcusdt':               lambda: get_strategy('BTCEUR'),
     'btc':                   lambda: get_strategy('BTCEUR'),
 
@@ -83,6 +84,14 @@ def _get_btceur_weekly_breakout():
         return BTCEURWeeklyBreakoutStrategy()
     except Exception as e:
         logger.warning(f"BTCEURWeeklyBreakoutStrategy no disponible: {e}")
+        return get_strategy('BTCEUR')
+
+def _get_btceur_regime_momentum():
+    try:
+        from strategies.btceur_regime_momentum import BTCEURRegimeMomentumStrategy
+        return BTCEURRegimeMomentumStrategy()
+    except Exception as e:
+        logger.warning(f"BTCEURRegimeMomentumStrategy no disponible: {e}")
         return get_strategy('BTCEUR')
 
 def _get_eurusd_advanced():

@@ -62,7 +62,7 @@ SYMBOLS = ['EURUSD', 'XAUUSD', 'BTCEUR']
 STRATEGIES_BY_SYMBOL = {
     'EURUSD': ['eurusd_simple', 'eurusd_advanced', 'eurusd_mtf', 'eurusd_asian_breakout'],
     'XAUUSD': ['xauusd_simple', 'xauusd_reversal', 'xauusd_momentum', 'xauusd_psychological'],
-    'BTCEUR': ['btceur_simple', 'btc_trend_pullback_v1', 'btceur_weekly_breakout'],
+    'BTCEUR': ['btceur_simple', 'btc_trend_pullback_v1', 'btceur_weekly_breakout', 'btceur_regime_momentum'],
 }
 
 # Todas las estrategias válidas (para validación de argumento CLI)
@@ -277,6 +277,10 @@ def run_single_backtest(symbol: str, bars: int, strategy: str = None,
         elif strategy == 'btceur_weekly_breakout':
             lookback = 900
             forward  = 300
+        elif strategy == 'btceur_regime_momentum':
+            # Necesita ~900 velas H4 para Daily resampleado con EMA200
+            lookback = 900
+            forward  = 240   # 10 días H4
         elif strategy in ('eurusd_asian_breakout', 'xauusd_psychological'):
             lookback = 210
             forward  = 120
