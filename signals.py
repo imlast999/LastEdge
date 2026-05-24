@@ -194,7 +194,7 @@ def detect_signal(
                 return None, df
             cls_name = strategy_instance.__class__.__name__
             # Clases válidas para BTCEUR: BTCEURStrategy (baseline) y BTCCycleV1Strategy (nueva)
-            valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy')
+            valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy', 'BTCEURRegimeMomentumStrategy')
             if cls_name not in valid_btceur_classes:
                 err_msg = f"Estrategia incorrecta: {cls_name} (válidas: {valid_btceur_classes})."
                 logger.error("[CRITICAL][BTCEUR] %s Abortando detección.", err_msg)

@@ -180,7 +180,7 @@ def validate_btceur_strategy() -> bool:
         active_symbols["BTCEUR"] = False
         return False
 
-    valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy')
+    valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy', 'BTCEURRegimeMomentumStrategy')
     if strat.__class__.__name__ not in valid_btceur_classes:
         err_msg = f"Estrategia incorrecta: {strat.__class__.__name__} (válidas: {valid_btceur_classes})."
         log_event(f"[CRITICAL][BTCEUR] {err_msg}", "ERROR")
