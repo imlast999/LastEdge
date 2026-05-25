@@ -38,6 +38,10 @@ class EURUSDAsianBreakoutStrategy(BaseStrategy):
         # Registro de última señal por día (evita duplicados intradiarios)
         self._last_signal_date: Optional[str] = None
 
+    def reset_state(self) -> None:
+        """Resetea estado interno — llamar entre ventanas de walk-forward / optimización."""
+        self._last_signal_date = None
+
     def _get_default_config(self) -> Dict:
         return {
             # Sesiones (horas UTC)
@@ -50,11 +54,11 @@ class EURUSDAsianBreakoutStrategy(BaseStrategy):
             'buffer':       0.0003,   # 3 pips por encima/debajo del rango
 
             # Filtros
-            'min_range_pips':  5.0,   # rango mínimo en pips
+            'min_range_pips':  4.0,   # rango mínimo en pips (optimizado)
             'max_range_pips':  80.0,  # rango máximo (evita días muy volátiles)
 
             # Gestión
-            'tp_multiplier':   1.5,   # TP = range × 1.5
+            'tp_multiplier':   1.5,   # TP = range × 1.5 (optimizado backtest 3k)
             'sl_buffer':       0.0001, # buffer adicional en SL
 
             # Mínimo de velas H1
