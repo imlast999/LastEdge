@@ -1,0 +1,640 @@
+{
+  "timestamp": "2026-05-25T17:31:51.008329",
+  "bars": 5000,
+  "min_pf": 1.0,
+  "strategies": {
+    "eurusd_asian_breakout": {
+      "strategy": "eurusd_asian_breakout",
+      "symbol": "EURUSD",
+      "bars": 5000,
+      "passed_break_even": true,
+      "best": {
+        "params": {
+          "tp_multiplier": 1.5,
+          "min_range_pips": 4.0
+        },
+        "cb_losses": 0,
+        "cb_pause": 0,
+        "signals": 82,
+        "pf": 1.1312203099447136,
+        "net_pips": 168.50000000000585,
+        "winrate": 57.3170731707317,
+        "valid": true
+      },
+      "top5": [
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "min_range_pips": 4.0
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 82,
+          "pf": 1.1312203099447136,
+          "net_pips": 168.50000000000585,
+          "winrate": 57.3170731707317,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "min_range_pips": 4.0
+          },
+          "cb_losses": 4,
+          "cb_pause": 168,
+          "signals": 82,
+          "pf": 1.1312203099447136,
+          "net_pips": 168.50000000000585,
+          "winrate": 57.3170731707317,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "min_range_pips": 5.0
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 82,
+          "pf": 1.1312203099447136,
+          "net_pips": 168.50000000000585,
+          "winrate": 57.3170731707317,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "min_range_pips": 5.0
+          },
+          "cb_losses": 4,
+          "cb_pause": 168,
+          "signals": 82,
+          "pf": 1.1312203099447136,
+          "net_pips": 168.50000000000585,
+          "winrate": 57.3170731707317,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "min_range_pips": 6.0
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 82,
+          "pf": 1.1312203099447136,
+          "net_pips": 168.50000000000585,
+          "winrate": 57.3170731707317,
+          "valid": true
+        }
+      ],
+      "combos_tested": 36
+    },
+    "eurusd_simple": {
+      "strategy": "eurusd_simple",
+      "symbol": "EURUSD",
+      "bars": 5000,
+      "passed_break_even": true,
+      "best": {
+        "params": {
+          "sl_atr_multiplier": 1.5,
+          "tp_atr_multiplier": 6.0
+        },
+        "cb_losses": 3,
+        "cb_pause": 72,
+        "signals": 185,
+        "pf": 1.3967139638463761,
+        "net_pips": 1058.3464285714404,
+        "winrate": 30.386740331491712,
+        "valid": true
+      },
+      "top5": [
+        {
+          "params": {
+            "sl_atr_multiplier": 1.5,
+            "tp_atr_multiplier": 6.0
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 185,
+          "pf": 1.3967139638463761,
+          "net_pips": 1058.3464285714404,
+          "winrate": 30.386740331491712,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 1.5,
+            "tp_atr_multiplier": 5.0
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 188,
+          "pf": 1.3535221076037842,
+          "net_pips": 930.0750000000194,
+          "winrate": 33.68983957219251,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 5.0
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 192,
+          "pf": 1.248252936142396,
+          "net_pips": 824.6714285714282,
+          "winrate": 39.26701570680628,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 6.0
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 186,
+          "pf": 1.2055670830568126,
+          "net_pips": 699.1571428571433,
+          "winrate": 34.25414364640884,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 4.0
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 199,
+          "pf": 1.1891027612077942,
+          "net_pips": 614.9999999999909,
+          "winrate": 43.43434343434344,
+          "valid": true
+        }
+      ],
+      "combos_tested": 36
+    },
+    "eurusd_mtf": {
+      "strategy": "eurusd_mtf",
+      "symbol": "EURUSD",
+      "bars": 5000,
+      "passed_break_even": false,
+      "best": {
+        "params": {
+          "sl_atr_multiplier": 3.0,
+          "tp_atr_multiplier": 5.0
+        },
+        "cb_losses": 3,
+        "cb_pause": 72,
+        "signals": 50,
+        "pf": 0.4182059699379888,
+        "net_pips": -3053.3714285714523,
+        "winrate": 19.444444444444446,
+        "valid": true
+      },
+      "top5": [
+        {
+          "params": {
+            "sl_atr_multiplier": 3.0,
+            "tp_atr_multiplier": 5.0
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 50,
+          "pf": 0.4182059699379888,
+          "net_pips": -3053.3714285714523,
+          "winrate": 19.444444444444446,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 5.0
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 51,
+          "pf": 0.31794690695025857,
+          "net_pips": -3131.5785714285807,
+          "winrate": 12.5,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 5.0
+          },
+          "cb_losses": 4,
+          "cb_pause": 168,
+          "signals": 50,
+          "pf": 0.24878096638249228,
+          "net_pips": -3664.4357142857175,
+          "winrate": 10.0,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 6.0
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 52,
+          "pf": 0.1924865422059318,
+          "net_pips": -4028.799999999999,
+          "winrate": 7.317073170731707,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 6.0
+          },
+          "cb_losses": 4,
+          "cb_pause": 168,
+          "signals": 49,
+          "pf": 0.19093496327518217,
+          "net_pips": -4069.342857142859,
+          "winrate": 7.6923076923076925,
+          "valid": true
+        }
+      ],
+      "combos_tested": 36
+    },
+    "xauusd_momentum": {
+      "strategy": "xauusd_momentum",
+      "symbol": "XAUUSD",
+      "bars": 5000,
+      "passed_break_even": true,
+      "best": {
+        "params": {
+          "sl_atr_multiplier": 2.0,
+          "tp_atr_multiplier": 6.5
+        },
+        "cb_losses": 3,
+        "cb_pause": 72,
+        "signals": 40,
+        "pf": 1.475773475219232,
+        "net_pips": 6208.232142857118,
+        "winrate": 36.11111111111111,
+        "valid": true
+      },
+      "top5": [
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 6.5
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 40,
+          "pf": 1.475773475219232,
+          "net_pips": 6208.232142857118,
+          "winrate": 36.11111111111111,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.5,
+            "tp_atr_multiplier": 6.5
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 41,
+          "pf": 1.2704948492120602,
+          "net_pips": 4422.064285714252,
+          "winrate": 37.83783783783784,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 1.5,
+            "tp_atr_multiplier": 6.5
+          },
+          "cb_losses": 4,
+          "cb_pause": 168,
+          "signals": 38,
+          "pf": 1.2371281432383865,
+          "net_pips": 2938.8535714285226,
+          "winrate": 27.027027027027028,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 6.5
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 45,
+          "pf": 1.180092175944082,
+          "net_pips": 2938.7749999999724,
+          "winrate": 31.70731707317073,
+          "valid": true
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 5.5
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 43,
+          "pf": 1.178391935741771,
+          "net_pips": 2661.635714285696,
+          "winrate": 35.8974358974359,
+          "valid": true
+        }
+      ],
+      "combos_tested": 36
+    },
+    "xauusd_psychological": {
+      "strategy": "xauusd_psychological",
+      "symbol": "XAUUSD",
+      "bars": 5000,
+      "passed_break_even": false,
+      "best": {
+        "params": {
+          "tp_multiplier": 1.5,
+          "sl_buffer": 2.0
+        },
+        "cb_losses": 3,
+        "cb_pause": 72,
+        "signals": 34,
+        "pf": 0.9418181818181893,
+        "net_pips": -62.39999999999145,
+        "winrate": 61.76470588235294,
+        "valid": true
+      },
+      "top5": [
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "sl_buffer": 2.0
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 34,
+          "pf": 0.9418181818181893,
+          "net_pips": -62.39999999999145,
+          "winrate": 61.76470588235294,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 2.5,
+            "sl_buffer": 1.5
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 34,
+          "pf": 0.9444952983273701,
+          "net_pips": -66.69999999999891,
+          "winrate": 55.88235294117647,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 2.5,
+            "sl_buffer": 1.5
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 36,
+          "pf": 0.8900564617314946,
+          "net_pips": -140.1999999999971,
+          "winrate": 52.77777777777778,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "sl_buffer": 2.0
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 36,
+          "pf": 0.8737889273356481,
+          "net_pips": -145.89999999998963,
+          "winrate": 58.333333333333336,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 2.0,
+            "sl_buffer": 3.0
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 34,
+          "pf": 0.8905492461977853,
+          "net_pips": -164.79999999999382,
+          "winrate": 50.0,
+          "valid": true
+        }
+      ],
+      "combos_tested": 36
+    },
+    "xauusd_reversal": {
+      "strategy": "xauusd_reversal",
+      "symbol": "XAUUSD",
+      "bars": 5000,
+      "passed_break_even": false,
+      "best": {
+        "params": {
+          "sl_atr_multiplier": 2.0,
+          "tp_atr_multiplier": 4.0,
+          "rsi_oversold": 25,
+          "rsi_overbought": 72
+        },
+        "cb_losses": 0,
+        "cb_pause": 0,
+        "signals": 1,
+        "pf": 0.0,
+        "net_pips": -99999.0,
+        "winrate": 0.0,
+        "valid": false
+      },
+      "top5": [
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 4.0,
+            "rsi_oversold": 25,
+            "rsi_overbought": 72
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 1,
+          "pf": 0.0,
+          "net_pips": -99999.0,
+          "winrate": 0.0,
+          "valid": false
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 4.0,
+            "rsi_oversold": 25,
+            "rsi_overbought": 72
+          },
+          "cb_losses": 4,
+          "cb_pause": 168,
+          "signals": 1,
+          "pf": 0.0,
+          "net_pips": -99999.0,
+          "winrate": 0.0,
+          "valid": false
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 4.0,
+            "rsi_oversold": 25,
+            "rsi_overbought": 72
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 1,
+          "pf": 0.0,
+          "net_pips": -99999.0,
+          "winrate": 0.0,
+          "valid": false
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 4.0,
+            "rsi_oversold": 25,
+            "rsi_overbought": 75
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 1,
+          "pf": 0.0,
+          "net_pips": -99999.0,
+          "winrate": 0.0,
+          "valid": false
+        },
+        {
+          "params": {
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 4.0,
+            "rsi_oversold": 25,
+            "rsi_overbought": 75
+          },
+          "cb_losses": 4,
+          "cb_pause": 168,
+          "signals": 1,
+          "pf": 0.0,
+          "net_pips": -99999.0,
+          "winrate": 0.0,
+          "valid": false
+        }
+      ],
+      "combos_tested": 72
+    },
+    "btceur_regime_momentum": {
+      "strategy": "btceur_regime_momentum",
+      "symbol": "BTCEUR",
+      "bars": 5000,
+      "passed_break_even": false,
+      "best": {
+        "params": {
+          "adx_threshold": 15,
+          "sl_atr_multiplier": 2.0,
+          "tp_atr_multiplier": 3.5,
+          "donchian_length": 15
+        },
+        "cb_losses": 0,
+        "cb_pause": 0,
+        "signals": 0,
+        "pf": 0.0,
+        "net_pips": -99999.0,
+        "winrate": 0.0,
+        "valid": false
+      },
+      "top5": [
+        {
+          "params": {
+            "adx_threshold": 15,
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 3.5,
+            "donchian_length": 15
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 0,
+          "pf": 0.0,
+          "net_pips": -99999.0,
+          "winrate": 0.0,
+          "valid": false
+        },
+        {
+          "params": {
+            "adx_threshold": 15,
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 3.5,
+            "donchian_length": 15
+          },
+          "cb_losses": 4,
+          "cb_pause": 168,
+          "signals": 0,
+          "pf": 0.0,
+          "net_pips": -99999.0,
+          "winrate": 0.0,
+          "valid": false
+        },
+        {
+          "params": {
+            "adx_threshold": 15,
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 3.5,
+            "donchian_length": 15
+          },
+          "cb_losses": 3,
+          "cb_pause": 72,
+          "signals": 0,
+          "pf": 0.0,
+          "net_pips": -99999.0,
+          "winrate": 0.0,
+          "valid": false
+        },
+        {
+          "params": {
+            "adx_threshold": 15,
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 3.5,
+            "donchian_length": 20
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 0,
+          "pf": 0.0,
+          "net_pips": -99999.0,
+          "winrate": 0.0,
+          "valid": false
+        },
+        {
+          "params": {
+            "adx_threshold": 15,
+            "sl_atr_multiplier": 2.0,
+            "tp_atr_multiplier": 3.5,
+            "donchian_length": 20
+          },
+          "cb_losses": 4,
+          "cb_pause": 168,
+          "signals": 0,
+          "pf": 0.0,
+          "net_pips": -99999.0,
+          "winrate": 0.0,
+          "valid": false
+        }
+      ],
+      "combos_tested": 216
+    }
+  }
+}

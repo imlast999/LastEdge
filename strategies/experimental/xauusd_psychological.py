@@ -151,15 +151,21 @@ class XAUUSDPsychologicalStrategy(BaseStrategy):
             logger.debug("[PSYCH][REJECT] confirmation_candle_not_bullish")
             return None
 
-        # ── Niveles ───────────────────────────────────────────────────────────
+        # ── Niveles (SL/TP del lado correcto respecto al entry) ───────────────
+        buf = cfg['sl_buffer']
         if direction == 'SELL':
-            sl = level + cfg['sl_buffer']
-            tp = price - (sl - price) * cfg['tp_multiplier']
+            sl = max(level + buf, price + buf)
+            sl_distance = sl - price
+            if sl_distance <= 0:
+                return None
+            tp = price - sl_distance * cfg['tp_multiplier']
         else:
-            sl = level - cfg['sl_buffer']
-            tp = price + (price - sl) * cfg['tp_multiplier']
+            sl = min(level - buf, price - buf)
+            sl_distance = price - sl
+            if sl_distance <= 0:
+                return None
+            tp = price + sl_distance * cfg['tp_multiplier']
 
-        sl_distance = abs(price - sl)
         tp_distance = abs(tp - price)
         rr = tp_distance / sl_distance if sl_distance > 0 else 0
 

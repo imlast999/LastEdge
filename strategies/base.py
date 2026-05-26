@@ -33,7 +33,11 @@ class BaseStrategy(ABC):
     def __init__(self, name: str):
         self.name = name
         self.default_config = self._get_default_config()
-    
+
+    def reset_state(self) -> None:
+        """Reinicia estado interno entre replays (opcional en subclases)."""
+        pass
+
     @abstractmethod
     def _get_default_config(self) -> Dict:
         """Retorna configuración por defecto de la estrategia"""

@@ -206,6 +206,10 @@ class TradingEngine:
             return False, None
         
         bars_since_last = current_index - last_index
+
+        # Nueva ventana de replay / walk-forward: índices reinician, no aplicar cooldown
+        if bars_since_last < 0:
+            return False, None
         
         if bars_since_last < cooldown_bars:
             # Aún en cooldown
@@ -215,6 +219,21 @@ class TradingEngine:
         # Cooldown expirado, permitir señal
         return False, None
     
+    def reset_replay_state(self, symbol: Optional[str] = None) -> None:
+        """
+        Reinicia estado acumulado entre ventanas de backtest / walk-forward.
+        Limpia cooldown por símbolo para que los índices relativos no bloqueen señales.
+        """
+        symbols = [symbol.upper()] if symbol else list(self.cooldown_state.keys())
+        for sym in symbols:
+            if sym in self.cooldown_state:
+                self.cooldown_state[sym]['last_signal_index'] = None
+        try:
+            from signals import reset_strategy_instances
+            reset_strategy_instances()
+        except Exception:
+            pass
+
     def _update_cooldown(self, symbol: str, current_index: int):
         """
         Actualiza el estado de cooldown después de generar una señal válida

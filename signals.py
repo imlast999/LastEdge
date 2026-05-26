@@ -21,6 +21,19 @@ from strategies import get_strategy
 
 logger = logging.getLogger(__name__)
 
+# Estrategias con estado interno (1 señal/día, 1/semana, etc.) — una instancia por sesión de replay
+STATEFUL_STRATEGIES = frozenset({'eurusd_asian_breakout', 'btceur_weekly_breakout'})
+_strategy_instances: Dict[str, object] = {}
+
+
+def reset_strategy_instances() -> None:
+    """Limpia instancias cacheadas; llamar al inicio de cada replay / ventana WF."""
+    for inst in _strategy_instances.values():
+        if hasattr(inst, 'reset_state'):
+            inst.reset_state()
+    _strategy_instances.clear()
+
+
 # Registry de estrategias disponibles
 # rules_config.json usa eurusd_simple, xauusd_simple, btceur_simple → deben estar registradas
 STRATEGY_REGISTRY = {
@@ -28,14 +41,15 @@ STRATEGY_REGISTRY = {
     'eurusd':           lambda: get_strategy('EURUSD'),
     'eurusd_simple':    lambda: get_strategy('EURUSD'),
     'eurusd_advanced':  lambda: _get_eurusd_advanced(),
-    'eurusd_mtf':       lambda: _get_eurusd_mtf(),
+    # eurusd_mtf descartada (grid search mayo 2026, PF max 0.42) — ver strategies/experimental/
+    'eurusd_mtf':       lambda: _get_eurusd_mtf(),   # mantenida para compatibilidad backtest
     'eurusd_asian_breakout': lambda: _get_eurusd_asian_breakout(),
     'xauusd':           lambda: get_strategy('XAUUSD'),
     'xauusd_simple':    lambda: get_strategy('XAUUSD'),
     'xauusd_advanced':  lambda: _get_xauusd_advanced(),
-    'xauusd_reversal':  lambda: _get_xauusd_reversal(),
+    'xauusd_reversal':  lambda: _get_xauusd_reversal(),    # descartada (1 señal/5000v)
     'xauusd_momentum':  lambda: _get_xauusd_momentum(),
-    'xauusd_psychological': lambda: _get_xauusd_psychological(),
+    'xauusd_psychological': lambda: _get_xauusd_psychological(),  # descartada (PF max 0.94)
 
     # BTCEUR: todos los alias apuntan a la misma estrategia específica
     'btceur':                lambda: get_strategy('BTCEUR'),
@@ -178,8 +192,13 @@ def detect_signal(
             logger.warning(f"Estrategia {strategy_name} no encontrada, usando EURUSD por defecto")
             strategy_factory = STRATEGY_REGISTRY['eurusd']
         
-        # Crear instancia de la estrategia
-        strategy_instance = strategy_factory()
+        # Instancia: cachear las que guardan estado entre velas del mismo replay
+        if strategy_name in STATEFUL_STRATEGIES:
+            if strategy_name not in _strategy_instances:
+                _strategy_instances[strategy_name] = strategy_factory()
+            strategy_instance = _strategy_instances[strategy_name]
+        else:
+            strategy_instance = strategy_factory()
         
         # Log del nombre real de la estrategia para BTCEUR
         if symbol and symbol.upper() == 'BTCEUR':

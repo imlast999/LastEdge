@@ -258,14 +258,16 @@ class WalkForwardTester:
             df_train = df_full.iloc[train_start - self.lookback : train_end].copy()
             train_stats, train_signals = self._run_window(
                 df_train, symbol, strategy, config,
-                bars=self.train_bars, label=f"TRAIN-{window_idx}"
+                bars=self.train_bars, label=f"TRAIN-{window_idx}",
+                timeframe=timeframe,
             )
 
             # ── 4. Ejecutar TEST ──────────────────────────────────────────────
             df_test = df_full.iloc[test_start - self.lookback : test_end].copy()
             test_stats, test_signals = self._run_window(
                 df_test, symbol, strategy, config,
-                bars=self.test_bars, label=f"TEST-{window_idx}"
+                bars=self.test_bars, label=f"TEST-{window_idx}",
+                timeframe=timeframe,
             )
 
             # ── 5. Calcular métricas de la ventana ────────────────────────────
@@ -313,12 +315,18 @@ class WalkForwardTester:
 
     # ── Helpers internos ──────────────────────────────────────────────────────
 
-    def _run_window(self, df_window, symbol, strategy, config, bars, label=''):
+    def _run_window(self, df_window, symbol, strategy, config, bars, label='',
+                    timeframe: str = 'H1'):
         """Ejecuta el replay engine sobre una ventana de datos ya descargados."""
         from core.replay_engine import ReplayEngine
+        from core.engine import get_trading_engine
+
+        max_forward = getattr(self, 'max_forward_bars', 120)
+        get_trading_engine().reset_replay_state(symbol)
+
         engine = ReplayEngine(
             lookback_window=self.lookback,
-            max_forward_bars=120,
+            max_forward_bars=max_forward,
             cb_consecutive_losses=self.cb_losses,
             cb_pause_bars=self.cb_pause,
         )
@@ -330,6 +338,7 @@ class WalkForwardTester:
                 config=config,
                 skip_duplicate_filter=True,
                 df_override=df_window,
+                timeframe=timeframe,
             )
             return stats, engine.get_signals()
         except Exception as e:

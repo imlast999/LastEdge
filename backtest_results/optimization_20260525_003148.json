@@ -1,0 +1,94 @@
+{
+  "timestamp": "2026-05-25T00:23:15.733687",
+  "bars": 3000,
+  "min_pf": 1.0,
+  "strategies": {
+    "eurusd_asian_breakout": {
+      "strategy": "eurusd_asian_breakout",
+      "symbol": "EURUSD",
+      "bars": 3000,
+      "passed_break_even": true,
+      "best": {
+        "params": {
+          "tp_multiplier": 1.5,
+          "min_range_pips": 4.0
+        },
+        "cb_losses": 0,
+        "cb_pause": 0,
+        "signals": 49,
+        "pf": 1.220275590551192,
+        "net_pips": 167.85000000000764,
+        "winrate": 57.14285714285714,
+        "valid": true
+      },
+      "top5": [
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "min_range_pips": 4.0
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 49,
+          "pf": 1.220275590551192,
+          "net_pips": 167.85000000000764,
+          "winrate": 57.14285714285714,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "min_range_pips": 4.0
+          },
+          "cb_losses": 4,
+          "cb_pause": 168,
+          "signals": 49,
+          "pf": 1.220275590551192,
+          "net_pips": 167.85000000000764,
+          "winrate": 57.14285714285714,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "min_range_pips": 5.0
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 49,
+          "pf": 1.220275590551192,
+          "net_pips": 167.85000000000764,
+          "winrate": 57.14285714285714,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "min_range_pips": 5.0
+          },
+          "cb_losses": 4,
+          "cb_pause": 168,
+          "signals": 49,
+          "pf": 1.220275590551192,
+          "net_pips": 167.85000000000764,
+          "winrate": 57.14285714285714,
+          "valid": true
+        },
+        {
+          "params": {
+            "tp_multiplier": 1.5,
+            "min_range_pips": 6.0
+          },
+          "cb_losses": 0,
+          "cb_pause": 0,
+          "signals": 49,
+          "pf": 1.220275590551192,
+          "net_pips": 167.85000000000764,
+          "winrate": 57.14285714285714,
+          "valid": true
+        }
+      ],
+      "combos_tested": 36
+    }
+  }
+}

@@ -149,9 +149,10 @@ class ReplayEngine:
             
             logger.info(f"Usando estrategia: {strategy}")
             
-            # Obtener engine
+            # Obtener engine (estado limpio por cada run_replay / ventana WF)
             engine = get_trading_engine()
-            
+            engine.reset_replay_state(symbol)
+
             # Estadísticas
             stats = ReplayStatistics()
             self.signals = []

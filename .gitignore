@@ -12,7 +12,15 @@ circuit_breaker_state.json
 autosignals_state.json
 
 # ── Resultados de backtest (CSVs generados localmente) ────────────────────────
-backtest_results/
+backtest_results/optimization/
+backtest_results/retests/
+backtest_results/walk_forward/
+backtest_results/monte_carlo/
+backtest_results/*.csv
+backtest_results/*.txt
+backtest_results/*.log
+# Conservar JSONs de optimización en el repo (son resultados de research)
+# backtest_results/*.json  <- NO ignorar
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
 logs/

@@ -32,6 +32,14 @@ from typing import List, Optional
 # Añadir directorio raíz al path (el script está en tests/, la raíz está un nivel arriba)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Consola UTF-8 en Windows (evita fallos con ═ ✅ en cp1252)
+if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuración de logging (antes de cualquier import del proyecto)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -70,10 +78,31 @@ ALL_STRATEGIES = [s for strategies in STRATEGIES_BY_SYMBOL.values() for s in str
 
 # Timeframe por estrategia (las MTF usan H4)
 TIMEFRAME_BY_STRATEGY = {
-    'eurusd_mtf':            'H4',
-    'btc_trend_pullback_v1': 'H1',  # usa H1 para entrada, resamplea H4 internamente
+    'eurusd_mtf':              'H4',
+    'btc_trend_pullback_v1':   'H1',  # usa H1 para entrada, resamplea H4 internamente
+    'btceur_regime_momentum':  'H4',
 }
 DEFAULT_TIMEFRAME = 'H1'
+
+
+def get_replay_params(strategy: str) -> tuple:
+    """
+    Devuelve (lookback, max_forward_bars, timeframe) según la estrategia.
+    Usado por backtest simple y walk-forward.
+    """
+    timeframe = TIMEFRAME_BY_STRATEGY.get(strategy, DEFAULT_TIMEFRAME)
+    if strategy == 'eurusd_mtf':
+        return 1300, 300, timeframe
+    if strategy == 'btc_trend_pullback_v1':
+        return 900, 120, timeframe
+    if strategy == 'btceur_weekly_breakout':
+        return 900, 300, timeframe
+    if strategy == 'btceur_regime_momentum':
+        # EMA200 daily ≈ 219 velas D1 → ~1320 velas H4 (6 H4/día)
+        return 1400, 240, timeframe
+    if strategy in ('eurusd_asian_breakout', 'xauusd_psychological'):
+        return 210, 120, timeframe
+    return 210, 120, timeframe
 
 # Estrategia por defecto por símbolo
 DEFAULT_STRATEGY = {
@@ -260,33 +289,13 @@ def run_single_backtest(symbol: str, bars: int, strategy: str = None,
         strategy = DEFAULT_STRATEGY.get(symbol, 'eurusd_simple')
 
     pip_size  = PIP_SIZE.get(symbol, 0.0001)
-    timeframe = TIMEFRAME_BY_STRATEGY.get(strategy, DEFAULT_TIMEFRAME)
+    lookback, forward, timeframe = get_replay_params(strategy)
 
     cb_label = f"CB={cb_losses}L/{cb_pause_bars}v" if cb_losses > 0 else "sin CB"
     print(f"\n  ⏳  Analizando {symbol} ({bars} velas {timeframe}, estrategia: {strategy}, {cb_label})...")
 
     try:
         from core.replay_engine import ReplayEngine
-
-        if strategy == 'eurusd_mtf':
-            lookback = 1300
-            forward  = 300
-        elif strategy == 'btc_trend_pullback_v1':
-            lookback = 900
-            forward  = 120
-        elif strategy == 'btceur_weekly_breakout':
-            lookback = 900
-            forward  = 300
-        elif strategy == 'btceur_regime_momentum':
-            # Necesita ~900 velas H4 para Daily resampleado con EMA200
-            lookback = 900
-            forward  = 240   # 10 días H4
-        elif strategy in ('eurusd_asian_breakout', 'xauusd_psychological'):
-            lookback = 210
-            forward  = 120
-        else:
-            lookback = 210
-            forward  = 120
 
         engine = ReplayEngine(
             lookback_window=lookback,
@@ -527,16 +536,27 @@ def print_recommendations(results: List[dict]):
 def run_walkforward(symbol: str, strategy: str, total_bars: int,
                     train_bars: int, test_bars: int, step_bars: int,
                     cb_losses: int = 4, cb_pause: int = 168,
-                    save: bool = False) -> bool:
+                    save: bool = False,
+                    lookback: int = None,
+                    max_forward: int = None,
+                    timeframe: str = None) -> bool:
     """
     Ejecuta walk-forward testing y muestra el reporte.
     Retorna True si la estrategia es STABLE o MARGINAL.
     """
     from core.walkforward import WalkForwardTester
 
+    lb, fwd, tf = get_replay_params(strategy)
+    if lookback is None:
+        lookback = lb
+    if max_forward is None:
+        max_forward = fwd
+    if timeframe is None:
+        timeframe = tf
+
     _section(f"WALK-FORWARD: {symbol}  [estrategia: {strategy}]")
     print(f"  Train: {train_bars} velas · Test: {test_bars} velas · Step: {step_bars} velas")
-    print(f"  Total: {total_bars} velas · CB: {cb_losses}L/{cb_pause}v")
+    print(f"  Total: {total_bars} velas {timeframe} · Lookback: {lookback} · CB: {cb_losses}L/{cb_pause}v")
     print()
 
     wf = WalkForwardTester(
@@ -545,12 +565,15 @@ def run_walkforward(symbol: str, strategy: str, total_bars: int,
         step_bars=step_bars,
         cb_losses=cb_losses,
         cb_pause=cb_pause,
+        lookback=lookback,
     )
+    wf.max_forward_bars = max_forward
 
     report = wf.run(
         symbol=symbol,
         strategy=strategy,
         total_bars=total_bars,
+        timeframe=timeframe,
         verbose=True,
     )
 

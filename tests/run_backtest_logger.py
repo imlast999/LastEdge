@@ -132,6 +132,9 @@ def main():
 
             cmd = [PYTHON, SCRIPT] + args
             try:
+                env = os.environ.copy()
+                env['PYTHONIOENCODING'] = 'utf-8'
+                env['PYTHONUTF8'] = '1'
                 proc = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
@@ -139,6 +142,7 @@ def main():
                     text=True,
                     encoding='utf-8',
                     errors='replace',
+                    env=env,
                 )
                 for line in proc.stdout:
                     tee(line, log)

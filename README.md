@@ -118,7 +118,7 @@ Breakout del rango asiático durante la apertura de Londres.
 | Entrada BUY | Cierre > asia_high + 3 pips buffer |
 | Entrada SELL | Cierre < asia_low − 3 pips buffer |
 | Stop Loss | Extremo opuesto del rango asiático |
-| Take Profit | entry ± range × 1.5 |
+| Take Profit | entry ± range × 2.0 |
 | Filtros | No viernes · rango mínimo 5 pips · máximo 80 pips |
 | Máx. señales | 1 por día |
 | **Winrate backtest** | **56.5%** |

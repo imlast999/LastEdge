@@ -35,6 +35,10 @@ class BTCEURWeeklyBreakoutStrategy(BaseStrategy):
         super().__init__("BTCEUR_WeeklyBreakout")
         self._last_signal_week: Optional[str] = None
 
+    def reset_state(self) -> None:
+        """Reinicia estado interno (backtest / walk-forward)."""
+        self._last_signal_week = None
+
     def _get_default_config(self) -> Dict:
         return {
             # Breakout
