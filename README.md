@@ -1,6 +1,6 @@
 # 🤖 BOT MT5 — Trading Automatizado con Discord
 
-Bot de trading para MetaTrader 5 con integración Discord, backtesting histórico, paper trading y modo real. Monitorea EURUSD, XAUUSD y BTCEUR en H1 con señales automáticas, dashboard web en tiempo real y circuit breaker integrado.
+Bot de trading para MetaTrader 5 con integración Discord, backtesting histórico, paper trading y modo real. Monitorea EURUSD, XAUUSD y BTCEUR en H1 con señales automáticas, dashboard web en tiempo real, circuit breaker integrado y pipeline completo de validación cuantitativa.
 
 ---
 
@@ -39,10 +39,12 @@ core/
   filters.py                # Filtros de duplicados y cooldown
   replay_engine.py          # Motor de backtesting histórico
   circuit_breaker.py        # Circuit breaker y risk scaling
+  walkforward.py            # Walk-forward testing
+  trade_costs.py            # Modelado de spread y comisiones reales
 
 services/
   autosignals.py            # Loop de escaneo automático
-  dashboard.py              # Dashboard web (puerto 8080)
+  dashboard.py              # Dashboard web (puerto 5000)
   execution.py              # Ejecución de órdenes MT5
   logging.py                # Sistema de logging inteligente
   database.py               # Persistencia SQLite
@@ -51,21 +53,36 @@ services/
 
 strategies/
   base.py                   # Clase base con indicadores comunes
-  eurusd.py                 # eurusd_simple (fallback EURUSD)
-  eurusd_asian_breakout.py  # ⭐ Estrategia activa EURUSD
-  xauusd.py                 # xauusd_simple (activa) + Reversal + Momentum
-  btceur_new.py             # btceur_simple (activa)
+  eurusd.py                 # eurusd_simple ⭐ activa EURUSD
+  xauusd.py                 # xauusd_simple ⭐ activa XAUUSD + Momentum
+  btceur_new.py             # btceur_simple ⭐ activa BTCEUR
   btc_trend_pullback_v1.py  # Alternativa BTCEUR (H4+H1 multi-timeframe)
   btceur_weekly_breakout.py # Alternativa BTCEUR (breakout semanal)
-  eurusd_mtf.py             # EURUSD multi-timeframe (experimental)
-  xauusd_psychological.py   # Reversión niveles psicológicos (experimental)
+  btceur_regime_momentum.py # Alternativa BTCEUR (régimen + momentum H4)
+  experimental/             # Estrategias descartadas tras validación
+    eurusd_asian_breakout.py  # DESCARTADA — PF < 1.0 en retest 10k/15k/20k
+    eurusd_mtf.py             # DESCARTADA — PF 0.46 en backtest
+    xauusd_psychological.py   # DESCARTADA — PF negativo
 
 tests/
   backtest_runner.py        # Script de backtesting CLI completo
+  optimize_strategies.py    # Grid search de parámetros
+  apply_optimization.py     # Aplica parámetros óptimos al código
+  run_full_backtest.bat     # Ejecuta todos los backtests + walk-forward
+  run_progressive_retests.py  # Retest multi-horizonte 10k/15k/20k
+  run_progressive_retests.bat # Lanzador del retest progresivo
+  run_long_retests.py       # Retests largos con logging persistente
+  run_optimization.bat      # Lanzador del grid search
+  run_backtest_logger.py    # Wrapper con logging para el .bat
   test_replay.py            # Tests del replay engine
 
+backtest_results/
+  optimization/             # JSONs de grid search (parámetros óptimos)
+  progressive_retests/      # Sesiones de retest 10k/15k/20k
+  walk_forward/             # Resultados de walk-forward (futuro)
+  monte_carlo/              # Resultados de Monte Carlo (futuro)
+
 logs/                       # Logs por sesión (rotación automática, en .gitignore)
-backtest_results/           # CSVs de resultados de backtest
 ```
 
 ---
@@ -104,27 +121,35 @@ DASHBOARD_HISTORY_HOURS=168   # 7 días de historial
 
 ## Estrategias activas
 
-Validadas con backtest histórico sobre datos H1 reales de MT5.
+Validadas con retest progresivo sobre 10.000 / 15.000 / 20.000 velas H1 reales de MT5 (junio 2026). Los costes de spread y comisión de cuenta Professional están incluidos en todos los resultados.
 
-### EURUSD — `eurusd_asian_breakout` ⭐ (recomendada)
+### EURUSD — `eurusd_simple` ⭐
 
-Breakout del rango asiático durante la apertura de Londres.
+Momentum en tendencia con ATR dinámico. Parámetros optimizados mediante grid search (mayo 2026).
 
 | Parámetro | Valor |
 |---|---|
 | Timeframe | H1 |
-| Sesión de entrada | Londres 07:00–11:00 UTC |
-| Rango asiático | 00:00–06:00 UTC |
-| Entrada BUY | Cierre > asia_high + 3 pips buffer |
-| Entrada SELL | Cierre < asia_low − 3 pips buffer |
-| Stop Loss | Extremo opuesto del rango asiático |
-| Take Profit | entry ± range × 2.0 |
-| Filtros | No viernes · rango mínimo 5 pips · máximo 80 pips |
-| Máx. señales | 1 por día |
-| **Winrate backtest** | **56.5%** |
-| **Profit factor** | **1.30** (3000 velas H1) |
+| Stop Loss | 1.5× ATR |
+| Take Profit | 6.0× ATR |
+| R:R implícito | ~4:1 |
+| Riesgo/trade | 0.75% |
+| Circuit Breaker | 3 pérdidas → pausa 72 velas |
+| Cooldown | 10 velas entre señales |
 
-### XAUUSD — `xauusd_simple`
+**Resultados retest progresivo (con costes reales):**
+
+| Horizonte | Señales | WR | PF | Pips netos | Clasificación |
+|---|---|---|---|---|---|
+| 10.000 velas | 337 | 26.1% | 1.12 | +727 | — |
+| 15.000 velas | 516 | 25.8% | 1.11 | +905 | — |
+| 20.000 velas | 690 | 27.0% | **1.19** | +2068 | **✅ ROBUST** |
+
+El PF mejora al ampliar el horizonte — señal de ausencia de overfitting. Racha máxima de pérdidas: 26 (requiere CB activo).
+
+---
+
+### XAUUSD — `xauusd_simple` ⭐
 
 Momentum en tendencia con filtro EMA200. Sesión activa 06:00–22:00 UTC.
 
@@ -133,15 +158,26 @@ Momentum en tendencia con filtro EMA200. Sesión activa 06:00–22:00 UTC.
 | Timeframe | H1 |
 | Filtro tendencia | EMA20 > EMA50 + precio > EMA200 |
 | Entrada | RSI > 55 (BUY) / RSI < 45 (SELL) + ATR > media |
-| Confirmación | No 2 velas consecutivas en contra |
 | Stop Loss | 2.0× ATR |
 | Take Profit | 5.0× ATR |
 | R:R | 2.5 |
 | Riesgo/trade | 0.60% |
+| Circuit Breaker | 4 pérdidas → pausa 168 velas |
 | Cooldown | 240 minutos entre señales |
-| **Profit factor** | **1.28** (5000 velas H1) |
 
-### BTCEUR — `btceur_simple` (baseline)
+**Resultados retest progresivo (con costes reales):**
+
+| Horizonte | Señales | WR | PF | Pips netos | Clasificación |
+|---|---|---|---|---|---|
+| 10.000 velas | 253 | 38.7% | 1.23 | +13.151 | — |
+| 15.000 velas | 361 | 36.8% | 1.20 | +13.154 | — |
+| 20.000 velas | 456 | 35.5% | **1.17** | +12.462 | **✅ ROBUST** |
+
+Degradación controlada del 5.1% — la más estable del sistema. Drawdown máximo estable en los tres horizontes.
+
+---
+
+### BTCEUR — `btceur_simple` ⭐
 
 Tendencia EMA + MACD + expansión de volatilidad. Opera 24/7.
 
@@ -154,22 +190,123 @@ Tendencia EMA + MACD + expansión de volatilidad. Opera 24/7.
 | Take Profit | 3.0× ATR |
 | R:R | 1.5 |
 | Riesgo/trade | 0.50% |
+| Circuit Breaker | 4 pérdidas → pausa 168 velas |
 | Cooldown | 60 minutos entre señales |
-| **Profit factor** | **1.30** (5000 velas H1) |
+| Límite dirección | Máx. 3 señales en la misma dirección por día |
 
-### Estrategias alternativas disponibles
+**Resultados retest progresivo (con costes reales):**
 
-| Estrategia | Par | Estado | Notas |
+| Horizonte | Señales | WR | PF | Pips netos | Clasificación |
+|---|---|---|---|---|---|
+| 10.000 velas | 239 | 46.4% | 1.23 | +36.836 | — |
+| 15.000 velas | 344 | 43.6% | 1.02 | +4.175 | — |
+| 20.000 velas | — | — | — | — | **⚠️ INCONCLUSIVE** |
+
+Dependencia de régimen de mercado detectada: funciona bien en tendencia, se deteriora en lateralización. Drawdown crece significativamente al ampliar el horizonte. Monitorear con precaución en paper trading.
+
+---
+
+### Estrategias alternativas disponibles (no activas)
+
+| Estrategia | Par | PF backtest | Estado | Notas |
+|---|---|---|---|---|
+| `xauusd_momentum` | XAUUSD | 1.25 (20k) | Disponible | ROBUST, degradación 12.2%, muestra pequeña (78 trades) |
+| `btc_trend_pullback_v1` | BTCEUR | 1.21 | Disponible | CB muy activo (53% señales bloqueadas) |
+| `btceur_weekly_breakout` | BTCEUR | 2.66 (con CB) | Disponible | PF inflado por CB, no validado sin CB |
+| `btceur_regime_momentum` | BTCEUR | — | En prueba | H4+Daily, 0 señales en backtest (bug datos H4 pendiente) |
+
+Para cambiar estrategia: editar `rules_config.json` → campo `"strategy"`, o usar `/set_strategy` en Discord.
+
+---
+
+### Estrategias descartadas (`strategies/experimental/`)
+
+| Estrategia | Par | Motivo de descarte |
+|---|---|---|
+| `eurusd_asian_breakout` | EURUSD | PF < 1.0 en retest 10k/15k/20k con costes reales |
+| `eurusd_mtf` | EURUSD | PF 0.46 en backtest — sin edge |
+| `xauusd_psychological` | XAUUSD | PF negativo — pierde más de lo que gana |
+| `xauusd_reversal` | XAUUSD | 1–3 señales en 5000 velas — demasiado restrictiva |
+
+Movidas a `strategies/experimental/` para referencia histórica. No registradas en el sistema activo.
+
+---
+
+## Pipeline de validación cuantitativa
+
+El proyecto incluye un pipeline completo para validar estrategias antes de usarlas en real.
+
+### 1. Backtest individual
+
+```bash
+# Modo interactivo
+python tests/backtest_runner.py
+
+# CLI con circuit breaker simulado
+python tests/backtest_runner.py --symbol EURUSD --strategy eurusd_simple --bars 10000 --save
+python tests/backtest_runner.py --symbol XAUUSD --bars 10000 --cb-losses 4 --cb-pause 168
+python tests/backtest_runner.py --symbol BTCEUR --bars 10000 --cb-losses 0  # sin CB
+
+# Todos los pares + walk-forward
+tests\run_full_backtest.bat
+```
+
+Opciones: `--symbol`, `--strategy`, `--bars`, `--verbose`, `--save`, `--all`, `--walkforward`, `--cb-losses`, `--cb-pause`
+
+### 2. Grid search de parámetros
+
+```bash
+tests\run_optimization.bat
+# o directamente:
+python tests/optimize_strategies.py
+```
+
+Prueba todas las combinaciones de SL/TP/CB para cada estrategia sobre 5000 velas. Guarda el top 5 de cada estrategia en `backtest_results/optimization/`. Duración: ~7 horas para todas las estrategias.
+
+Para aplicar los parámetros óptimos:
+```bash
+python tests/apply_optimization.py backtest_results/optimization/optimization_YYYYMMDD.json
+```
+
+### 3. Retest progresivo multi-horizonte
+
+```bash
+tests\run_progressive_retests.bat
+# o directamente:
+python tests/run_progressive_retests.py
+```
+
+Ejecuta cada estrategia activa con 10.000, 15.000 y 20.000 velas H1 de forma secuencial. Detecta automáticamente degradación temporal y clasifica cada estrategia como:
+
+| Clasificación | Criterio |
+|---|---|
+| **ROBUST** | PF mínimo ≥ 1.1 en todos los horizontes, degradación < 15% |
+| **STABLE** | PF mínimo ≥ 1.05, degradación < 25% |
+| **DEGRADING** | PF positivo pero degradación ≥ 15% |
+| **OVERFITTED** | PF alto en 10k pero cae por debajo de 1.0 en 20k |
+| **FAILED** | PF < 1.0 en algún horizonte |
+| **INCONCLUSIVE** | Datos insuficientes o resultados contradictorios |
+
+Resultados guardados en `backtest_results/progressive_retests/session_YYYYMMDD_HHMMSS/`.
+
+### 4. Walk-forward testing
+
+```bash
+python tests/backtest_runner.py --symbol EURUSD --bars 10000 --walkforward
+python tests/backtest_runner.py --symbol XAUUSD --bars 10000 --walkforward --wf-train 2160 --wf-test 720
+```
+
+Divide los datos en ventanas TRAIN/TEST solapadas y evalúa la consistencia de la estrategia en cada ventana. Detecta overfitting cuando el PF en TEST es significativamente inferior al de TRAIN.
+
+### Costes reales incluidos (`core/trade_costs.py`)
+
+Todos los backtests descuentan automáticamente los costes de la cuenta Professional de FXLiveCapital:
+
+| Par | Spread | Comisión | Total round-trip |
 |---|---|---|---|
-| `eurusd_simple` | EURUSD | Fallback (PF 1.28) | EMA50/200 + RSI |
-| `btc_trend_pullback_v1` | BTCEUR | Alternativa (PF 1.20) | H4+H1 multi-timeframe |
-| `btceur_weekly_breakout` | BTCEUR | Experimental (PF 3.70) | Racha máx. 29 wins |
-| `xauusd_psychological` | XAUUSD | Experimental (WR 70%) | Niveles psicológicos |
-| `xauusd_reversal` | XAUUSD | Experimental | Ultra-selectiva, RSI extremo + EMA200 |
-| `xauusd_momentum` | XAUUSD | Experimental | Tendencias fuertes |
-| `eurusd_mtf` | EURUSD | Experimental | Multi-timeframe H1+H4 |
-
-Para cambiar estrategia: editar `rules_config.json` → campo `"strategy"`.
+| EURUSD | 1.2 pips | 0.3 pips | **1.5 pips** |
+| XAUUSD | 3.5 pips | 0.3 pips | **3.8 pips** |
+| BTCEUR | 25.0 pips | 0.3 pips | **25.3 pips** |
 
 ---
 
@@ -179,58 +316,32 @@ Accesible en `http://localhost:5000` mientras el bot está corriendo. Se actuali
 
 ### Secciones
 
-**Barra superior**
-- Estado del sistema y uptime
-- Fecha/hora actual
-- Indicador de conexión MT5 (🟢/🟡/🔴 según tiempo sin datos)
+**Barra superior** — Estado del sistema, uptime, fecha/hora, indicador de conexión MT5 (🟢/🟡/🔴)
 
-**KPIs (fila superior)**
-- Estado del sistema (RUNNING/ERROR)
-- Señales de la sesión actual
-- Posiciones abiertas en MT5
-- Profit total (paper o real)
+**KPIs** — Estado del sistema, señales de la sesión, posiciones abiertas en MT5, profit total
 
-**Equity simulada y winrate**
-- Calcula cómo habría evolucionado el balance si se hubieran ejecutado todas las señales de la sesión
-- Winrate en tiempo real con conteo de WIN/LOSS/OPEN
-- Cambio en € y % respecto al balance inicial
+**Equity en tiempo real**
+- Balance base (MT5 al arrancar) + P&L acumulado de señales cerradas + P&L flotante de señales abiertas
+- Se actualiza cada 10 segundos vía `/api/equity` sin recargar la página
+- En modo real usa directamente `mt5.account_info().equity`
 
-**Curva de equity (Chart.js)**
-- Gráfico de línea interactivo con la evolución del balance simulado
-- Tooltip con valor exacto en cada punto
+**Curva de equity (Chart.js)** — Gráfico interactivo con la evolución del balance. El último punto incluye el flotante actual.
 
-**Posiciones reales MT5** *(solo si hay posiciones abiertas)*
-- Tabla con símbolo, dirección, volumen, precio apertura, precio actual, P&L en €, SL y TP
+**Posiciones reales MT5** — Tabla con símbolo, dirección, volumen, precio apertura, precio actual, P&L en €, SL y TP *(solo si hay posiciones abiertas)*
 
-**Circuit Breaker**
-- Estado actual (ACTIVO/PAUSADO)
-- Pérdidas y wins consecutivos
-- Multiplicador de riesgo actual
+**Circuit Breaker** — Estado actual, pérdidas/wins consecutivos, multiplicador de riesgo activo
 
-**Pares monitoreados**
-- Estado de cada par (🟢/🟡/🔴)
-- Total de señales, mostradas y score promedio
-- Tiempo desde última señal
+**Pares monitoreados** — Estado de cada par, total de señales, score promedio, tiempo desde última señal
 
 **Tabla de señales (sesión actual)**
-- Solo señales desde que arrancó el bot (no persiste entre reinicios en la tabla)
-- Entry, SL, TP con colores (rojo/verde)
-- R:R calculado automáticamente
-- Estado en tiempo real: `WIN ✅` / `LOSS ❌` / `OPEN +45%` (P&L como % del riesgo)
+- Solo señales desde que arrancó el bot — se resetea a 0 en cada reinicio
+- Entry, SL, TP con colores · R:R calculado · Estado: `WIN ✅` / `LOSS ❌` / `OPEN +45%`
 - Estado persistente — una vez WIN/LOSS no cambia aunque MT5 se desconecte
 - Filtros por par: ALL / EURUSD / XAUUSD / BTCEUR
 
-**Botón modo real** *(esquina inferior derecha)*
-- 🟢 Activar modo real — abre modal de confirmación con aviso de dinero real
-- 🔴 Desactivar — vuelve a paper trading instantáneamente
-- Sin reinicio necesario
+**Botón modo real** — Modal de confirmación con aviso de dinero real. Sin reinicio necesario.
 
-**Banner de modo real** *(visible cuando está activo)*
-- Aviso prominente en rojo cuando el bot ejecuta órdenes reales
-
-**Exportar CSV**
-- Botón en la tabla y endpoint `/api/export`
-- Descarga todas las señales de los últimos 7 días con entry/SL/TP/R:R/estado
+**Exportar CSV** — Botón en la tabla y endpoint `/api/export`. Descarga señales de los últimos 7 días.
 
 ### APIs disponibles
 
@@ -240,48 +351,16 @@ Accesible en `http://localhost:5000` mientras el bot está corriendo. Se actuali
 | `GET /api/metrics` | Métricas en JSON |
 | `GET /api/history` | Historial de señales (7 días) |
 | `GET /api/export` | Descarga CSV |
+| `GET /api/equity` | Snapshot de equity en tiempo real |
 | `GET /api/enable-real` | Activa modo real |
 | `GET /api/disable-real` | Desactiva modo real |
 | `GET /api/execution-status` | Estado actual del modo de ejecución |
 
 ---
 
-## Backtesting
-
-```bash
-# Modo interactivo (recomendado)
-python tests/backtest_runner.py
-
-# CLI directo
-python tests/backtest_runner.py --symbol EURUSD --strategy eurusd_asian_breakout --bars 3000
-python tests/backtest_runner.py --symbol XAUUSD --bars 5000
-python tests/backtest_runner.py --symbol BTCEUR --strategy btceur_simple --bars 3000
-python tests/backtest_runner.py --all --bars 3000 --save
-
-# Opciones
-#   --symbol    EURUSD | XAUUSD | BTCEUR
-#   --strategy  ver lista abajo
-#   --bars      número de velas H1 (168 ≈ 1 semana, 720 ≈ 1 mes)
-#   --verbose   muestra detalle de cada señal
-#   --save      guarda resultados en backtest_results/ como CSV
-#   --all       ejecuta los 3 pares con su estrategia por defecto
-```
-
-**Estrategias disponibles por par:**
-
-| Par | Estrategias |
-|---|---|
-| EURUSD | `eurusd_simple`, `eurusd_advanced`, `eurusd_mtf`, `eurusd_asian_breakout` |
-| XAUUSD | `xauusd_simple`, `xauusd_reversal`, `xauusd_momentum`, `xauusd_psychological` |
-| BTCEUR | `btceur_simple`, `btc_trend_pullback_v1`, `btceur_weekly_breakout` |
-
-Los resultados se guardan en `backtest_results/` como CSV con timestamp.
-
----
-
 ## Circuit Breaker y Risk Scaling
 
-Implementado en `core/circuit_breaker.py`. Se activa automáticamente según el historial de trades:
+Implementado en `core/circuit_breaker.py`. Estado persistente durante la sesión, se resetea en cada reinicio del bot.
 
 | Situación | Acción |
 |---|---|
@@ -292,18 +371,20 @@ Implementado en `core/circuit_breaker.py`. Se activa automáticamente según el 
 | 5 wins seguidos | Riesgo × 1.8 |
 | 7 wins seguidos | Riesgo × 2.0 |
 
+El CB está completamente integrado con el dashboard: cada señal que se cierra como WIN/LOSS actualiza el estado del CB en tiempo real.
+
 ---
 
 ## Filtro de noticias (`services/news_filter.py`)
 
-Pausa el trading 30 minutos antes y después de eventos de alto impacto:
+Pausa el trading 30 minutos antes y después de eventos de alto impacto. Fechas exactas hardcodeadas para 2025–2026 (no aproximaciones).
 
 | Evento | Símbolo afectado | Hora UTC |
 |---|---|---|
 | NFP (primer viernes del mes) | EURUSD, XAUUSD | 13:30 |
-| CPI USA (2º martes del mes) | EURUSD, XAUUSD | 13:30 |
-| Fed FOMC (meses impares + jun/dic) | EURUSD, XAUUSD | 19:00 |
-| ECB Meeting (ene/abr/jun/sep) | EURUSD | 12:15 |
+| CPI USA | EURUSD, XAUUSD | 13:30 |
+| Fed FOMC | EURUSD, XAUUSD | 19:00 |
+| ECB Meeting | EURUSD | 12:15 |
 | ECB Press Conference | EURUSD | 12:45 |
 
 BTCEUR no está afectado por noticias macro.
@@ -320,9 +401,7 @@ Para activar el modo real:
 3. Confirmar el modal de advertencia
 4. Las señales MEDIUM-HIGH y HIGH se ejecutarán automáticamente en MT5
 
-Para desactivar: pulsar el botón rojo en el dashboard o reiniciar el bot.
-
-> ⚠️ El modo real implica pérdidas o ganancias reales de dinero. Úsalo solo cuando hayas validado el rendimiento en paper trading.
+> ⚠️ El modo real implica pérdidas o ganancias reales de dinero. Úsalo solo cuando hayas validado el rendimiento en paper trading con al menos 50 operaciones cerradas por estrategia.
 
 ---
 
@@ -334,7 +413,7 @@ Para desactivar: pulsar el botón rojo en el dashboard o reiniciar el bot.
 |---|---|
 | `/autosignals on\|off\|status` | Activa, desactiva o consulta el loop de escaneo automático |
 | `/status` | Estado del bot: uptime, MT5, módulos cargados, configuración activa |
-| `/pairs` | Muestra los 3 pares con su estado y permite activar/desactivar cada uno con botones |
+| `/pairs` | Muestra los 3 pares con su estado y permite activar/desactivar cada uno |
 | `/logs_info` | Ruta y tamaño del archivo de log actual |
 
 ### MT5 y posiciones
@@ -360,16 +439,9 @@ Para desactivar: pulsar el botón rojo en el dashboard o reiniciar el bot.
 
 | Comando | Descripción |
 |---|---|
-| `/replay` | Abre un modal con 5 campos configurables y ejecuta el backtest completo con el pipeline real |
+| `/replay` | Abre un modal con 5 campos configurables y ejecuta el backtest completo |
 
-El modal de `/replay` permite configurar:
-- **Par**: EURUSD / XAUUSD / BTCEUR
-- **Estrategia**: cualquiera de las disponibles para ese par (vacío = estrategia activa)
-- **Velas**: 100–10000 velas H1
-- **Circuit Breaker**: pérdidas consecutivas para activar la pausa (0 = desactivado)
-- **Pausa CB**: velas de pausa tras activar el circuit breaker
-
-El resultado se muestra como embed con winrate, profit factor, pips netos, R:R medio, racha máxima y estadísticas del circuit breaker simulado.
+El modal de `/replay` permite configurar par, estrategia, velas (100–10000), pérdidas para activar CB y velas de pausa. El resultado se muestra como embed con WR, PF, pips netos, R:R medio, racha máxima y estadísticas del CB simulado.
 
 ### Estadísticas y configuración
 
@@ -378,9 +450,9 @@ El resultado se muestra como embed con winrate, profit factor, pips netos, R:R m
 | `/performance [days]` | Reporte de rendimiento: señales, winrate, P&L de los últimos N días |
 | `/strategy_performance [days]` | Desglose de rendimiento por estrategia |
 | `/set_strategy [symbol] [strategy]` | Cambia la estrategia activa de un par en caliente sin reiniciar el bot |
-| `/bot_status` | Estado del circuit breaker (activo/pausado, racha, multiplicador de riesgo) y cooldowns activos por par |
-| `/news` | Próximos eventos de alto impacto (NFP, CPI, FOMC, ECB) con ventana de blackout y símbolos afectados |
-| `/equity` | Snapshot de la equity paper: balance cerrado + P&L flotante de señales abiertas en tiempo real |
+| `/bot_status` | Estado del circuit breaker (activo/pausado, racha, multiplicador) y cooldowns por par |
+| `/news` | Próximos eventos de alto impacto con ventana de blackout y símbolos afectados |
+| `/equity` | Snapshot de equity paper: balance cerrado + P&L flotante de señales abiertas |
 
 ---
 
@@ -388,30 +460,44 @@ El resultado se muestra como embed con winrate, profit factor, pips netos, R:R m
 
 El bot incluye dos niveles de watchdog:
 
-1. **MT5 watchdog** (`_mt5_watchdog_loop`): verifica la conexión cada 60s y reconecta automáticamente. Tras 5 fallos consecutivos envía alerta a Discord.
-2. **Autosignal watchdog**: si no hay escaneo en 30 minutos, envía alerta al canal de señales.
+1. **MT5 watchdog** (`_mt5_watchdog_loop`): verifica la conexión cada 60s y reconecta automáticamente. Tras 5 fallos consecutivos envía alerta a Discord. No bloquea el event loop de asyncio.
+2. **Autosignal watchdog**: si no hay escaneo en 30 minutos (y el CB no está activo), envía alerta al canal de señales.
 
 ---
 
 ## Resumen semanal automático
 
-Cada lunes entre 08:00–09:00 UTC el bot envía un embed a Discord con:
-- Total de señales de los últimos 7 días
-- Wins / Losses / Winrate
-- Mejor y peor par por winrate
+Cada lunes entre 08:00–09:00 UTC el bot envía un embed a Discord con total de señales, wins/losses, winrate y mejor/peor par de los últimos 7 días.
 
 ---
 
 ## Notas operativas
 
+- El bot arranca con un **cooldown de 2 minutos** antes de enviar la primera señal (evita falsas señales al inicio)
+- Cada reinicio del bot es una sesión completamente limpia: historial de señales, balance paper, circuit breaker y cooldowns se resetean a 0
 - El bot no genera señales de forex/oro el fin de semana (mercados cerrados)
 - BTCEUR opera 24/7 y puede generar señales cualquier día
-- EURUSD Asian Breakout solo opera lunes–jueves, sesión de Londres (07:00–11:00 UTC)
+- EURUSD solo opera en sesiones de Londres y Nueva York
 - XAUUSD solo opera 06:00–22:00 UTC (filtro de sesión activa)
-- Cooldowns: EURUSD 60 min · XAUUSD 240 min · BTCEUR 60 min
+- Cooldowns: EURUSD 10 velas · XAUUSD 240 min · BTCEUR 60 min
+- BTCEUR tiene límite de 3 señales en la misma dirección por día (anti-spam en tendencias fuertes)
 - Límite de 5 trades por período de 12h (global)
 - Los logs se guardan en `logs/` con rotación automática por sesión (en `.gitignore`)
-- El dashboard persiste el historial de señales 7 días entre reinicios (`dashboard_data.json`)
-- Las señales LOW y VERY_LOW se filtran automáticamente (no se envían a Discord)
+- Las señales LOW y VERY_LOW se filtran automáticamente
 - Señales MEDIUM se muestran en Discord pero no se auto-ejecutan en modo real
 - Señales MEDIUM-HIGH y HIGH se auto-ejecutan cuando el modo real está activo
+
+---
+
+## Criterios para pasar a trading real
+
+Basados en el análisis cuantitativo del proyecto (junio 2026):
+
+1. **Paper trading** ≥ 3 meses o ≥ 50 operaciones cerradas por estrategia
+2. **PF acumulado** ≥ 1.10 en paper trading
+3. **Drawdown máximo** en paper < 10% del capital asignado
+4. **WR real** dentro de ±10% del WR del backtest
+5. **Walk-forward** con ≥ 4 de 7 ventanas positivas en TEST
+6. La estrategia funciona con PF > 1.0 **sin** circuit breaker (o el CB es mejora, no requisito)
+
+> El objetivo no es encontrar la estrategia con el PF más alto en backtest. Es encontrar la estrategia que menos se rompe cuando el mercado cambia.
