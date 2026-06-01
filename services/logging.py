@@ -115,16 +115,26 @@ class IntelligentLogger:
     def _setup_output_capture(self):
         """Configura captura automática de stdout y stderr"""
         try:
+            log_file_path = self.current_log_file
+
             class TeeOutput:
-                """Clase para duplicar salida a archivo y consola"""
+                """
+                Duplica stdout/stderr al archivo de log SIN bloquear el event loop.
+                
+                Reglas:
+                - La escritura a la terminal es fire-and-forget (thread daemon, sin join).
+                  Si la terminal está lenta o bloqueada, simplemente se abandona.
+                - La escritura al archivo es directa y síncrona (el archivo nunca bloquea).
+                - El FileHandler de logging NO usa este stream — tiene su propio
+                  handler directo al archivo para evitar doble escritura y bloqueos.
+                """
                 def __init__(self, file_path, original_stream):
                     self.file_path = file_path
                     self.original_stream = original_stream
                     self.terminal = original_stream
-                    
+
                 def write(self, message):
-                    # Escribir a terminal en un thread separado con timeout
-                    # para evitar bloquear el event loop de asyncio
+                    # 1. Terminal: fire-and-forget, sin join, nunca bloquea
                     import threading
                     def _do_write():
                         try:
@@ -132,27 +142,27 @@ class IntelligentLogger:
                             self.terminal.flush()
                         except Exception:
                             pass
-                    t = threading.Thread(target=_do_write, daemon=True)
-                    t.start()
-                    t.join(timeout=2.0)  # máximo 2s — si tarda más, ignorar
-                    
-                    # Escribir a archivo con timestamp
+                    threading.Thread(target=_do_write, daemon=True).start()
+
+                    # 2. Archivo: escritura directa, nunca bloquea
                     try:
-                        if message.strip():  # Solo si no es línea vacía
+                        if message.strip():
                             with open(self.file_path, 'a', encoding='utf-8') as f:
                                 timestamp = datetime.now().strftime('%H:%M:%S')
                                 f.write(f"[{timestamp}] {message}")
-                                f.flush()
                     except Exception:
-                        pass  # No queremos que el logging cause errores
-                        
+                        pass
+
                 def flush(self):
-                    self.terminal.flush()
-            
+                    try:
+                        self.terminal.flush()
+                    except Exception:
+                        pass
+
             # Redirigir stdout y stderr
-            sys.stdout = TeeOutput(self.current_log_file, sys.stdout)
-            sys.stderr = TeeOutput(self.current_log_file, sys.stderr)
-            
+            sys.stdout = TeeOutput(log_file_path, sys.stdout)
+            sys.stderr = TeeOutput(log_file_path, sys.stderr)
+
         except Exception as e:
             logger.error(f"Error configurando captura de salida: {e}")
     
