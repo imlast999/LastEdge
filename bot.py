@@ -181,6 +181,8 @@ def validate_btceur_strategy() -> bool:
         return False
 
     valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy', 'BTCEURRegimeMomentumStrategy')
+    # eurusd_asian_breakout descartada junio 2026 (PF<1.0 en 10k/15k/20k velas)
+    # EURUSD ahora usa eurusd_simple con SL=1.5x ATR, TP=6.0x ATR, CB=3/72
     if strat.__class__.__name__ not in valid_btceur_classes:
         err_msg = f"Estrategia incorrecta: {strat.__class__.__name__} (válidas: {valid_btceur_classes})."
         log_event(f"[CRITICAL][BTCEUR] {err_msg}", "ERROR")

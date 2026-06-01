@@ -1,0 +1,45 @@
+{
+  "classification": "ROBUST",
+  "reason": "PF minimo 1.17 >= 1.1, degradacion 5.1% < 15%",
+  "pf_by_horizon": {
+    "10000": 1.23,
+    "15000": 1.195,
+    "20000": 1.167
+  },
+  "wr_by_horizon": {
+    "10000": 38.7,
+    "15000": 36.8,
+    "20000": 35.5
+  },
+  "dd_by_horizon": {
+    "10000": 11015.5,
+    "15000": 11015.5,
+    "20000": 11015.5
+  },
+  "pf_change_total": -5.1,
+  "wr_change_total": -3.2,
+  "dd_growth_total": 0.0,
+  "degradation_score": 0.051,
+  "robustness_score": 1.167,
+  "consistency": 1.0,
+  "comparisons": [
+    {
+      "from_bars": 10000,
+      "to_bars": 15000,
+      "pf_change": -2.8,
+      "wr_change": -1.9,
+      "dd_change": 0.0,
+      "net_pips_change": 3.4
+    },
+    {
+      "from_bars": 15000,
+      "to_bars": 20000,
+      "pf_change": -2.4,
+      "wr_change": -1.3,
+      "dd_change": 0.0,
+      "net_pips_change": -692.2
+    }
+  ],
+  "horizons_valid": 3,
+  "horizons_total": 3
+}

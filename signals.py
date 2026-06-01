@@ -41,6 +41,8 @@ STRATEGY_REGISTRY = {
     'eurusd':           lambda: get_strategy('EURUSD'),
     'eurusd_simple':    lambda: get_strategy('EURUSD'),
     'eurusd_advanced':  lambda: _get_eurusd_advanced(),
+    # eurusd_asian_breakout descartada (retest progresivo junio 2026, PF<1.0 en 10k/15k/20k) — ver strategies/experimental/
+    'eurusd_asian_breakout': lambda: _get_eurusd_asian_breakout(),   # mantenida para compatibilidad backtest
     # eurusd_mtf descartada (grid search mayo 2026, PF max 0.42) — ver strategies/experimental/
     'eurusd_mtf':       lambda: _get_eurusd_mtf(),   # mantenida para compatibilidad backtest
     'eurusd_asian_breakout': lambda: _get_eurusd_asian_breakout(),

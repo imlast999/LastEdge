@@ -1,0 +1,45 @@
+{
+  "classification": "FAILED",
+  "reason": "PF siempre por debajo de 1.0 (max: 0.99)",
+  "pf_by_horizon": {
+    "10000": 0.973,
+    "15000": 0.989,
+    "20000": 0.983
+  },
+  "wr_by_horizon": {
+    "10000": 54.3,
+    "15000": 55.1,
+    "20000": 54.6
+  },
+  "dd_by_horizon": {
+    "10000": 615.1,
+    "15000": 615.1,
+    "20000": 615.1
+  },
+  "pf_change_total": 0.9,
+  "wr_change_total": 0.4,
+  "dd_growth_total": 0.0,
+  "degradation_score": 0.0,
+  "robustness_score": 0.973,
+  "consistency": 0.0,
+  "comparisons": [
+    {
+      "from_bars": 10000,
+      "to_bars": 15000,
+      "pf_change": 1.6,
+      "wr_change": 0.8,
+      "dd_change": 0.0,
+      "net_pips_change": 36.3
+    },
+    {
+      "from_bars": 15000,
+      "to_bars": 20000,
+      "pf_change": -0.7,
+      "wr_change": -0.4,
+      "dd_change": 0.0,
+      "net_pips_change": -61.3
+    }
+  ],
+  "horizons_valid": 3,
+  "horizons_total": 3
+}
