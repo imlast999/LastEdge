@@ -1,308 +1,173 @@
-# 🤖 BOT MT5 — Trading Automatizado con Discord
+<div align="center">
 
-Bot de trading para MetaTrader 5 con integración Discord, backtesting histórico, paper trading y modo real. Monitorea EURUSD, XAUUSD y BTCEUR en H1 con señales automáticas, dashboard web en tiempo real, circuit breaker integrado y pipeline completo de validación cuantitativa.
+# BOT-MT5
 
----
+**Quantitative Trading Research Framework**
 
-## Inicio rápido
+Backtesting · Optimization · Paper Trading · MT5 Execution · Discord Integration
 
-```bash
-# Opción recomendada: script automático (instala dependencias y arranca)
-start_bot.bat
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
+![Phase](https://img.shields.io/badge/Phase-Paper%20Trading-yellow)
+![Status](https://img.shields.io/badge/Status-Active-brightgreen)
+![License](https://img.shields.io/badge/License-MIT-lightgrey)
+![Platform](https://img.shields.io/badge/Platform-Windows-informational)
 
-# Manual
-pip install -r requirements.txt
-python bot.py
-```
-
-Requiere MT5 abierto y credenciales en `.env`.
+</div>
 
 ---
 
-## Estructura del proyecto
+## What is this?
 
-```
-bot.py                      # Punto de entrada — bot Discord + MT5
-signals.py                  # Dispatcher de estrategias
-rules_config.json           # Configuración de pares y riesgo
-mt5_client.py               # Cliente MetaTrader 5
-charts.py                   # Generación de gráficos
-secrets_store.py            # Credenciales cifradas
-position_manager.py         # Gestión de posiciones MT5
-backtest_tracker.py         # Tracking de señales
-audioop_patch.py            # Compatibilidad Python 3.13
+BOT-MT5 is a personal quantitative research framework built around MetaTrader 5. It combines a strategy engine, a full backtesting pipeline, and a Discord-controlled paper trading system into a single modular codebase.
 
-core/
-  engine.py                 # Motor principal de señales
-  scoring.py                # Sistema de scoring y confianza
-  risk.py                   # Gestión de riesgo y lot sizing
-  filters.py                # Filtros de duplicados y cooldown
-  replay_engine.py          # Motor de backtesting histórico
-  circuit_breaker.py        # Circuit breaker y risk scaling
-  walkforward.py            # Walk-forward testing
-  trade_costs.py            # Modelado de spread y comisiones reales
+The goal is not to chase high backtest numbers. It is to find strategies that survive when market conditions change — then validate them thoroughly before committing real capital.
 
-services/
-  autosignals.py            # Loop de escaneo automático
-  dashboard.py              # Dashboard web (puerto 5000)
-  execution.py              # Ejecución de órdenes MT5
-  logging.py                # Sistema de logging inteligente
-  database.py               # Persistencia SQLite
-  commands.py               # Comandos Discord adicionales
-  news_filter.py            # Filtro de noticias de alto impacto
-
-strategies/
-  base.py                   # Clase base con indicadores comunes
-  eurusd.py                 # eurusd_simple ⭐ activa EURUSD
-  xauusd.py                 # xauusd_simple ⭐ activa XAUUSD + Momentum
-  btceur_new.py             # btceur_simple ⭐ activa BTCEUR
-  btc_trend_pullback_v1.py  # Alternativa BTCEUR (H4+H1 multi-timeframe)
-  btceur_weekly_breakout.py # Alternativa BTCEUR (breakout semanal)
-  btceur_regime_momentum.py # Alternativa BTCEUR (régimen + momentum H4)
-  experimental/             # Estrategias descartadas tras validación
-    eurusd_asian_breakout.py  # DESCARTADA — PF < 1.0 en retest 10k/15k/20k
-    eurusd_mtf.py             # DESCARTADA — PF 0.46 en backtest
-    xauusd_psychological.py   # DESCARTADA — PF negativo
-
-tests/
-  backtest_runner.py        # Script de backtesting CLI completo
-  optimize_strategies.py    # Grid search de parámetros
-  apply_optimization.py     # Aplica parámetros óptimos al código
-  run_full_backtest.bat     # Ejecuta todos los backtests + walk-forward
-  run_progressive_retests.py  # Retest multi-horizonte 10k/15k/20k
-  run_progressive_retests.bat # Lanzador del retest progresivo
-  run_long_retests.py       # Retests largos con logging persistente
-  run_optimization.bat      # Lanzador del grid search
-  run_backtest_logger.py    # Wrapper con logging para el .bat
-  test_replay.py            # Tests del replay engine
-
-backtest_results/
-  optimization/             # JSONs de grid search (parámetros óptimos)
-  progressive_retests/      # Sesiones de retest 10k/15k/20k
-  walk_forward/             # Resultados de walk-forward (futuro)
-  monte_carlo/              # Resultados de Monte Carlo (futuro)
-
-logs/                       # Logs por sesión (rotación automática, en .gitignore)
-```
+> **Current phase:** Paper trading validation. No live capital is at risk until quantitative criteria are met.
 
 ---
 
-## Configuración (.env)
+## Overview
 
-```env
-# Discord
-DISCORD_TOKEN=...
-GUILD_ID=...
-AUTHORIZED_USER_ID=...
-
-# MT5
-MT5_LOGIN=...
-MT5_PASSWORD=...
-MT5_SERVER=...              # ej: ICMarkets-Demo
-
-# Trading
-AUTOSIGNALS=1
-AUTOSIGNAL_INTERVAL=20      # segundos entre escaneos
-AUTOSIGNAL_SYMBOLS=EURUSD,XAUUSD,BTCEUR
-
-# Auto-ejecución (0 = paper trading, 1 = órdenes reales)
-AUTO_EXECUTE_SIGNALS=0
-AUTO_EXECUTE_CONFIDENCE=HIGH
-
-# Riesgo
-MT5_RISK_PCT=0.5
-
-# Dashboard
-DASHBOARD_PORT=5000
-DASHBOARD_HISTORY_HOURS=168   # 7 días de historial
+```
+Strategy ideas → Backtest → Optimization → Progressive Retest → Walk-Forward → Paper Trading → Live
 ```
 
----
-
-## Estrategias activas
-
-Validadas con retest progresivo sobre 10.000 / 15.000 / 20.000 velas H1 reales de MT5 (junio 2026). Los costes de spread y comisión de cuenta Professional están incluidos en todos los resultados.
-
-### EURUSD — `eurusd_simple` ⭐
-
-Momentum en tendencia con ATR dinámico. Parámetros optimizados mediante grid search (mayo 2026).
-
-| Parámetro | Valor |
+| Layer | What it does |
 |---|---|
-| Timeframe | H1 |
-| Stop Loss | 1.5× ATR |
-| Take Profit | 6.0× ATR |
-| R:R implícito | ~4:1 |
-| Riesgo/trade | 0.75% |
-| Circuit Breaker | 3 pérdidas → pausa 72 velas |
-| Cooldown | 10 velas entre señales |
-
-**Resultados retest progresivo (con costes reales):**
-
-| Horizonte | Señales | WR | PF | Pips netos | Clasificación |
-|---|---|---|---|---|---|
-| 10.000 velas | 337 | 26.1% | 1.12 | +727 | — |
-| 15.000 velas | 516 | 25.8% | 1.11 | +905 | — |
-| 20.000 velas | 690 | 27.0% | **1.19** | +2068 | **✅ ROBUST** |
-
-El PF mejora al ampliar el horizonte — señal de ausencia de overfitting. Racha máxima de pérdidas: 26 (requiere CB activo).
+| **Strategy Engine** | Evaluates EURUSD, XAUUSD, BTCEUR every 20s on H1 candles |
+| **Scoring System** | Assigns confidence levels (LOW / MEDIUM / HIGH) to each signal |
+| **Risk Management** | Dynamic lot sizing, circuit breaker, drawdown protection |
+| **Backtesting** | Replay engine using the same pipeline as production |
+| **Optimization** | Grid search over SL/TP/CB parameter space |
+| **Progressive Retest** | Auto-classifies strategies at 10k / 15k / 20k candles |
+| **Walk-Forward** | Detects overfitting via rolling TRAIN/TEST windows |
+| **Discord Bot** | 17 slash commands for monitoring, analysis, and control |
+| **Dashboard** | Web UI on `localhost:5000` with real-time equity and signal table |
 
 ---
 
-### XAUUSD — `xauusd_simple` ⭐
+## Architecture
 
-Momentum en tendencia con filtro EMA200. Sesión activa 06:00–22:00 UTC.
-
-| Parámetro | Valor |
-|---|---|
-| Timeframe | H1 |
-| Filtro tendencia | EMA20 > EMA50 + precio > EMA200 |
-| Entrada | RSI > 55 (BUY) / RSI < 45 (SELL) + ATR > media |
-| Stop Loss | 2.0× ATR |
-| Take Profit | 5.0× ATR |
-| R:R | 2.5 |
-| Riesgo/trade | 0.60% |
-| Circuit Breaker | 4 pérdidas → pausa 168 velas |
-| Cooldown | 240 minutos entre señales |
-
-**Resultados retest progresivo (con costes reales):**
-
-| Horizonte | Señales | WR | PF | Pips netos | Clasificación |
-|---|---|---|---|---|---|
-| 10.000 velas | 253 | 38.7% | 1.23 | +13.151 | — |
-| 15.000 velas | 361 | 36.8% | 1.20 | +13.154 | — |
-| 20.000 velas | 456 | 35.5% | **1.17** | +12.462 | **✅ ROBUST** |
-
-Degradación controlada del 5.1% — la más estable del sistema. Drawdown máximo estable en los tres horizontes.
+```mermaid
+flowchart TD
+    A[MT5 Market Data] --> B[Replay Engine / Live Candles]
+    B --> C{Strategy Layer}
+    C --> D[eurusd_simple]
+    C --> E[xauusd_simple]
+    C --> F[btceur_simple]
+    D & E & F --> G[Scoring System]
+    G --> H[Risk Filters]
+    H --> I{Signal Quality}
+    I -->|HIGH / MED-HIGH| J[Execution Layer]
+    I -->|MEDIUM| K[Discord Alert Only]
+    I -->|LOW| L[Dropped]
+    J --> M[Circuit Breaker]
+    M -->|OK| N[MT5 Order / Paper Trade]
+    M -->|Triggered| O[Auto-Pause 24h]
+    N --> P[Dashboard + Discord]
+    Q[News Filter] -->|Blackout active| L
+```
 
 ---
 
-### BTCEUR — `btceur_simple` ⭐
+## Project Status
 
-Tendencia EMA + MACD + expansión de volatilidad. Opera 24/7.
+### ✅ Completed
 
-| Parámetro | Valor |
-|---|---|
-| Timeframe | H1 |
-| Filtro tendencia | EMA20 > EMA50 + precio > EMA200 |
-| Entrada | MACD histogram en dirección + ATR > media |
-| Stop Loss | 2.0× ATR |
-| Take Profit | 3.0× ATR |
-| R:R | 1.5 |
-| Riesgo/trade | 0.50% |
-| Circuit Breaker | 4 pérdidas → pausa 168 velas |
-| Cooldown | 60 minutos entre señales |
-| Límite dirección | Máx. 3 señales en la misma dirección por día |
+- Multi-strategy signal engine (EURUSD, XAUUSD, BTCEUR)
+- Full backtesting pipeline with real trade costs included
+- Grid search optimizer (~7h run, 200+ parameter combinations)
+- Progressive retest framework (10k / 15k / 20k candles, auto-classification)
+- Walk-forward testing with TRAIN/TEST rolling windows
+- Circuit breaker with dynamic risk scaling
+- News event filter (exact 2025–2026 dates: NFP, CPI, FOMC, ECB)
+- Real-time web dashboard with equity simulation and Chart.js curve
+- Discord bot with 17 slash commands
+- Paper trading mode with full P&L simulation
+- Automatic weekly summary (Discord, every Monday 08:00 UTC)
+- MT5 watchdog with auto-reconnect (non-blocking asyncio)
+- Trade costs model (spread + commission per symbol)
 
-**Resultados retest progresivo (con costes reales):**
+### 🔄 In Progress
 
-| Horizonte | Señales | WR | PF | Pips netos | Clasificación |
-|---|---|---|---|---|---|
-| 10.000 velas | 239 | 46.4% | 1.23 | +36.836 | — |
-| 15.000 velas | 344 | 43.6% | 1.02 | +4.175 | — |
-| 20.000 velas | — | — | — | — | **⚠️ INCONCLUSIVE** |
+- Paper trading validation (target: ≥ 50 closed trades per strategy)
+- Walk-forward bug fix (windows 2–6 producing 0 signals)
+- `btceur_regime_momentum` investigation (0 signals, possible H4 data issue)
 
-Dependencia de régimen de mercado detectada: funciona bien en tendencia, se deteriora en lateralización. Drawdown crece significativamente al ampliar el horizonte. Monitorear con precaución en paper trading.
+### 📋 Planned
 
----
-
-### Estrategias alternativas disponibles (no activas)
-
-| Estrategia | Par | PF backtest | Estado | Notas |
-|---|---|---|---|---|
-| `xauusd_momentum` | XAUUSD | 1.25 (20k) | Disponible | ROBUST, degradación 12.2%, muestra pequeña (78 trades) |
-| `btc_trend_pullback_v1` | BTCEUR | 1.21 | Disponible | CB muy activo (53% señales bloqueadas) |
-| `btceur_weekly_breakout` | BTCEUR | 2.66 (con CB) | Disponible | PF inflado por CB, no validado sin CB |
-| `btceur_regime_momentum` | BTCEUR | — | En prueba | H4+Daily, 0 señales en backtest (bug datos H4 pendiente) |
-
-Para cambiar estrategia: editar `rules_config.json` → campo `"strategy"`, o usar `/set_strategy` en Discord.
+- Monte Carlo simulation (`core/montecarlo.py`)
+- Position analytics from trade journal
+- Live trading (after paper validation criteria are met)
 
 ---
 
-### Estrategias descartadas (`strategies/experimental/`)
+## Strategy Ecosystem
 
-| Estrategia | Par | Motivo de descarte |
+### Active Strategies
+
+| Symbol | Strategy | SL | TP | WR (20k) | PF (20k) | Classification |
+|---|---|---|---|---|---|---|
+| EURUSD | `eurusd_simple` | 1.5× ATR | 6.0× ATR | 27.0% | **1.19** | ✅ ROBUST |
+| XAUUSD | `xauusd_simple` | 2.0× ATR | 5.0× ATR | 35.5% | **1.17** | ✅ ROBUST |
+| BTCEUR | `btceur_simple` | 2.0× ATR | 3.0× ATR | 46.4% | **1.23** (10k) | ⚠️ INCONCLUSIVE |
+
+All results include real spread + commission costs for a Professional account (FXLiveCapital).
+
+> BTCEUR is classified INCONCLUSIVE due to significant drawdown growth beyond 15k candles — regime dependency suspected. Monitoring in paper trading.
+
+### Available (not active)
+
+| Strategy | Symbol | PF | Notes |
+|---|---|---|---|
+| `xauusd_momentum` | XAUUSD | 1.25 | ROBUST, small sample (78 trades) |
+| `btc_trend_pullback_v1` | BTCEUR | 1.21 | CB triggered on 53% of signals |
+| `btceur_weekly_breakout` | BTCEUR | 2.66 | PF inflated by CB; not validated without it |
+| `btceur_regime_momentum` | BTCEUR | — | H4+Daily; 0 signals in backtest (data bug) |
+
+### Discarded (`strategies/experimental/`)
+
+| Strategy | Symbol | Reason |
 |---|---|---|
-| `eurusd_asian_breakout` | EURUSD | PF < 1.0 en retest 10k/15k/20k con costes reales |
-| `eurusd_mtf` | EURUSD | PF 0.46 en backtest — sin edge |
-| `xauusd_psychological` | XAUUSD | PF negativo — pierde más de lo que gana |
-| `xauusd_reversal` | XAUUSD | 1–3 señales en 5000 velas — demasiado restrictiva |
-
-Movidas a `strategies/experimental/` para referencia histórica. No registradas en el sistema activo.
+| `eurusd_asian_breakout` | EURUSD | PF < 1.0 at 10k / 15k / 20k with real costs |
+| `eurusd_mtf` | EURUSD | PF 0.46 — no edge |
+| `xauusd_psychological` | XAUUSD | Negative PF |
+| `xauusd_reversal` | XAUUSD | 1–3 signals per 5000 candles — too restrictive |
 
 ---
 
-## Pipeline de validación cuantitativa
+## Research Pipeline
 
-El proyecto incluye un pipeline completo para validar estrategias antes de usarlas en real.
-
-### 1. Backtest individual
-
-```bash
-# Modo interactivo
-python tests/backtest_runner.py
-
-# CLI con circuit breaker simulado
-python tests/backtest_runner.py --symbol EURUSD --strategy eurusd_simple --bars 10000 --save
-python tests/backtest_runner.py --symbol XAUUSD --bars 10000 --cb-losses 4 --cb-pause 168
-python tests/backtest_runner.py --symbol BTCEUR --bars 10000 --cb-losses 0  # sin CB
-
-# Todos los pares + walk-forward
-tests\run_full_backtest.bat
+```mermaid
+flowchart LR
+    A[Strategy Idea] --> B[Backtest\nreplay_engine.py]
+    B --> C[Grid Search\noptimize_strategies.py]
+    C --> D[Progressive Retest\n10k / 15k / 20k candles]
+    D --> E{Classification}
+    E -->|ROBUST / STABLE| F[Walk-Forward\nwalkforward.py]
+    E -->|DEGRADING / FAILED| G[Discard to\nexperimental/]
+    F --> H{Overfitting?}
+    H -->|No| I[Paper Trading\n≥ 50 closed trades]
+    H -->|Yes| G
+    I --> J{Meets criteria?}
+    J -->|Yes| K[Live Trading]
+    J -->|No| L[Extended paper\nor discard]
 ```
 
-Opciones: `--symbol`, `--strategy`, `--bars`, `--verbose`, `--save`, `--all`, `--walkforward`, `--cb-losses`, `--cb-pause`
+### Validation criteria for going live
 
-### 2. Grid search de parámetros
+A strategy must satisfy **all** of the following:
 
-```bash
-tests\run_optimization.bat
-# o directamente:
-python tests/optimize_strategies.py
-```
+1. Progressive retest classification: **ROBUST** or **STABLE**
+2. PF ≥ 1.10 in paper trading with ≥ 50 closed trades
+3. Max drawdown in paper trading < 10% of allocated capital
+4. Live winrate within ±10 percentage points of backtest winrate
+5. Walk-forward: ≥ 4 of 7 TEST windows with PF > 1.0
+6. PF > 1.0 **without** circuit breaker (CB can improve results but must not be a requirement)
 
-Prueba todas las combinaciones de SL/TP/CB para cada estrategia sobre 5000 velas. Guarda el top 5 de cada estrategia en `backtest_results/optimization/`. Duración: ~7 horas para todas las estrategias.
+### Trade costs included in all backtests
 
-Para aplicar los parámetros óptimos:
-```bash
-python tests/apply_optimization.py backtest_results/optimization/optimization_YYYYMMDD.json
-```
-
-### 3. Retest progresivo multi-horizonte
-
-```bash
-tests\run_progressive_retests.bat
-# o directamente:
-python tests/run_progressive_retests.py
-```
-
-Ejecuta cada estrategia activa con 10.000, 15.000 y 20.000 velas H1 de forma secuencial. Detecta automáticamente degradación temporal y clasifica cada estrategia como:
-
-| Clasificación | Criterio |
-|---|---|
-| **ROBUST** | PF mínimo ≥ 1.1 en todos los horizontes, degradación < 15% |
-| **STABLE** | PF mínimo ≥ 1.05, degradación < 25% |
-| **DEGRADING** | PF positivo pero degradación ≥ 15% |
-| **OVERFITTED** | PF alto en 10k pero cae por debajo de 1.0 en 20k |
-| **FAILED** | PF < 1.0 en algún horizonte |
-| **INCONCLUSIVE** | Datos insuficientes o resultados contradictorios |
-
-Resultados guardados en `backtest_results/progressive_retests/session_YYYYMMDD_HHMMSS/`.
-
-### 4. Walk-forward testing
-
-```bash
-python tests/backtest_runner.py --symbol EURUSD --bars 10000 --walkforward
-python tests/backtest_runner.py --symbol XAUUSD --bars 10000 --walkforward --wf-train 2160 --wf-test 720
-```
-
-Divide los datos en ventanas TRAIN/TEST solapadas y evalúa la consistencia de la estrategia en cada ventana. Detecta overfitting cuando el PF en TEST es significativamente inferior al de TRAIN.
-
-### Costes reales incluidos (`core/trade_costs.py`)
-
-Todos los backtests descuentan automáticamente los costes de la cuenta Professional de FXLiveCapital:
-
-| Par | Spread | Comisión | Total round-trip |
+| Symbol | Spread | Commission | Round-trip |
 |---|---|---|---|
 | EURUSD | 1.2 pips | 0.3 pips | **1.5 pips** |
 | XAUUSD | 3.5 pips | 0.3 pips | **3.8 pips** |
@@ -310,194 +175,266 @@ Todos los backtests descuentan automáticamente los costes de la cuenta Professi
 
 ---
 
-## Dashboard
+## Project Structure
 
-Accesible en `http://localhost:5000` mientras el bot está corriendo. Se actualiza automáticamente cada 30 segundos.
-
-### Secciones
-
-**Barra superior** — Estado del sistema, uptime, fecha/hora, indicador de conexión MT5 (🟢/🟡/🔴)
-
-**KPIs** — Estado del sistema, señales de la sesión, posiciones abiertas en MT5, profit total
-
-**Equity en tiempo real**
-- Balance base (MT5 al arrancar) + P&L acumulado de señales cerradas + P&L flotante de señales abiertas
-- Se actualiza cada 10 segundos vía `/api/equity` sin recargar la página
-- En modo real usa directamente `mt5.account_info().equity`
-
-**Curva de equity (Chart.js)** — Gráfico interactivo con la evolución del balance. El último punto incluye el flotante actual.
-
-**Posiciones reales MT5** — Tabla con símbolo, dirección, volumen, precio apertura, precio actual, P&L en €, SL y TP *(solo si hay posiciones abiertas)*
-
-**Circuit Breaker** — Estado actual, pérdidas/wins consecutivos, multiplicador de riesgo activo
-
-**Pares monitoreados** — Estado de cada par, total de señales, score promedio, tiempo desde última señal
-
-**Tabla de señales (sesión actual)**
-- Solo señales desde que arrancó el bot — se resetea a 0 en cada reinicio
-- Entry, SL, TP con colores · R:R calculado · Estado: `WIN ✅` / `LOSS ❌` / `OPEN +45%`
-- Estado persistente — una vez WIN/LOSS no cambia aunque MT5 se desconecte
-- Filtros por par: ALL / EURUSD / XAUUSD / BTCEUR
-
-**Botón modo real** — Modal de confirmación con aviso de dinero real. Sin reinicio necesario.
-
-**Exportar CSV** — Botón en la tabla y endpoint `/api/export`. Descarga señales de los últimos 7 días.
-
-### APIs disponibles
-
-| Endpoint | Descripción |
-|---|---|
-| `GET /` | Dashboard HTML completo |
-| `GET /api/metrics` | Métricas en JSON |
-| `GET /api/history` | Historial de señales (7 días) |
-| `GET /api/export` | Descarga CSV |
-| `GET /api/equity` | Snapshot de equity en tiempo real |
-| `GET /api/enable-real` | Activa modo real |
-| `GET /api/disable-real` | Desactiva modo real |
-| `GET /api/execution-status` | Estado actual del modo de ejecución |
-
----
-
-## Circuit Breaker y Risk Scaling
-
-Implementado en `core/circuit_breaker.py`. Estado persistente durante la sesión, se resetea en cada reinicio del bot.
-
-| Situación | Acción |
-|---|---|
-| 2 pérdidas seguidas | Riesgo × 0.8 |
-| 3 pérdidas seguidas | Riesgo × 0.5 |
-| 4 pérdidas seguidas | **Pausa automática 24h** |
-| 3 wins seguidos | Riesgo × 1.4 |
-| 5 wins seguidos | Riesgo × 1.8 |
-| 7 wins seguidos | Riesgo × 2.0 |
-
-El CB está completamente integrado con el dashboard: cada señal que se cierra como WIN/LOSS actualiza el estado del CB en tiempo real.
+```
+BOT-MT5/
+├── bot.py                      # Entry point — Discord bot + MT5
+├── signals.py                  # Strategy dispatcher
+├── rules_config.json           # Per-symbol configuration
+│
+├── core/
+│   ├── engine.py               # Main signal engine
+│   ├── scoring.py              # Confidence scoring system
+│   ├── risk.py                 # Lot sizing and drawdown protection
+│   ├── filters.py              # Duplicate and cooldown filters
+│   ├── replay_engine.py        # Backtesting replay loop
+│   ├── circuit_breaker.py      # Auto-pause on losing streaks
+│   ├── walkforward.py          # Rolling TRAIN/TEST validation
+│   └── trade_costs.py          # Spread + commission model
+│
+├── services/
+│   ├── autosignals.py          # Scan loop (every 20s)
+│   ├── dashboard.py            # Web dashboard (port 5000)
+│   ├── execution.py            # MT5 order execution
+│   ├── logging.py              # Session logging system
+│   ├── news_filter.py          # High-impact event blackout
+│   └── commands.py             # Discord slash commands
+│
+├── strategies/
+│   ├── eurusd.py               # eurusd_simple (active)
+│   ├── xauusd.py               # xauusd_simple + momentum (active)
+│   ├── btceur_new.py           # btceur_simple (active)
+│   ├── btc_trend_pullback_v1.py
+│   ├── btceur_weekly_breakout.py
+│   ├── btceur_regime_momentum.py
+│   └── experimental/           # Discarded strategies (reference only)
+│
+├── tests/
+│   ├── backtest_runner.py      # CLI backtest with CB simulation
+│   ├── optimize_strategies.py  # Grid search
+│   ├── apply_optimization.py   # Apply optimal params to strategy files
+│   ├── run_progressive_retests.py   # Multi-horizon 10k/15k/20k
+│   ├── run_long_retests.py     # Long retests with persistent logging
+│   ├── run_full_backtest.bat   # Run all backtests + walk-forward
+│   ├── run_progressive_retests.bat
+│   └── run_optimization.bat
+│
+└── backtest_results/
+    ├── optimization/           # Grid search JSONs
+    ├── progressive_retests/    # Session folders (10k/15k/20k results)
+    ├── walk_forward/           # Walk-forward results (planned)
+    └── monte_carlo/            # Monte Carlo results (planned)
+```
 
 ---
 
-## Filtro de noticias (`services/news_filter.py`)
+## Installation
 
-Pausa el trading 30 minutos antes y después de eventos de alto impacto. Fechas exactas hardcodeadas para 2025–2026 (no aproximaciones).
+**Prerequisites:** Python 3.11+, MetaTrader 5 desktop app, a Discord bot token.
 
-| Evento | Símbolo afectado | Hora UTC |
+```bash
+# 1. Clone the repository
+git clone https://github.com/imlast999/BOT-MT5.git
+cd BOT-MT5
+
+# 2. Copy and fill in the environment file
+copy .env.example .env
+# Edit .env with your Discord token, MT5 credentials, etc.
+
+# 3. Install dependencies and start (recommended)
+start_bot.bat
+
+# Or manually
+pip install -r requirements.txt
+python bot.py
+```
+
+`.env` minimum required fields:
+
+```env
+DISCORD_TOKEN=your_token
+GUILD_ID=your_server_id
+AUTHORIZED_USER_ID=your_user_id
+MT5_LOGIN=your_mt5_login
+MT5_PASSWORD=your_mt5_password
+MT5_SERVER=YourBroker-Demo
+```
+
+---
+
+## Usage
+
+### Paper trading (default)
+
+```bash
+start_bot.bat
+# Dashboard available at http://localhost:5000
+# Bot responds to Discord slash commands
+```
+
+The bot always starts in paper trading mode (`AUTO_EXECUTE_SIGNALS=0`). To enable real execution, use the button in the dashboard.
+
+### Running backtests
+
+```bash
+# Single strategy, interactive mode
+python tests/backtest_runner.py
+
+# CLI — single pair
+python tests/backtest_runner.py --symbol XAUUSD --strategy xauusd_simple --bars 10000 --save
+
+# With circuit breaker simulation
+python tests/backtest_runner.py --symbol EURUSD --bars 10000 --cb-losses 3 --cb-pause 72
+
+# Walk-forward analysis
+python tests/backtest_runner.py --symbol EURUSD --bars 10000 --walkforward
+
+# All active strategies
+tests\run_full_backtest.bat
+```
+
+### Running optimization (grid search)
+
+```bash
+# Full grid search (~7h for all strategies, 5000 candles)
+tests\run_optimization.bat
+
+# Apply optimal parameters found
+python tests/apply_optimization.py backtest_results/optimization/optimization_YYYYMMDD.json
+```
+
+### Progressive retest (multi-horizon validation)
+
+```bash
+# Runs 10k, 15k, 20k candles for each active strategy sequentially
+tests\run_progressive_retests.bat
+
+# Results saved to backtest_results/progressive_retests/session_YYYYMMDD_HHMMSS/
+```
+
+---
+
+## Discord Commands
+
+| Category | Command | Description |
 |---|---|---|
-| NFP (primer viernes del mes) | EURUSD, XAUUSD | 13:30 |
-| CPI USA | EURUSD, XAUUSD | 13:30 |
+| **Control** | `/autosignals on\|off\|status` | Start, stop, or check the signal scan loop |
+| | `/status` | Bot uptime, MT5 connection, loaded modules |
+| | `/pairs` | Toggle monitoring per symbol |
+| | `/logs_info` | Current log file path and size |
+| **MT5** | `/positions` | List open MT5 positions with P&L |
+| | `/close_position [ticket]` | Close a position by ticket number |
+| | `/close_positions_ui` | Close positions via dropdown |
+| | `/set_mt5_credentials` | Update MT5 login without editing `.env` |
+| **Signals** | `/signal [symbol]` | Request a manual signal for a pair |
+| | `/chart [symbol] [tf] [n]` | Generate a candlestick chart PNG |
+| | `/force_autosignal [symbol]` | Trigger an immediate scan |
+| | `/debug_signals [symbol]` | Show full evaluation pipeline with rejection reasons |
+| | `/diagnose_signals [symbol] [n]` | Analyze N historical windows for signal detection |
+| | `/replay` | Run a backtest from Discord via modal form |
+| **Stats** | `/performance [days]` | Winrate and P&L report |
+| | `/strategy_performance [days]` | Per-strategy breakdown |
+| | `/set_strategy [symbol] [name]` | Hot-swap strategy without restart |
+| | `/bot_status` | Circuit breaker state and per-symbol cooldowns |
+| | `/news` | Upcoming high-impact events with blackout windows |
+| | `/equity` | Live equity snapshot (closed + floating P&L) |
+
+---
+
+## Risk Management
+
+### Circuit Breaker
+
+Implemented in `core/circuit_breaker.py`. Resets on each bot restart.
+
+| Condition | Action |
+|---|---|
+| 2 consecutive losses | Risk × 0.8 |
+| 3 consecutive losses | Risk × 0.5 |
+| **4 consecutive losses** | **Auto-pause for 168 candles (~1 week H1)** |
+| 3 consecutive wins | Risk × 1.4 |
+| 5 consecutive wins | Risk × 1.8 |
+| 7 consecutive wins | Risk × 2.0 |
+
+### News Filter
+
+Pauses trading 30 minutes before and after high-impact events. Exact dates hardcoded for 2025–2026.
+
+| Event | Affects | UTC |
+|---|---|---|
+| NFP | EURUSD, XAUUSD | 13:30 |
+| US CPI | EURUSD, XAUUSD | 13:30 |
 | Fed FOMC | EURUSD, XAUUSD | 19:00 |
 | ECB Meeting | EURUSD | 12:15 |
 | ECB Press Conference | EURUSD | 12:45 |
 
-BTCEUR no está afectado por noticias macro.
+### Operational limits
 
----
-
-## Modo real vs Paper trading
-
-El bot arranca siempre en **paper trading** (`AUTO_EXECUTE_SIGNALS=0`).
-
-Para activar el modo real:
-1. Abrir el dashboard en `http://localhost:5000`
-2. Pulsar el botón verde **"Activar modo real"** (esquina inferior derecha)
-3. Confirmar el modal de advertencia
-4. Las señales MEDIUM-HIGH y HIGH se ejecutarán automáticamente en MT5
-
-> ⚠️ El modo real implica pérdidas o ganancias reales de dinero. Úsalo solo cuando hayas validado el rendimiento en paper trading con al menos 50 operaciones cerradas por estrategia.
-
----
-
-## Comandos Discord
-
-### Control del bot
-
-| Comando | Descripción |
+| Rule | Value |
 |---|---|
-| `/autosignals on\|off\|status` | Activa, desactiva o consulta el loop de escaneo automático |
-| `/status` | Estado del bot: uptime, MT5, módulos cargados, configuración activa |
-| `/pairs` | Muestra los 3 pares con su estado y permite activar/desactivar cada uno |
-| `/logs_info` | Ruta y tamaño del archivo de log actual |
-
-### MT5 y posiciones
-
-| Comando | Descripción |
-|---|---|
-| `/positions` | Lista posiciones abiertas en MT5 con ticket, símbolo y P&L |
-| `/close_position [ticket]` | Cierra una posición por número de ticket |
-| `/close_positions_ui` | Igual que el anterior pero con desplegable visual |
-| `/set_mt5_credentials` | Modal para introducir login/password/server de MT5 sin tocar el .env |
-
-### Señales y análisis
-
-| Comando | Descripción |
-|---|---|
-| `/signal [symbol]` | Pide una señal manual para un par en ese momento |
-| `/chart [symbol] [timeframe] [candles]` | Genera un gráfico PNG con las últimas velas |
-| `/force_autosignal [symbol]` | Fuerza un escaneo inmediato sin esperar el intervalo |
-| `/debug_signals [symbol]` | Pipeline completo de evaluación con todos los filtros y razones de rechazo |
-| `/diagnose_signals [symbol] [iterations]` | Analiza N ventanas históricas para ver si la estrategia detecta setups |
-
-### Backtest desde Discord
-
-| Comando | Descripción |
-|---|---|
-| `/replay` | Abre un modal con 5 campos configurables y ejecuta el backtest completo |
-
-El modal de `/replay` permite configurar par, estrategia, velas (100–10000), pérdidas para activar CB y velas de pausa. El resultado se muestra como embed con WR, PF, pips netos, R:R medio, racha máxima y estadísticas del CB simulado.
-
-### Estadísticas y configuración
-
-| Comando | Descripción |
-|---|---|
-| `/performance [days]` | Reporte de rendimiento: señales, winrate, P&L de los últimos N días |
-| `/strategy_performance [days]` | Desglose de rendimiento por estrategia |
-| `/set_strategy [symbol] [strategy]` | Cambia la estrategia activa de un par en caliente sin reiniciar el bot |
-| `/bot_status` | Estado del circuit breaker (activo/pausado, racha, multiplicador) y cooldowns por par |
-| `/news` | Próximos eventos de alto impacto con ventana de blackout y símbolos afectados |
-| `/equity` | Snapshot de equity paper: balance cerrado + P&L flotante de señales abiertas |
+| Startup cooldown | 2 minutes (no signals on first scan) |
+| Max trades per 12h period | 5 (global) |
+| BTCEUR directional limit | Max 3 signals in same direction per day |
+| EURUSD cooldown | 10 candles |
+| XAUUSD cooldown | 240 minutes |
+| BTCEUR cooldown | 60 minutes |
+| XAUUSD session | 06:00–22:00 UTC only |
 
 ---
 
-## Watchdog y reconexión MT5
+## Development Philosophy
 
-El bot incluye dos niveles de watchdog:
+**Robustness over complexity** — A strategy with PF 1.15 that works across different market regimes is more valuable than one with PF 1.60 that only works in a bull run.
 
-1. **MT5 watchdog** (`_mt5_watchdog_loop`): verifica la conexión cada 60s y reconecta automáticamente. Tras 5 fallos consecutivos envía alerta a Discord. No bloquea el event loop de asyncio.
-2. **Autosignal watchdog**: si no hay escaneo en 30 minutos (y el CB no está activo), envía alerta al canal de señales.
+**Evidence over assumptions** — Every claim about a strategy's performance is backed by backtests on real H1 data with actual trade costs included. No theoretical PF numbers.
 
----
+**Validation before deployment** — The progression from backtest → optimization → progressive retest → walk-forward → paper trading exists specifically to avoid deploying strategies that work in-sample but fail out-of-sample.
 
-## Resumen semanal automático
+**Reproducibility first** — Every backtest session saves a full JSON with exact parameters, timestamp, candle count, and results. Results can be reproduced months later.
 
-Cada lunes entre 08:00–09:00 UTC el bot envía un embed a Discord con total de señales, wins/losses, winrate y mejor/peor par de los últimos 7 días.
-
----
-
-## Notas operativas
-
-- El bot arranca con un **cooldown de 2 minutos** antes de enviar la primera señal (evita falsas señales al inicio)
-- Cada reinicio del bot es una sesión completamente limpia: historial de señales, balance paper, circuit breaker y cooldowns se resetean a 0
-- El bot no genera señales de forex/oro el fin de semana (mercados cerrados)
-- BTCEUR opera 24/7 y puede generar señales cualquier día
-- EURUSD solo opera en sesiones de Londres y Nueva York
-- XAUUSD solo opera 06:00–22:00 UTC (filtro de sesión activa)
-- Cooldowns: EURUSD 10 velas · XAUUSD 240 min · BTCEUR 60 min
-- BTCEUR tiene límite de 3 señales en la misma dirección por día (anti-spam en tendencias fuertes)
-- Límite de 5 trades por período de 12h (global)
-- Los logs se guardan en `logs/` con rotación automática por sesión (en `.gitignore`)
-- Las señales LOW y VERY_LOW se filtran automáticamente
-- Señales MEDIUM se muestran en Discord pero no se auto-ejecutan en modo real
-- Señales MEDIUM-HIGH y HIGH se auto-ejecutan cuando el modo real está activo
+**Single developer scope** — The system is intentionally sized for one person to maintain. No microservices, no Docker, no cloud infrastructure. Just a Python process and a running MT5 terminal.
 
 ---
 
-## Criterios para pasar a trading real
+## Roadmap
 
-Basados en el análisis cuantitativo del proyecto (junio 2026):
+### Current phase — Paper Trading Validation
+- [ ] Accumulate ≥ 50 closed trades per active strategy
+- [ ] Confirm live winrate vs backtest winrate (±10% tolerance)
+- [ ] Fix walk-forward window bug (windows 2–6 returning 0 signals)
+- [ ] Investigate `btceur_regime_momentum` H4 data issue
 
-1. **Paper trading** ≥ 3 meses o ≥ 50 operaciones cerradas por estrategia
-2. **PF acumulado** ≥ 1.10 en paper trading
-3. **Drawdown máximo** en paper < 10% del capital asignado
-4. **WR real** dentro de ±10% del WR del backtest
-5. **Walk-forward** con ≥ 4 de 7 ventanas positivas en TEST
-6. La estrategia funciona con PF > 1.0 **sin** circuit breaker (o el CB es mejora, no requisito)
+### Next phase — Statistical Confidence
+- [ ] Monte Carlo simulation (`core/montecarlo.py`)
+- [ ] Trade journal with SQLite (`core/journal.py`)
+- [ ] Position analytics (session performance, duration analysis)
+- [ ] Strategy correlation analysis
 
-> El objetivo no es encontrar la estrategia con el PF más alto en backtest. Es encontrar la estrategia que menos se rompe cuando el mercado cambia.
+### Long-term — Live Deployment
+- [ ] Meet all 6 go-live validation criteria
+- [ ] Start with minimal capital ($200) at 0.5% risk per trade
+- [ ] Scale progressively based on live performance
+
+---
+
+## Contributing
+
+This is a personal research project, but the codebase is open. If you want to add a strategy, the pattern is in `strategies/base.py` — inherit `BaseStrategy`, implement `evaluate()`, and register in `signals.py` and `backtest_runner.py`.
+
+Before submitting a pull request:
+- Run the progressive retest on your strategy (`tests/run_progressive_retests.bat`)
+- Include the `session_summary.json` from the results
+- A strategy should reach at least **STABLE** classification before being considered for the active set
+
+---
+
+## License
+
+MIT — use it, fork it, learn from it.
+
+---
+
+<div align="center">
+<sub>Built to understand markets, not to get rich quick.</sub>
+</div>
