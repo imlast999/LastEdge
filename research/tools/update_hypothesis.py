@@ -57,31 +57,90 @@ def update_status(hyp: dict, new_status: str, reason: str, date: str) -> dict:
 
 
 def add_evidence_from_run_card(hyp: dict, run_card_path: Path, hyp_id: str) -> dict:
-    """Añade evidencia desde una Run Card al hypothesis."""
+    """Añade evidencia desde una Run Card al hypothesis.
+    Soporta dos formatos:
+      - retest_multi_horizon: tiene results_summary[hyp_id]
+      - walk_forward / monte_carlo / paper_trading_review: tiene results directamente
+    """
     with open(run_card_path, encoding="utf-8") as f:
         card = json.load(f)
 
-    strategy_result = card.get("results_summary", {}).get(hyp_id)
-    if not strategy_result:
-        print(f"  ⚠️  La Run Card no tiene resultados para '{hyp_id}'. Disponibles: {list(card.get('results_summary', {}).keys())}")
-        return hyp
+    run_type = card.get("type", "")
 
-    pf_vals = list(strategy_result.get("pf_by_horizon", {}).values())
-    pf_str  = f"PF {min(pf_vals):.3f}–{max(pf_vals):.3f}" if pf_vals else "PF ?"
+    # ── Formato retest (results_summary por estrategia) ──────────────────────
+    if "results_summary" in card:
+        strategy_result = card.get("results_summary", {}).get(hyp_id)
+        if not strategy_result:
+            print(f"  ⚠️  La Run Card no tiene resultados para '{hyp_id}'. Disponibles: {list(card.get('results_summary', {}).keys())}")
+            return hyp
 
-    evidence_entry = {
-        "run_id":  card.get("run_id", "?"),
-        "type":    card.get("type", "?"),
-        "date":    card.get("date", "?"),
-        "verdict": strategy_result.get("verdict", "?"),
-        "summary": f"{strategy_result.get('reason','')} | {pf_str} | degradation={strategy_result.get('degradation_score')}",
-        "metrics": {
-            "pf_by_horizon":    strategy_result.get("pf_by_horizon"),
-            "wr_by_horizon":    strategy_result.get("wr_by_horizon"),
-            "degradation_score":strategy_result.get("degradation_score"),
-            "robustness_score": strategy_result.get("robustness_score"),
-        },
-    }
+        pf_vals = list(strategy_result.get("pf_by_horizon", {}).values())
+        pf_str  = f"PF {min(pf_vals):.3f}–{max(pf_vals):.3f}" if pf_vals else "PF ?"
+
+        evidence_entry = {
+            "run_id":  card.get("run_id", "?"),
+            "type":    run_type,
+            "date":    card.get("date", "?"),
+            "verdict": strategy_result.get("verdict", "?"),
+            "summary": f"{strategy_result.get('reason','')} | {pf_str} | degradation={strategy_result.get('degradation_score')}",
+            "metrics": {
+                "pf_by_horizon":    strategy_result.get("pf_by_horizon"),
+                "wr_by_horizon":    strategy_result.get("wr_by_horizon"),
+                "degradation_score":strategy_result.get("degradation_score"),
+                "robustness_score": strategy_result.get("robustness_score"),
+            },
+        }
+
+    # ── Formato walk-forward / monte_carlo / paper_trading_review ────────────
+    else:
+        results = card.get("results", {})
+        verdict = results.get("stability_rating") or results.get("verdict") or "?"
+
+        # Construir summary según tipo
+        if run_type == "walk_forward":
+            summary = (
+                f"stability={verdict} | "
+                f"windows={results.get('windows_stable')}/{results.get('windows_total')} | "
+                f"avg_test_pf={results.get('avg_test_pf')} | "
+                f"consistency={results.get('consistency_score')}"
+            )
+            metrics = {
+                "stability_rating":  verdict,
+                "windows_stable":    results.get("windows_stable"),
+                "windows_total":     results.get("windows_total"),
+                "avg_train_pf":      results.get("avg_train_pf"),
+                "avg_test_pf":       results.get("avg_test_pf"),
+                "avg_pf_degradation":results.get("avg_pf_degradation"),
+                "consistency_score": results.get("consistency_score"),
+                "worst_window_pf":   results.get("worst_window_pf_test"),
+            }
+        elif run_type == "monte_carlo":
+            summary = (
+                f"verdict={verdict} | "
+                f"ruin_prob={results.get('ruin_probability')} | "
+                f"dd_p95={results.get('expected_drawdown_p95')}"
+            )
+            metrics = results
+        elif run_type == "paper_trading_review":
+            summary = (
+                f"signals={results.get('signals_closed')} | "
+                f"wr={results.get('winrate')} | "
+                f"net_pips={results.get('net_pips')} | "
+                f"matches_backtest={results.get('matches_backtest_expectation')}"
+            )
+            metrics = results
+        else:
+            summary = card.get("what", "")
+            metrics = results
+
+        evidence_entry = {
+            "run_id":  card.get("run_id", "?"),
+            "type":    run_type,
+            "date":    card.get("date", "?"),
+            "verdict": verdict,
+            "summary": summary,
+            "metrics": metrics,
+        }
 
     if "evidence" not in hyp:
         hyp["evidence"] = []

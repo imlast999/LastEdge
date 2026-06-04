@@ -91,6 +91,22 @@ El script `research/tools/run_card_generator.py` automatiza la creación de Run 
 
 ---
 
+---
+
+### 2026-06-04 — [REVISIÓN] eurusd_simple: walk-forward UNSTABLE — no descartada, pero no avanza a paper trading
+
+**Contexto**: Primer walk-forward de eurusd_simple. 20 ventanas en 20000 velas H1 (train 4320 / test 720 / step 720). CB: 3 pérdidas / 72 velas pausa.
+
+**Observación**: Veredicto UNSTABLE. Pero el dato interesante es que el PF promedio en test (1.09) supera al de train (1.06) — esto descarta overfitting clásico. El problema real es la varianza: las ventanas van de PF test 0.50 (ventana 9) a 2.55 (ventana 18). Las ventanas 8 y 9 son las críticas — ambas con PF test < 0.65. El consistency score fue 0.84.
+
+**Decisión**: eurusd_simple NO avanza a PAPER_TRADING todavía. Estado actualizado a VALIDATING. El resultado no justifica ni el descarte ni el avance — justifica investigación. Preguntas abiertas: ¿qué régimen de mercado cubre la ventana 8-9 (barras 10080–11520)? ¿Es un periodo de consolidación fuerte? ¿La estrategia tiene un régimen de mercado claro donde falla?
+
+**Impacto**: Run Card `RC_walk_forward_20260604_eurusd_simple.json` generada y enlazada a la hipótesis. El test `walk_forward` marcado como completado en el registry. Hipótesis en VALIDATING hasta resolver las ventanas problemáticas.
+
+**Pendiente**: Analizar las barras 10080–11520 (ventanas 8-9) en el contexto de precio real de EURUSD. Si corresponden a un período de mercado lateral de baja volatilidad, podría añadirse un filtro de régimen. Después: repetir walk-forward con filtro → si mejora → volver a RETESTING con nueva configuración.
+
+---
+
 <!-- PLANTILLA PARA PRÓXIMAS ENTRADAS
 
 ### YYYY-MM-DD — [TIPO] Título
