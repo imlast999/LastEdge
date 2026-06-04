@@ -1,0 +1,50 @@
+{
+  "id": "eurusd_simple",
+  "strategy_file": "strategies/eurusd.py",
+  "symbol": "EURUSD",
+  "created": "2026-06-04",
+  "status": "RETESTING",
+
+  "hypothesis": "En tendencias confirmadas (EMA20 > EMA50 > EMA200), los retrocesos a la EMA20 con RSI en zona neutra (38-62) ofrecen entradas con ventaja estadística en dirección de la tendencia mayor.",
+
+  "edge_assumption": "El mercado EURUSD respeta la EMA200 como filtro de tendencia macro. Los retrocesos a EMA20 en tendencias establecidas tienen probabilidad de continuación superior al azar.",
+
+  "invalidation": "Si el profit factor cae por debajo de 1.05 de forma consistente en 3 horizontes o si walk-forward muestra degradación > 20%, la hipótesis se considera fallida.",
+
+  "parameters": {
+    "best_known": {
+      "sl_atr_multiplier": 1.5,
+      "tp_atr_multiplier": 6.0
+    },
+    "source": "grid_search_20260601"
+  },
+
+  "evidence": [
+    {
+      "run_id": "retest_20260601_eurusd_simple",
+      "type": "retest_multi_horizon",
+      "date": "2026-06-01",
+      "verdict": "ROBUST",
+      "summary": "PF 1.11-1.19 en 10k/15k/20k velas. Degradación 0%. Consistencia 1.0. WR ~26% (estrategia de bajo WR / alto RR).",
+      "metrics": {
+        "pf_10k": 1.122,
+        "pf_15k": 1.110,
+        "pf_20k": 1.190,
+        "wr_20k": 26.96,
+        "max_drawdown_pips": 989.75,
+        "degradation_score": 0.0,
+        "robustness_score": 1.11
+      }
+    }
+  ],
+
+  "tests_passed": ["retest_10k", "retest_15k", "retest_20k"],
+  "tests_pending": ["walk_forward", "monte_carlo", "paper_trading_review"],
+  "tests_failed": [],
+
+  "notes": "Estrategia de bajo winrate (~27%) con RR alto (tp 6x ATR). Funciona como trend-follower. El drawdown de ~990 pips es alto — requiere sizing conservador en live.",
+
+  "history": [
+    {"date": "2026-06-01", "from_status": "TESTING", "to_status": "RETESTING", "reason": "Pasó retest multi-horizonte con clasificación ROBUST"}
+  ]
+}

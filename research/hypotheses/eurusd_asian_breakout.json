@@ -1,0 +1,57 @@
+{
+  "id": "eurusd_asian_breakout",
+  "strategy_file": "strategies/eurusd.py",
+  "symbol": "EURUSD",
+  "created": "2026-06-04",
+  "status": "FAILED",
+
+  "hypothesis": "La ruptura del rango asiático durante la apertura de Londres genera movimientos direccionales explotables de forma consistente en EURUSD.",
+
+  "edge_assumption": "La sesión asiática comprime el precio en un rango estrecho. La apertura de Londres rompe ese rango con momentum suficiente para alcanzar TPs con RR favorable.",
+
+  "invalidation": "PF consistentemente por debajo de 1.0 en múltiples horizontes confirma que la hipótesis no es válida en las condiciones actuales del mercado.",
+
+  "parameters": {
+    "best_known": {
+      "tp_multiplier": 1.5,
+      "min_range_pips": 4.0
+    },
+    "source": "grid_search_20260601"
+  },
+
+  "evidence": [
+    {
+      "run_id": "retest_20260601_eurusd_asian_breakout",
+      "type": "retest_multi_horizon",
+      "date": "2026-06-01",
+      "verdict": "FAILED",
+      "summary": "PF máximo 0.989. Nunca supera 1.0 en ningún horizonte. Net pips negativo en todos. WR estable ~54% pero insuficiente para compensar el RR.",
+      "metrics": {
+        "pf_10k": 0.973,
+        "pf_15k": 0.989,
+        "pf_20k": 0.983,
+        "wr_20k": 54.64,
+        "net_pips_20k": -108.6,
+        "degradation_score": 0.0
+      }
+    }
+  ],
+
+  "tests_passed": [],
+  "tests_pending": [],
+  "tests_failed": ["retest_multi_horizon_20260601"],
+
+  "failure_reason": "PF siempre por debajo de 1.0. La hipótesis de ruptura asiática no genera edge suficiente con los parámetros explorados. El WR del 54% es real pero el RR implícito (tp 1.5x rango) es demasiado bajo para ser rentable.",
+
+  "lessons_learned": [
+    "Breakout de rango asiático requiere RR mínimo mayor — el rango asiático suele ser demasiado pequeño para TP 1.5x.",
+    "El 54% de WR indica que la dirección se detecta correctamente, pero el sizing del TP no captura suficiente movimiento.",
+    "Posible mejora: explorar TP dinámico basado en ATR de la sesión en lugar de múltiplo del rango."
+  ],
+
+  "notes": "Candidata a revisar con TP basado en ATR en lugar de múltiplo del rango. No descartar el concepto completamente — el problema puede ser el TP, no la dirección.",
+
+  "history": [
+    {"date": "2026-06-01", "from_status": "TESTING", "to_status": "FAILED", "reason": "PF máximo 0.989 en todos los horizontes. No hay edge demostrable con configuración actual."}
+  ]
+}
