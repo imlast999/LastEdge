@@ -107,6 +107,37 @@ El script `research/tools/run_card_generator.py` automatiza la creación de Run 
 
 ---
 
+### 2026-06-04 — [DESCUBRIMIENTO] Las ventanas 8-9 NO son un problema de régimen — son un problema de WR puntual en periodo específico
+
+**Contexto**: Investigación profunda de las ventanas 8 y 9 del walk-forward (PF 0.61 y 0.50). Script `investigate_windows.py` ejecutado con datos reales de MT5. Se analizó régimen de mercado (ATR, ADX, pendiente EMA50) y operaciones trade por trade.
+
+**Observación**: El hallazgo más importante es que **las ventanas TOP y las ventanas CRÍTICAS tienen el mismo régimen: LOW_VOLATILITY**. Los datos desmienten la hipótesis de régimen diferencial:
+
+| Ventana | PF test | WR   | ATR%   | ADX  | Régimen        | Fechas                     |
+|---------|---------|------|--------|------|----------------|----------------------------|
+| 7 (TOP) | 2.290   | 60%  | 0.100% | 34.9 | LOW_VOLATILITY | Sep–Oct 2024               |
+| 8 (MAL) | 0.610   | 30%  | 0.121% | 36.6 | LOW_VOLATILITY | Oct–Nov 2024               |
+| 9 (MAL) | 0.500   | 24%  | 0.142% | 32.4 | LOW_VOLATILITY | Nov 2024–Ene 2025          |
+| 18 (TOP)| 2.550   | 59%  | 0.093% | 33.3 | LOW_VOLATILITY | Dic 2025–Ene 2026          |
+
+ATR, ADX y pendiente EMA50 son prácticamente idénticos entre las ventanas buenas y las malas. Lo que cambia completamente es el **Win Rate**: 60% en las buenas, 24-30% en las malas. El RR efectivo es casi idéntico en todos los casos (~3.24-3.42x).
+
+**Conclusión de los datos**: El problema no es el régimen de mercado. El problema es que en Oct-Ene 2024/2025 la estrategia generó señales que fueron rechazadas con una frecuencia anormalmente alta. Esto puede ser:
+1. Un periodo de **whipsaws**: EURUSD en esa época tuvo movimientos post-elecciones USA (Nov 2024) que invalidaron muchos setups de tendencia.
+2. **Ruido estadístico real**: 18-26 trades con WR del 24-30% cae dentro del rango posible de una estrategia con expectativa real del 35-40% (el IC del 95% para n=20 con p=0.35 va de ~15% a ~55%).
+3. La estrategia no tiene filtro para eventos macroeconómicos de alto impacto.
+
+**Decisión**: Las hipótesis H2 (ADX), H3 (ATR) y H4 (pendiente EMA50) quedan descartadas por los datos. H1 (régimen) queda parcialmente descartada — el clasificador no distingue las ventanas. H5 (ruido estadístico) toma más peso como explicación. La causa más probable es una combinación de **ruido estadístico en muestra pequeña** + **evento macro específico** (elecciones USA Nov 2024 → rally USD fuerte que rompió tendencias EMA en EURUSD).
+
+**Impacto**: Redefinir el plan de investigación. El siguiente experimento no debe ser un filtro de régimen genérico — debe ser: analizar si el drawdown de las ventanas 8-9 coincide con el periodo post-electoral de Nov 2024 donde el DXY tuvo un rally de +4% en pocas semanas.
+
+**Pendiente**:
+- Verificar manualmente en qué fecha exacta cayeron los trades perdedores de las ventanas 8-9 (está en el CSV del walk-forward).
+- Si la concentración de pérdidas es en Nov 2024: la estrategia es viable pero sensible a eventos macro. Eso es diferente a un defecto estructural.
+- Considerar si el paper trading actual (que corre en condiciones de mercado de 2026) es una mejor prueba que este walk-forward histórico.
+
+---
+
 <!-- PLANTILLA PARA PRÓXIMAS ENTRADAS
 
 ### YYYY-MM-DD — [TIPO] Título
