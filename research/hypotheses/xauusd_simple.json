@@ -1,0 +1,47 @@
+{
+  "id": "xauusd_simple",
+  "strategy_file": "strategies/xauusd.py",
+  "symbol": "XAUUSD",
+  "created": "2026-06-04",
+  "status": "RETESTING",
+
+  "hypothesis": "XAUUSD respeta niveles de tendencia EMA con suficiente consistencia para generar edge en timeframe H1, con WR bajo (~36-39%) compensado por RR elevado.",
+
+  "edge_assumption": "El oro en H1 tiene suficiente persistencia de tendencia para que una estrategia trend-following simple genere PF > 1.1 de forma estable.",
+
+  "invalidation": "Si degradación en walk-forward supera 20% o PF cae por debajo de 1.05 en periodos out-of-sample.",
+
+  "parameters": {
+    "best_known": {},
+    "source": "configuración_por_defecto"
+  },
+
+  "evidence": [
+    {
+      "run_id": "retest_20260601_xauusd_simple",
+      "type": "retest_multi_horizon",
+      "date": "2026-06-01",
+      "verdict": "ROBUST",
+      "summary": "PF 1.23→1.17 en 10k→20k velas. Degradación 5.1%. WR decae de 38.7% a 35.5%. Drawdown estable. Consistencia 1.0.",
+      "metrics": {
+        "pf_10k": 1.230,
+        "pf_15k": 1.195,
+        "pf_20k": 1.167,
+        "wr_20k": 35.53,
+        "max_drawdown_pips": 11015.51,
+        "degradation_score": 0.051,
+        "robustness_score": 1.167
+      }
+    }
+  ],
+
+  "tests_passed": ["retest_10k", "retest_15k", "retest_20k"],
+  "tests_pending": ["walk_forward", "monte_carlo", "paper_trading_review"],
+  "tests_failed": [],
+
+  "notes": "El drawdown de 11015 pips es significativo en XAUUSD (escala de precio distinta). Requiere análisis de drawdown relativo antes de sizing en live. Tendencia de degradación suave — vigilar en walk-forward.",
+
+  "history": [
+    {"date": "2026-06-01", "from_status": "TESTING", "to_status": "RETESTING", "reason": "Pasó retest multi-horizonte con clasificación ROBUST. Degradación 5.1%."}
+  ]
+}

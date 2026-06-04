@@ -1,0 +1,30 @@
+{
+  "id": "btc_trend_pullback_v1",
+  "strategy_file": "strategies/btc_trend_pullback_v1.py",
+  "symbol": "BTCEUR",
+  "created": "2026-06-04",
+  "status": "TESTING",
+
+  "hypothesis": "BTC en tendencia alcista/bajista confirmada (H4) exhibe pullbacks a niveles de soporte/resistencia que ofrecen entradas con RR favorable antes de la continuación.",
+
+  "edge_assumption": "BTC tiene tendencias macroestructurales claras en H4. Los pullbacks en tendencia son comprados/vendidos por el mercado de forma predecible.",
+
+  "invalidation": "Si PF no supera 1.1 en retest de 15k+ velas, o si el comportamiento es inconsistente entre horizontes (degradación > 15%).",
+
+  "parameters": {
+    "best_known": null,
+    "source": "pendiente_grid_search"
+  },
+
+  "evidence": [],
+
+  "tests_passed": [],
+  "tests_pending": ["grid_search", "retest_10k", "retest_15k", "retest_20k", "walk_forward", "monte_carlo"],
+  "tests_failed": [],
+
+  "notes": "Estrategia pendiente de validación inicial. No hay grid search completado todavía. Prioridad baja hasta confirmar las 3 candidatas principales.",
+
+  "history": [
+    {"date": "2026-06-04", "from_status": null, "to_status": "TESTING", "reason": "Registrada como candidata pendiente de validación inicial."}
+  ]
+}
