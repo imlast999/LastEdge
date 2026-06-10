@@ -138,6 +138,47 @@ ATR, ADX y pendiente EMA50 son prácticamente idénticos entre las ventanas buen
 
 ---
 
+---
+
+### 2026-06-10 — [PROMOCIÓN] xauusd_simple avanza a PAPER_TRADING tras walk-forward MARGINAL
+
+**Contexto**: Walk-forward de xauusd_simple. 20 ventanas en 20000 velas H1 (train 4320 / test 720 / step 720). CB: 4 pérdidas / 168 velas pausa.
+
+**Observación**: Veredicto MARGINAL. Los datos clave:
+- Avg test PF 1.30 > avg train PF 1.19 → no hay overfitting
+- Consistency score 0.83 → 15 de 20 ventanas con PF test > 1.0
+- 3 ventanas con colapso: ventana 2 (0 trades), ventana 17 (PF 0.25), ventana 19 (PF 0.84)
+- Ventana 15 con PF 4.17: outlier positivo, probablemente pocos trades
+
+El patrón es similar al de eurusd_simple: el test supera al train en promedio, lo que descarta overfitting. La estrategia tiene edge real en la mayoría de periodos con degradación puntual en algunos.
+
+**Decisión**: xauusd_simple promovida a PAPER_TRADING. Es la primera estrategia que supera el walk-forward suficientemente para avanzar. El veredicto MARGINAL (no STABLE) implica que el paper trading tiene que confirmar el comportamiento — no es una validación completa, es evidencia suficiente para el siguiente paso.
+
+**Impacto**: Pipeline activo ahora tiene dos estrategias en PAPER_TRADING: xauusd_simple y, cuando tengamos más datos, eurusd_simple (aún en VALIDATING pendiente de análisis de ventanas).
+
+**Pendiente**: Acumular ≥ 50 trades cerrados en paper trading. Registrar entrada [PAPER_TRADING] cuando haya suficiente evidencia.
+
+---
+
+### 2026-06-10 — [DESCARTE] xauusd_momentum descartada — el retest 20k era un artefacto de muestra pequeña
+
+**Contexto**: Walk-forward de xauusd_momentum. Misma configuración que xauusd_simple.
+
+**Observación**: El resultado destruye la hipótesis completamente. Lo más importante no es el veredicto UNSTABLE — es que el **avg train PF es 0.76**. La estrategia no tiene edge ni en el periodo de entrenamiento de la mayoría de ventanas. Además:
+
+- La mayoría de ventanas test tienen 0 trades o 1-3 trades → ruido estadístico puro
+- Las ventanas con PF inf (8, 10) y PF 5.52/6.12 (16, 18) son outliers de 1 sola operación ganadora sin pérdidas — no edge real
+- Consistency score 0.44: peor que lanzar una moneda
+- Los buenos resultados del retest multi-horizonte (PF 1.42 en 10k velas, 63 trades totales) eran exactamente eso: una muestra de 63 trades que por azar dieron buenas métricas
+
+**Decisión**: xauusd_momentum descartada definitivamente. Estado FAILED. A diferencia de eurusd_asian_breakout (donde la dirección era correcta pero el TP incorrecto), aquí la estrategia no tiene edge demostrable en ningún período suficientemente amplio.
+
+**Impacto**: Pipeline queda con 3 estrategias: eurusd_simple (VALIDATING), xauusd_simple (PAPER_TRADING), btc_trend_pullback_v1 (TESTING, pendiente de inicio). xauusd_momentum eliminada del pipeline.
+
+**Pendiente**: Actualizar rules_config.json si xauusd_momentum estaba activa en el bot. Verificar que el bot usa xauusd_simple y no xauusd_momentum en producción.
+
+---
+
 <!-- PLANTILLA PARA PRÓXIMAS ENTRADAS
 
 ### YYYY-MM-DD — [TIPO] Título

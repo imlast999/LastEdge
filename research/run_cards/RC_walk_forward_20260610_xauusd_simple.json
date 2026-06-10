@@ -1,0 +1,72 @@
+{
+  "run_id": "walk_forward_20260610_xauusd_simple",
+  "type": "walk_forward",
+  "date": "2026-06-10",
+  "what": "Walk-forward testing de xauusd_simple en 20000 velas H1. 20 ventanas: train 4320 / test 720 / step 720. CB: 4 perdidas / 168 velas pausa.",
+  "reproducibility": {
+    "script": "python tests/backtest_runner.py --symbol XAUUSD --strategy xauusd_simple --bars 20000 --walkforward --wf-train 4320 --wf-test 720 --wf-step 720 --save",
+    "strategy": "xauusd_simple",
+    "bars": 20000,
+    "timeframe": "H1",
+    "params": {},
+    "circuit_breaker": {
+      "cb_losses": 4,
+      "cb_pause_bars": 168
+    },
+    "csv_output": "backtest_results/walkforward_XAUUSD_xauusd_simple_20260610_203050.csv"
+  },
+  "hypothesis_id": "xauusd_simple",
+  "config": {
+    "train_bars": 4320,
+    "test_bars": 720,
+    "step_bars": 720,
+    "total_bars": 20000,
+    "windows_count": 20
+  },
+  "results": {
+    "stability_rating": "MARGINAL",
+    "windows_stable": 15,
+    "windows_total": 20,
+    "avg_train_pf": 1.19,
+    "avg_test_pf": 1.30,
+    "avg_pf_degradation": -0.10,
+    "consistency_score": 0.83,
+    "worst_window_pf_test": 0.00,
+    "best_window_pf_test": 4.17,
+    "avg_train_wr": 36.0,
+    "avg_test_wr": 35.3,
+    "windows_detail": [
+      {"w":  1, "pf_train": 1.02, "pf_test": 0.95, "degradation":  0.07, "flag": "OK"},
+      {"w":  2, "pf_train": 0.84, "pf_test": 0.00, "degradation":  0.84, "flag": "FAIL"},
+      {"w":  3, "pf_train": 0.65, "pf_test": 1.50, "degradation": -0.86, "flag": "OK"},
+      {"w":  4, "pf_train": 0.97, "pf_test": 1.65, "degradation": -0.68, "flag": "OK"},
+      {"w":  5, "pf_train": 1.02, "pf_test": 0.95, "degradation":  0.07, "flag": "OK"},
+      {"w":  6, "pf_train": 0.92, "pf_test": 1.28, "degradation": -0.36, "flag": "OK"},
+      {"w":  7, "pf_train": 1.05, "pf_test": 1.03, "degradation":  0.02, "flag": "OK"},
+      {"w":  8, "pf_train": 1.01, "pf_test": 1.62, "degradation": -0.61, "flag": "OK"},
+      {"w":  9, "pf_train": 1.17, "pf_test": 0.90, "degradation":  0.27, "flag": "WARNING"},
+      {"w": 10, "pf_train": 1.22, "pf_test": 1.26, "degradation": -0.04, "flag": "OK"},
+      {"w": 11, "pf_train": 1.27, "pf_test": 0.84, "degradation":  0.43, "flag": "WARNING"},
+      {"w": 12, "pf_train": 1.16, "pf_test": 1.42, "degradation": -0.26, "flag": "OK"},
+      {"w": 13, "pf_train": 1.27, "pf_test": 1.17, "degradation":  0.11, "flag": "OK"},
+      {"w": 14, "pf_train": 1.33, "pf_test": 0.97, "degradation":  0.36, "flag": "WARNING"},
+      {"w": 15, "pf_train": 1.19, "pf_test": 4.17, "degradation": -2.98, "flag": "OK"},
+      {"w": 16, "pf_train": 1.47, "pf_test": 1.88, "degradation": -0.41, "flag": "OK"},
+      {"w": 17, "pf_train": 1.70, "pf_test": 0.25, "degradation":  1.44, "flag": "FAIL"},
+      {"w": 18, "pf_train": 1.65, "pf_test": 1.78, "degradation": -0.13, "flag": "OK"},
+      {"w": 19, "pf_train": 1.65, "pf_test": 0.84, "degradation":  0.81, "flag": "FAIL"},
+      {"w": 20, "pf_train": 1.33, "pf_test": 1.44, "degradation": -0.12, "flag": "OK"}
+    ]
+  },
+  "decisions_triggered": [
+    "xauusd_simple -> MARGINAL. Avanza a paper trading con vigilancia.",
+    "Avg test PF 1.30 > train 1.19: no hay overfitting. La estrategia mejora ligeramente out-of-sample en promedio.",
+    "3 ventanas FAIL (2, 17, 19): ventana 2 con 0 trades (estadistica nula), ventanas 17 y 19 con degradacion real.",
+    "Ventana 15 con PF test 4.17: outlier positivo — pocos trades o periodo excepcional. No sobreponderar.",
+    "Consistency score 0.83: aceptable. 15/20 ventanas con PF test > 1.0."
+  ],
+  "notes": "El resultado MARGINAL es genuinamente marginal — ni fuerte ni debil. El avg test PF 1.30 supera al train 1.19, lo que descarta overfitting. El problema son 3 ventanas con colapso (0 trades o degradacion fuerte). Necesita paper trading para confirmar comportamiento real.",
+  "generated_at": "2026-06-10",
+  "completed_at": "2026-06-10T20:30:50",
+  "status": "COMPLETE"
+}

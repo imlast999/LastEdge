@@ -3,14 +3,10 @@
   "strategy_file": "strategies/xauusd.py",
   "symbol": "XAUUSD",
   "created": "2026-06-04",
-  "status": "RETESTING",
-
+  "status": "FAILED",
   "hypothesis": "El oro exhibe movimientos de momentum sostenidos cuando hay confluencia de tendencia y fuerza direccional (ATR elevado). Con RR alto (sl 2x ATR / tp 6.5x ATR), un winrate del 28-34% es suficiente para generar edge positivo.",
-
   "edge_assumption": "XAUUSD tiene periodos de momentum fuerte que permiten capturas de movimientos grandes. El filtro de ATR y la selección de setups de alta confianza reducen el ruido suficientemente.",
-
   "invalidation": "Si el PF cae por debajo de 1.1 en horizontes largos (20k+ velas), o si walk-forward muestra degradación consistente > 15%, el edge se considera cuestionable.",
-
   "parameters": {
     "best_known": {
       "sl_atr_multiplier": 2.0,
@@ -18,7 +14,6 @@
     },
     "source": "grid_search_20260601"
   },
-
   "evidence": [
     {
       "run_id": "retest_20260601_xauusd_momentum",
@@ -35,16 +30,50 @@
         "degradation_score": 0.122,
         "robustness_score": 1.246
       }
+    },
+    {
+      "run_id": "walk_forward_20260610_xauusd_momentum",
+      "type": "walk_forward",
+      "date": "2026-06-10",
+      "verdict": "UNSTABLE",
+      "summary": "stability=UNSTABLE | windows=None/20 | avg_test_pf=inf (contaminado por ventanas con 0 trades) | consistency=0.44",
+      "metrics": {
+        "stability_rating": "UNSTABLE",
+        "windows_stable": null,
+        "windows_total": 20,
+        "avg_train_pf": 0.76,
+        "avg_test_pf": "inf (contaminado por ventanas con 0 trades)",
+        "avg_pf_degradation": "inf (no interpretable)",
+        "consistency_score": 0.44,
+        "worst_window_pf": 0.0
+      }
     }
   ],
-
-  "tests_passed": ["retest_10k", "retest_15k", "retest_20k"],
-  "tests_pending": ["walk_forward", "monte_carlo", "paper_trading_review"],
-  "tests_failed": [],
-
+  "tests_passed": [
+    "retest_10k",
+    "retest_15k",
+    "retest_20k"
+  ],
+  "tests_pending": [
+    "monte_carlo",
+    "paper_trading_review"
+  ],
+  "tests_failed": [
+    "walk_forward"
+  ],
   "notes": "ATENCIÓN: solo 63-82 señales en 20k velas. Estadística limitada. La degradación del 12% entre 10k y 20k necesita verificación con walk-forward. Señal selectiva — puede pasar semanas sin operar.",
-
   "history": [
-    {"date": "2026-06-01", "from_status": "TESTING", "to_status": "RETESTING", "reason": "Pasó retest multi-horizonte con clasificación ROBUST. Degradación aceptable."}
+    {
+      "date": "2026-06-01",
+      "from_status": "TESTING",
+      "to_status": "RETESTING",
+      "reason": "Pasó retest multi-horizonte con clasificación ROBUST. Degradación aceptable."
+    },
+    {
+      "date": "2026-06-10",
+      "from_status": "RETESTING",
+      "to_status": "FAILED",
+      "reason": "Walk-forward UNSTABLE: avg train PF 0.76, mayoria de ventanas sin trades. Muestra insuficiente + sin edge in-sample. Descarte definitivo."
+    }
   ]
 }
