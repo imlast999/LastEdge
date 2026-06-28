@@ -29,9 +29,10 @@ SPREAD_PIPS: Dict[str, float] = {
 
 # ── Comisión por lote completo (USD) ──────────────────────────────────────────
 COMMISSION_PER_LOT_USD: Dict[str, float] = {
-    'EURUSD': 3.0,   # $3 por lote completo (round-trip = $6)
-    'XAUUSD': 3.0,   # $3 por lote completo
+    'EURUSD': 3.0,   # $3 por lote completo (Forex)
+    'XAUUSD': 3.0,   # $3 por lote completo (Spot Metals)
     'BTCEUR': 3.0,   # $3 por lote completo (Spot Commodities)
+    'US30': 6.0,     # $6 por lote completo (Indexes)
 }
 
 # ── Tamaño de lote por defecto para el cálculo de comisión ───────────────────

@@ -58,6 +58,8 @@ from .commands import (
     create_commands_service
 )
 
+from .mobile_store import get_mobile_store
+
 # Instancias globales para compatibilidad
 intelligent_logger = get_intelligent_logger()
 execution_service = get_execution_service()
@@ -104,5 +106,8 @@ __all__ = [
     'reset_trades_today',
     
     # Commands
-    'create_commands_service'
+    'create_commands_service',
+
+    # Mobile app bridge
+    'get_mobile_store',
 ]

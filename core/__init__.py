@@ -52,6 +52,18 @@ from .replay_engine import (
     get_replay_engine
 )
 
+from .montecarlo import (
+    MonteCarlo,
+    MonteCarloReport,
+    TradeRecord,
+    run_montecarlo,
+)
+
+from .journal import (
+    TradeJournal,
+    get_journal,
+)
+
 # Aliases for compatibility
 get_engine = get_trading_engine
 
@@ -97,6 +109,16 @@ __all__ = [
     'ReplaySignal',
     'ReplayStatistics',
     'get_replay_engine',
+
+    # Monte Carlo
+    'MonteCarlo',
+    'MonteCarloReport',
+    'TradeRecord',
+    'run_montecarlo',
+
+    # Trade Journal
+    'TradeJournal',
+    'get_journal',
     
     # Utilities
     'get_current_period_start',

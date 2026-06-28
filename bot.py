@@ -180,9 +180,10 @@ def validate_btceur_strategy() -> bool:
         active_symbols["BTCEUR"] = False
         return False
 
-    valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy', 'BTCEURRegimeMomentumStrategy')
+    valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy')
     # eurusd_asian_breakout descartada junio 2026 (PF<1.0 en 10k/15k/20k velas)
     # EURUSD ahora usa eurusd_simple con SL=1.5x ATR, TP=6.0x ATR, CB=3/72
+    # btceur_regime_momentum desactivada: requiere H4+Daily, replay_engine usa H1
     if strat.__class__.__name__ not in valid_btceur_classes:
         err_msg = f"Estrategia incorrecta: {strat.__class__.__name__} (válidas: {valid_btceur_classes})."
         log_event(f"[CRITICAL][BTCEUR] {err_msg}", "ERROR")
@@ -339,6 +340,8 @@ def init_risk_managers():
         from core import get_risk_manager, get_filters_system
         risk_manager = get_risk_manager()
         advanced_filter = get_filters_system()
+        # Unificar contadores: ConsolidatedFilters leerá/escribirá desde BotState
+        advanced_filter.set_bot_state(state)
         logger.info("Gestores de riesgo inicializados correctamente")
     except Exception as e:
         logger.error(f"Error inicializando gestores de riesgo: {e}")
@@ -576,6 +579,11 @@ async def on_ready():
     # start weekly summary background task
     bot.loop.create_task(_weekly_summary_loop())
     log_event("Weekly summary loop iniciado (lunes 08:00 UTC)")
+
+    # start session summary background task
+    if SESSION_SUMMARY_AVAILABLE:
+        bot.loop.create_task(_session_summary_loop())
+        log_event("Session summary loop iniciado (cierre London 17h, NY 22h UTC)")
     
     # Print helpful invite URL for adding the bot with application commands scope
     try:
@@ -642,19 +650,103 @@ async def _trailing_stops_loop_simple():
 
 
 async def _market_opening_loop_simple():
-    """Simplified market opening loop"""
+    """
+    Loop de alertas de apertura de mercado.
+    Verifica cada 5 minutos si hay una apertura próxima y envía alertas
+    al canal de signals en tres momentos: 30 min antes, 15 min antes,
+    y 15 min después de abrir.
+    """
     await bot.wait_until_ready()
-    logger.info('Market opening alerts loop started')
-    
+    log_event("Sistema de alertas de apertura de mercado iniciado (verificación cada 5 min)")
+
+    # Rastrear qué alertas ya se enviaron para no repetirlas
+    # Clave: "{market}_{alert_type}_{fecha_hora_apertura_redondeada}"
+    _sent_alerts: set = set()
+
     while True:
         try:
-            if MARKET_OPENING_AVAILABLE and market_opening_system:
-                # Basic market opening monitoring
-                pass
-            await asyncio.sleep(300)
+            await asyncio.sleep(300)  # verificar cada 5 minutos
+
+            if not MARKET_OPENING_AVAILABLE or not market_opening_system:
+                continue
+
+            # Obtener próxima apertura en un thread separado (llama a MT5)
+            def _get_opening():
+                return market_opening_system.get_next_market_opening()
+
+            market_name, opening_time, minutes_until = await asyncio.to_thread(_get_opening)
+
+            if market_name is None or minutes_until is None:
+                continue
+
+            # ¿Hay que enviar alerta ahora?
+            should_alert, alert_type = market_opening_system.should_send_alert(
+                market_name, minutes_until
+            )
+
+            if not should_alert or alert_type is None:
+                continue
+
+            # Clave de deduplicación: misma alerta no se envía dos veces
+            # Usamos la hora de apertura redondeada al minuto más cercano
+            opening_key = opening_time.strftime('%Y%m%d%H%M') if opening_time else 'UNK'
+            alert_key = f"{market_name}_{alert_type}_{opening_key}"
+
+            if alert_key in _sent_alerts:
+                continue  # ya enviada, saltar
+
+            # Generar análisis pre-mercado para los pares activos de esta sesión
+            session_info = market_opening_system.market_sessions.get(market_name, {})
+            main_pairs = session_info.get('main_pairs', [])
+
+            # Filtrar solo pares que tenemos activos en el bot
+            active_pairs = [p for p in main_pairs if active_symbols.get(p, False)]
+
+            def _generate_strategies():
+                strategies = []
+                for pair in active_pairs:
+                    try:
+                        result = market_opening_system.generate_opening_strategy(pair, market_name)
+                        strategies.append(result)
+                    except Exception as e:
+                        logger.warning(f"Error generando estrategia de apertura para {pair}: {e}")
+                return strategies
+
+            strategies = await asyncio.to_thread(_generate_strategies)
+
+            # Formatear y enviar mensaje
+            message = market_opening_system.format_opening_alert(
+                market_name, alert_type, strategies
+            )
+
+            channel = await _find_signals_channel()
+            if channel:
+                # Discord limita mensajes a 2000 chars; truncar si hace falta
+                if len(message) > 1950:
+                    message = message[:1950] + "\n…*(mensaje truncado)*"
+                await channel.send(message)
+                log_event(
+                    f"📢 Alerta de apertura enviada: {market_name} | {alert_type} | "
+                    f"{minutes_until:+d} min | pares: {active_pairs}"
+                )
+            else:
+                logger.warning(
+                    f"Market opening: no se encontró el canal '{SIGNALS_CHANNEL_NAME}'"
+                )
+
+            # Registrar como enviada para no repetir
+            _sent_alerts.add(alert_key)
+
+            # Limpiar alertas antiguas (más de 24h) para no acumular indefinidamente
+            if len(_sent_alerts) > 100:
+                _sent_alerts.clear()
+
+        except asyncio.CancelledError:
+            break
         except Exception:
             logger.exception('Market opening loop crashed; retrying in 10 minutes')
             await asyncio.sleep(600)
+
 
 
 async def _mt5_watchdog_loop():
@@ -828,6 +920,82 @@ async def _weekly_summary_loop():
         except Exception as e:
             logger.error(f"Weekly summary loop error: {e}")
             await asyncio.sleep(3600)
+
+
+# ======================
+# SESSION SUMMARY LOOP
+# ======================
+
+async def _session_summary_loop():
+    """
+    Background task: envía un resumen de señales al final de cada sesión
+    de mercado (London 17h UTC, New York 22h UTC).
+    Verifica cada 5 minutos si alguna sesión acaba de cerrar.
+    """
+    await bot.wait_until_ready()
+    log_event("Session summary loop iniciado")
+
+    from session_summary import SESSIONS, session_summary as _ss
+
+    while True:
+        try:
+            await asyncio.sleep(300)  # verificar cada 5 minutos
+
+            for session_name in SESSIONS:
+                should_send, key = _ss.should_send_summary(session_name)
+                if not should_send:
+                    continue
+
+                # Obtener historial de señales de las últimas 24h
+                try:
+                    from services.dashboard import get_dashboard_service
+                    # Obtenemos las horas de la sesión para filtrar
+                    session_info = SESSIONS[session_name]
+                    duration_h = session_info["close_utc"] - session_info["open_utc"]
+                    history = get_dashboard_service().get_signal_history(
+                        hours=max(duration_h, 10)
+                    )
+                except Exception as e:
+                    logger.error(f"Session summary: error getting history: {e}")
+                    history = []
+
+                # Obtener estado del circuit breaker
+                cb_status = None
+                try:
+                    from core.circuit_breaker import get_circuit_breaker
+                    cb_status = get_circuit_breaker().get_status()
+                except Exception as e:
+                    logger.warning(f"Session summary: no se pudo obtener CB status: {e}")
+
+                # Construir mensaje
+                message = _ss.build_summary_message(
+                    session_name=session_name,
+                    signal_history=history,
+                    circuit_breaker_status=cb_status,
+                )
+
+                # Enviar al canal
+                channel = await _find_signals_channel()
+                if channel:
+                    await channel.send(message)
+                    log_event(
+                        f"📋 Resumen de sesión enviado: {session_name} | "
+                        f"{len(history)} señales en historial"
+                    )
+                else:
+                    logger.warning(
+                        f"Session summary: no se encontró el canal '{SIGNALS_CHANNEL_NAME}'"
+                    )
+
+                # Marcar como enviado para no repetir
+                _ss.mark_sent(key)
+
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("Session summary loop crashed; retrying in 5 minutes")
+            await asyncio.sleep(300)
+
 
 # ======================
 # COMANDOS
@@ -2855,7 +3023,7 @@ async def slash_news(interaction: discord.Interaction):
 
 @bot.tree.command(name="equity")
 async def slash_equity(interaction: discord.Interaction):
-    """Snapshot de la equity paper actual: balance cerrado + P&L flotante de señales abiertas (solo admin)."""
+    """Snapshot de equity MT5: balance + P&L flotante (solo admin)."""
     if interaction.user.id != AUTHORIZED_USER_ID:
         await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
         return
@@ -2866,7 +3034,7 @@ async def slash_equity(interaction: discord.Interaction):
         from services.dashboard import get_dashboard_service
 
         snap = get_dashboard_service().get_equity_snapshot()
-        mode        = snap.get('mode', 'paper')
+        mode        = snap.get('mode', 'mt5')
         balance     = snap.get('balance', 0.0)
         floating    = snap.get('floating_pnl', 0.0)
         total       = snap.get('total_equity', 0.0)
@@ -2876,7 +3044,7 @@ async def slash_equity(interaction: discord.Interaction):
 
         sign_ch  = "+" if change  >= 0 else ""
         sign_fl  = "+" if floating >= 0 else ""
-        mode_lbl = "🔴 REAL" if mode == 'real' else "🟡 PAPER"
+        mode_lbl = "MT5"
 
         lines = [
             f"**💰 Equity — {mode_lbl}**",
@@ -2892,6 +3060,302 @@ async def slash_equity(interaction: discord.Interaction):
 
     except Exception as e:
         logger.error(f"Error en /equity: {e}", exc_info=True)
+        await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
+
+
+# ======================
+# COMANDOS: GO-LIVE CHECK y JOURNAL
+# ======================
+
+@bot.tree.command(name="go_live_check")
+@discord.app_commands.describe(symbol="Par a evaluar: EURUSD, XAUUSD o BTCEUR (por defecto: EURUSD)")
+async def slash_go_live_check(
+    interaction: discord.Interaction,
+    symbol: str = "EURUSD",
+):
+    """Evalúa automáticamente los 6 criterios de go-live para un par (solo admin)."""
+    if interaction.user.id != AUTHORIZED_USER_ID:
+        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
+        return
+
+    sym = symbol.strip().upper()
+    if sym not in ('EURUSD', 'XAUUSD', 'BTCEUR'):
+        await interaction.response.send_message(
+            "❌ Símbolo no válido. Usa EURUSD, XAUUSD o BTCEUR.", ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(thinking=True, ephemeral=True)
+
+    results: list[str] = []
+    passed = 0
+    total_criteria = 6
+
+    try:
+        # ── Criterio 1: Clasificación progresiva ≥ STABLE ────────────────────
+        try:
+            import glob
+            wf_pattern = os.path.join(
+                os.path.dirname(__file__), 'backtest_results',
+                f'walkforward_{sym}_*.csv'
+            )
+            wf_files = sorted(glob.glob(wf_pattern), reverse=True)
+            if wf_files:
+                import csv
+                with open(wf_files[0], newline='', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    rows_wf = list(reader)
+                stability = rows_wf[0].get('stability_rating', 'UNKNOWN') if rows_wf else 'UNKNOWN'
+            else:
+                stability = 'NO_DATA'
+
+            ok1 = stability in ('STABLE', 'MARGINAL')
+            icon1 = '✅' if ok1 else '❌'
+            if ok1:
+                passed += 1
+            results.append(f"{icon1} **Clasificación walk-forward**: `{stability}` (mín: MARGINAL)")
+        except Exception as e:
+            results.append(f"⚠️ **Clasificación walk-forward**: error al leer CSV — `{e}`")
+
+        # ── Criterio 2: ≥ 50 trades cerrados en MT5 ─────────────────────────
+        try:
+            from core.journal import get_journal
+            journal = get_journal()
+            closed_count = journal.count_closed_trades(symbol=sym, mode='live')
+            ok2 = closed_count >= 50
+            icon2 = '✅' if ok2 else '❌'
+            if ok2:
+                passed += 1
+            results.append(f"{icon2} **Trades cerrados MT5**: `{closed_count}/50`")
+        except Exception as e:
+            results.append(f"⚠️ **Trades cerrados MT5**: error — `{e}`")
+
+        # ── Criterio 3: PF MT5 ≥ 1.3 ──────────────────────────────────────────
+        try:
+            from core.journal import get_journal
+            rep = get_journal().get_report(days=0, symbol=sym, mode='live')
+            pf_live = rep.get('profit_factor', 0.0)
+            if pf_live == float('inf'):
+                pf_live_str = '∞'
+                ok3 = True
+            else:
+                pf_live_str = f"{pf_live:.2f}"
+                ok3 = pf_live >= 1.3
+            icon3 = '✅' if ok3 else '❌'
+            if ok3:
+                passed += 1
+            results.append(f"{icon3} **Profit Factor MT5**: `{pf_live_str}` (mín: 1.30)")
+        except Exception as e:
+            results.append(f"⚠️ **Profit Factor MT5**: error — `{e}`")
+
+        # ── Criterio 4: Drawdown ≤ 15% ───────────────────────────────────────
+        try:
+            from core.journal import get_journal
+            rep = get_journal().get_report(days=0, symbol=sym, mode='live')
+            total_pips = rep.get('total_pnl_pips', 0.0)
+            # Estimamos el DD máximo como la racha de pérdidas acumuladas
+            recent = get_journal().get_recent_trades(limit=200, symbol=sym)
+            equity = 0.0
+            peak = 0.0
+            max_dd_pct = 0.0
+            for t in reversed(recent):
+                if t.get('result') in ('WIN', 'LOSS', 'BREAKEVEN') and t.get('mode') == 'live':
+                    equity += t.get('pnl_pips') or 0.0
+                    if equity > peak:
+                        peak = equity
+                    if peak > 0:
+                        dd = (peak - equity) / peak * 100
+                        if dd > max_dd_pct:
+                            max_dd_pct = dd
+            ok4 = max_dd_pct <= 15.0
+            icon4 = '✅' if ok4 else '❌'
+            if ok4:
+                passed += 1
+            results.append(f"{icon4} **Drawdown máximo MT5**: `{max_dd_pct:.1f}%` (máx: 15%)")
+        except Exception as e:
+            results.append(f"⚠️ **Drawdown máximo MT5**: error — `{e}`")
+
+        # ── Criterio 5: WR MT5 ≥ WR backtest × 0.85 ────────────────────────
+        try:
+            from core.journal import get_journal
+            rep_live = get_journal().get_report(days=0, symbol=sym, mode='live')
+            wr_live = rep_live.get('winrate', 0.0)
+
+            # WR backtest: buscar en CSV más reciente
+            import glob, csv
+            bt_pattern = os.path.join(
+                os.path.dirname(__file__), 'backtest_results', f'backtest_*_{sym}_*.csv'
+            )
+            bt_files = sorted(glob.glob(bt_pattern), reverse=True)
+            wr_backtest = None
+            if bt_files:
+                with open(bt_files[0], newline='', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    bt_rows = list(reader)
+                if bt_rows:
+                    wr_backtest = float(bt_rows[0].get('winrate', 0) or 0)
+
+            if wr_backtest is not None and wr_backtest > 0:
+                threshold = wr_backtest * 0.85
+                ok5 = wr_live >= threshold
+                icon5 = '✅' if ok5 else '❌'
+                detail = f"`{wr_live:.1f}%` vs backtest `{wr_backtest:.1f}%` (mín: `{threshold:.1f}%`)"
+            else:
+                ok5 = wr_live > 0
+                icon5 = '⚠️' if ok5 else '❌'
+                detail = f"`{wr_live:.1f}%` (sin datos backtest para comparar)"
+            if ok5:
+                passed += 1
+            results.append(f"{icon5} **Winrate MT5 vs backtest**: {detail}")
+        except Exception as e:
+            results.append(f"⚠️ **Winrate MT5 vs backtest**: error — `{e}`")
+
+        # ── Criterio 6: Walk-forward ventanas útiles ≥ 3 ─────────────────────
+        try:
+            import glob, csv
+            wf_pattern = os.path.join(
+                os.path.dirname(__file__), 'backtest_results',
+                f'walkforward_{sym}_*.csv'
+            )
+            wf_files = sorted(glob.glob(wf_pattern), reverse=True)
+            profitable_windows = 0
+            total_windows = 0
+            if wf_files:
+                with open(wf_files[0], newline='', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        total_windows += 1
+                        try:
+                            if float(row.get('test_pf', 0) or 0) >= 1.0:
+                                profitable_windows += 1
+                        except Exception:
+                            pass
+            ok6 = profitable_windows >= 3
+            icon6 = '✅' if ok6 else '❌'
+            if ok6:
+                passed += 1
+            results.append(
+                f"{icon6} **Ventanas WF rentables**: `{profitable_windows}/{total_windows}` (mín: 3)"
+            )
+        except Exception as e:
+            results.append(f"⚠️ **Ventanas WF rentables**: error — `{e}`")
+
+    except Exception as e:
+        logger.error(f"Error en /go_live_check: {e}", exc_info=True)
+        await interaction.followup.send(f"❌ Error inesperado: {e}", ephemeral=True)
+        return
+
+    # ── Veredicto final ───────────────────────────────────────────────────────
+    if passed == total_criteria:
+        verdict = "✅ **LISTO PARA LIVE** — todos los criterios superados"
+    elif passed >= 4:
+        verdict = f"⚠️ **CASI LISTO** — {passed}/{total_criteria} criterios superados. Revisar los fallidos."
+    else:
+        verdict = f"❌ **NO LISTO** — solo {passed}/{total_criteria} criterios superados."
+
+    lines = [
+        f"**🚦 Go-Live Check — {sym}**",
+        "",
+    ] + results + [
+        "",
+        f"─────────────────────────────",
+        verdict,
+    ]
+
+    await interaction.followup.send("\n".join(lines), ephemeral=True)
+
+
+@bot.tree.command(name="journal")
+@discord.app_commands.describe(
+    symbol="Par a consultar (EURUSD, XAUUSD, BTCEUR o ALL)",
+    days="Días hacia atrás (0 = todos, por defecto: 30)",
+    mode="live (por defecto) u otro valor del journal",
+)
+async def slash_journal(
+    interaction: discord.Interaction,
+    symbol: str = "ALL",
+    days: int = 30,
+    mode: str = "live",
+):
+    """Resumen del trade journal: winrate, PF, P&L, duración media (solo admin)."""
+    if interaction.user.id != AUTHORIZED_USER_ID:
+        await interaction.response.send_message("⛔ No autorizado", ephemeral=True)
+        return
+
+    await interaction.response.defer(thinking=True, ephemeral=True)
+
+    sym_filter = None if symbol.upper() == 'ALL' else symbol.upper()
+    mode_filter = mode.lower() if mode.lower() in ('paper', 'live') else 'live'
+    days_val = max(0, days)
+
+    try:
+        from core.journal import get_journal
+        journal = get_journal()
+        rep = journal.get_report(days=days_val, symbol=sym_filter, mode=mode_filter)
+
+        if rep.get('total_trades', 0) == 0:
+            await interaction.followup.send(
+                f"📭 No hay trades en el journal para **{symbol}** "
+                f"({'todos los días' if days_val == 0 else f'últimos {days_val}d'}) — modo `{mode_filter}`.",
+                ephemeral=True,
+            )
+            return
+
+        period_str = "todos los días" if days_val == 0 else f"últimos {days_val}d"
+        pf_str = "∞" if rep['profit_factor'] == float('inf') else f"{rep['profit_factor']:.2f}"
+        dur = int(rep.get('avg_duration_min', 0))
+        dur_str = f"{dur // 60}h {dur % 60}m" if dur >= 60 else f"{dur}min"
+
+        lines = [
+            f"**📒 Journal — {symbol.upper()} · {period_str} · `{mode_filter}`**",
+            "",
+            f"Trades totales:   **{rep['total_trades']}**  (cerrados: {rep['closed_trades']} | pendientes: {rep['pending_trades']})",
+            f"Ganadas/perdidas: **{rep['wins']}W / {rep['losses']}L**  →  WR `{rep['winrate']}%`",
+            f"Profit Factor:    **{pf_str}**",
+            f"P&L total:        **{rep['total_pnl_pips']:+.1f} pips**  ({rep['total_pnl_eur']:+.2f} €)",
+            f"Duración media:   **{dur_str}**",
+            f"Score confianza:  **{rep['avg_confidence_score']:.2f}** / 1.00",
+        ]
+
+        # Por símbolo (si es ALL)
+        if sym_filter is None and rep.get('by_symbol'):
+            lines += ["", "**Por par:**"]
+            for sym, d in sorted(rep['by_symbol'].items()):
+                lines.append(
+                    f"  {sym}: {d['total']}T · WR `{d['winrate']}%` · `{d['pnl_pips']:+.0f}` pip"
+                )
+
+        # Por estrategia
+        if rep.get('by_strategy'):
+            lines += ["", "**Por estrategia:**"]
+            for strat, d in sorted(rep['by_strategy'].items(), key=lambda x: -x[1]['total']):
+                lines.append(
+                    f"  `{strat}`: {d['total']}T · WR `{d['winrate']}%` · `{d['pnl_pips']:+.0f}` pip"
+                )
+
+        # Últimos 5 trades
+        recent = journal.get_recent_trades(limit=5, symbol=sym_filter)
+        if recent:
+            lines += ["", "**Últimas 5 operaciones:**"]
+            for t in recent:
+                ts = t['entry_time'][:16] if t.get('entry_time') else '?'
+                res = t.get('result') or 'PEND'
+                pip = t.get('pnl_pips') or 0
+                icon = '🟢' if res == 'WIN' else ('🔴' if res == 'LOSS' else '🟡')
+                lines.append(
+                    f"  {icon} `{ts}` {t.get('symbol','?')} {t.get('signal_type','?')} "
+                    f"→ {res} `{pip:+.0f}p` [{t.get('confidence','?')}]"
+                )
+
+        msg = "\n".join(lines)
+        # Discord limita a 2000 chars
+        if len(msg) > 1950:
+            msg = msg[:1950] + "\n…*(truncado)*"
+
+        await interaction.followup.send(msg, ephemeral=True)
+
+    except Exception as e:
+        logger.error(f"Error en /journal: {e}", exc_info=True)
         await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
 
 

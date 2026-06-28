@@ -29,6 +29,12 @@ class DatabaseService:
         c.execute("CREATE TABLE IF NOT EXISTS trades_counter(date TEXT PRIMARY KEY, count INTEGER)")
         conn.commit()
         conn.close()
+        # Tablas para la app móvil
+        try:
+            from services.mobile_store import get_mobile_store
+            get_mobile_store(self.db_path).ensure_tables()
+        except Exception as e:
+            logger.debug(f"Mobile tables init: {e}")
     
     def load_state(self, state_obj) -> None:
         """Carga el estado desde la base de datos"""

@@ -59,6 +59,8 @@ temp/
 tmp/
 chart_*.png
 *.png
+!mobile-app/**/*.png
+!mobile-app/**/*.webp
 *.jpg
 *.jpeg
 *.bak

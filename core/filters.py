@@ -34,9 +34,17 @@ class ConsolidatedFilters:
     - Filtros de trading (de trading_filters.py)
     - Filtros de riesgo
     - Filtros temporales
+
+    Los contadores de trades (diario y por período) son la ÚNICA fuente de verdad
+    del BotState inyectado. Si no se inyecta estado, se usan contadores locales
+    como fallback (útil en tests y backtest).
     """
     
-    def __init__(self):
+    def __init__(self, bot_state=None):
+        # Referencia opcional a BotState — fuente de verdad de contadores
+        # Se puede inyectar después de la construcción vía set_bot_state()
+        self._bot_state = bot_state
+
         # Configuración de filtros
         self.duplicate_config = {
             'time_window_minutes': 30,
@@ -63,42 +71,68 @@ class ConsolidatedFilters:
         
         # Estado interno
         self.recent_signals = {}  # symbol -> list of recent signals
+
+        # Contadores locales: solo se usan cuando no hay BotState inyectado
+        # (tests, backtest, ejecución standalone).  NO leer directamente en
+        # producción — usar _get_daily_count() / _get_period_count() en su lugar.
         self.daily_trades = defaultdict(int)
         self.period_trades = defaultdict(int)
+
+        # Contadores de señales rechazadas para get_stats()
+        self._rejected_signals: int = 0
+        self._total_evaluated: int = 0
+
+    def set_bot_state(self, bot_state) -> None:
+        """
+        Inyecta la referencia al BotState global.
+        Llamar desde bot.py después de que ambos objetos estén creados:
+            advanced_filter.set_bot_state(state)
+        """
+        self._bot_state = bot_state
+        logger.info("ConsolidatedFilters: BotState inyectado — contadores unificados")
         
     def apply_all_filters(self, df: pd.DataFrame, signal: Dict, 
                          current_balance: float = 10000.0) -> Tuple[bool, str, Dict]:
         """
-        Aplica todos los filtros en secuencia
+        Aplica todos los filtros en secuencia.
+
+        Registra contadores globales de señales evaluadas y rechazadas para
+        que get_stats() pueda devolver datos reales en lugar de ceros.
         
         Returns:
             (passed, reason, details)
         """
         symbol = signal.get('symbol', 'UNKNOWN')
+        self._total_evaluated += 1
         
         # 1. Filtro de duplicados
         duplicate_result = self._filter_duplicates(signal, symbol)
         if not duplicate_result.passed:
+            self._rejected_signals += 1
             return False, duplicate_result.reason, duplicate_result.details
         
         # 2. Filtro de límites de trading
         limits_result = self._filter_trading_limits(symbol)
         if not limits_result.passed:
+            self._rejected_signals += 1
             return False, limits_result.reason, limits_result.details
         
         # 3. Filtro de riesgo
         risk_result = self._filter_risk(signal, current_balance)
         if not risk_result.passed:
+            self._rejected_signals += 1
             return False, risk_result.reason, risk_result.details
         
         # 4. Filtro de condiciones de mercado
         market_result = self._filter_market_conditions(df, signal, symbol)
         if not market_result.passed:
+            self._rejected_signals += 1
             return False, market_result.reason, market_result.details
         
         # 5. Filtro de sesión de trading
         session_result = self._filter_trading_session(symbol)
         if not session_result.passed:
+            self._rejected_signals += 1
             return False, session_result.reason, session_result.details
         
         # Todos los filtros pasaron
@@ -161,15 +195,20 @@ class ConsolidatedFilters:
             )
     
     def _filter_trading_limits(self, symbol: str) -> FilterResult:
-        """Filtro de límites de trading diarios y por período"""
+        """
+        Filtro de límites de trading diarios y por período.
+
+        Lee los contadores desde BotState (fuente de verdad unificada) cuando
+        está disponible. En modo standalone/test usa los contadores locales.
+        """
         try:
-            today = datetime.now(timezone.utc).date().isoformat()
-            current_period = self._get_current_period()
+            daily_count = self._get_daily_count()
+            period_count = self._get_period_count()
+
+            max_daily = self.risk_config['max_trades_per_day']
+            max_period = self.risk_config['max_trades_per_period']
             
             # Verificar límite diario
-            daily_count = self.daily_trades.get(today, 0)
-            max_daily = self.risk_config['max_trades_per_day']
-            
             if daily_count >= max_daily:
                 return FilterResult(
                     passed=False,
@@ -179,10 +218,8 @@ class ConsolidatedFilters:
                 )
             
             # Verificar límite por período
-            period_count = self.period_trades.get(current_period, 0)
-            max_period = self.risk_config['max_trades_per_period']
-            
             if period_count >= max_period:
+                current_period = self._get_current_period()
                 return FilterResult(
                     passed=False,
                     reason=f"Period limit reached ({period_count}/{max_period})",
@@ -205,6 +242,24 @@ class ConsolidatedFilters:
                 details={'error': str(e)},
                 filter_name="limits"
             )
+
+    # ------------------------------------------------------------------
+    # Helpers de lectura de contadores — única lógica de acceso al estado
+    # ------------------------------------------------------------------
+
+    def _get_daily_count(self) -> int:
+        """Devuelve el contador de trades hoy desde BotState o local."""
+        if self._bot_state is not None:
+            return int(getattr(self._bot_state, 'trades_today', 0))
+        today = datetime.now(timezone.utc).date().isoformat()
+        return self.daily_trades.get(today, 0)
+
+    def _get_period_count(self) -> int:
+        """Devuelve el contador de trades del período actual desde BotState o local."""
+        if self._bot_state is not None:
+            return int(getattr(self._bot_state, 'trades_current_period', 0))
+        current_period = self._get_current_period()
+        return self.period_trades.get(current_period, 0)
     
     def _filter_risk(self, signal: Dict, current_balance: float) -> FilterResult:
         """Filtro de gestión de riesgo"""
@@ -424,26 +479,41 @@ class ConsolidatedFilters:
             return f"{date_str}_afternoon"
     
     def increment_trade_counters(self, symbol: str):
-        """Incrementa contadores de trades después de ejecutar una señal"""
-        today = datetime.now(timezone.utc).date().isoformat()
-        current_period = self._get_current_period()
-        
-        self.daily_trades[today] += 1
-        self.period_trades[current_period] += 1
-        
-        logger.info(f"Trade counters updated: Daily {self.daily_trades[today]}, Period {self.period_trades[current_period]}")
+        """
+        Incrementa contadores de trades después de ejecutar una señal.
+
+        Cuando BotState está inyectado, delega completamente en él
+        (bot.py sigue siendo la única fuente de verdad).
+        En modo standalone/test, incrementa los contadores locales.
+        """
+        if self._bot_state is not None:
+            # BotState es la fuente de verdad; bot.py ya incrementa sus contadores
+            # en el momento de ejecución, así que solo registramos en el log.
+            daily = getattr(self._bot_state, 'trades_today', '?')
+            period = getattr(self._bot_state, 'trades_current_period', '?')
+            logger.info(
+                f"Trade counters (BotState): Daily {daily}, Period {period} | symbol={symbol}"
+            )
+        else:
+            # Modo standalone — mantener contadores locales como fallback
+            today = datetime.now(timezone.utc).date().isoformat()
+            current_period = self._get_current_period()
+            self.daily_trades[today] += 1
+            self.period_trades[current_period] += 1
+            logger.info(
+                f"Trade counters (local): Daily {self.daily_trades[today]}, "
+                f"Period {self.period_trades[current_period]} | symbol={symbol}"
+            )
     
     def get_statistics(self) -> Dict:
         """Obtiene estadísticas de los filtros"""
-        today = datetime.now(timezone.utc).date().isoformat()
-        current_period = self._get_current_period()
-        
         return {
             'daily_trades': dict(self.daily_trades),
             'period_trades': dict(self.period_trades),
-            'current_daily_count': self.daily_trades.get(today, 0),
-            'current_period_count': self.period_trades.get(current_period, 0),
+            'current_daily_count': self._get_daily_count(),
+            'current_period_count': self._get_period_count(),
             'recent_signals_count': {symbol: len(signals) for symbol, signals in self.recent_signals.items()},
+            'using_bot_state': self._bot_state is not None,
             'config': {
                 'duplicate_config': self.duplicate_config,
                 'risk_config': self.risk_config,
@@ -453,20 +523,23 @@ class ConsolidatedFilters:
     
     def get_stats(self) -> Dict:
         """
-        Método de compatibilidad para obtener estadísticas
-        Alias para get_statistics()
+        Método de compatibilidad para obtener estadísticas.
+        Alias para get_statistics() con formato extendido.
         """
         stats = self.get_statistics()
-        
-        # Formato compatible con el código existente
+        daily_count = stats['current_daily_count']
+        period_count = stats['current_period_count']
+        shown = self._total_evaluated - self._rejected_signals
+
         return {
-            'total_signals': sum(self.daily_trades.values()),
-            'shown_signals': sum(self.daily_trades.values()),  # Simplificado por ahora
-            'rejected_signals': 0,  # Se calculará cuando tengamos más datos
-            'daily_count': stats['current_daily_count'],
-            'period_count': stats['current_period_count'],
+            'total_signals': self._total_evaluated,
+            'shown_signals': shown,
+            'rejected_signals': self._rejected_signals,
+            'daily_count': daily_count,
+            'period_count': period_count,
             'recent_signals': stats['recent_signals_count'],
-            'filters_config': stats['config']
+            'filters_config': stats['config'],
+            'using_bot_state': stats['using_bot_state'],
         }
 
 # Instancia global del sistema de filtros

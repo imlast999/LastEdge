@@ -44,8 +44,8 @@ if not exist ".env" (
     echo.
 )
 
-REM Leer puerto del dashboard desde .env (default 5000)
-set DASHBOARD_PORT=5000
+REM Leer puerto del dashboard desde .env (default 8080 — no usar 5000, reservado para API móvil)
+set DASHBOARD_PORT=8080
 for /f "tokens=2 delims==" %%a in ('findstr /i "DASHBOARD_PORT" .env 2^>nul') do set DASHBOARD_PORT=%%a
 
 REM Obtener IP local

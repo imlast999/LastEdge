@@ -7,18 +7,38 @@ logger = logging.getLogger(__name__)
 
 def initialize(path=None, retries: int = 3, backoff_factor: float = 2.0, initial_delay: float = 1.0):
     """Initialize MT5 with simple retry/backoff.
-
     Attempts to initialize MT5 up to `retries` times with exponential backoff.
     Returns True on success, raises RuntimeError on failure.
     """
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    login_id_str = os.getenv('MT5_LOGIN')
+    password = os.getenv('MT5_PASSWORD')
+    server = os.getenv('MT5_SERVER')
+
+    # Strip quotes if they were included literally in the .env file
+    if password and password.startswith('"') and password.endswith('"'):
+        password = password[1:-1]
+    if server and server.startswith('"') and server.endswith('"'):
+        server = server[1:-1]
+
+    kwargs = {}
+    if path:
+        kwargs['path'] = path
+    if login_id_str and password and server:
+        try:
+            kwargs['login'] = int(login_id_str)
+            kwargs['password'] = password
+            kwargs['server'] = server
+        except ValueError:
+            pass
+
     attempt = 0
     while True:
         try:
-            if path is None:
-                ok = mt5.initialize()
-            else:
-                ok = mt5.initialize(path=path)
-
+            ok = mt5.initialize(**kwargs)
             if ok:
                 logger.info("MT5 initialized")
                 return True
@@ -32,7 +52,7 @@ def initialize(path=None, retries: int = 3, backoff_factor: float = 2.0, initial
 
         attempt += 1
         if attempt >= retries:
-            raise RuntimeError(f"MT5 initialize failed after {retries} attempts")
+            raise RuntimeError(f"MT5 initialize failed after {retries} attempts. Last error: {mt5.last_error()}")
         # sleep with exponential backoff before retrying
         delay = initial_delay * (backoff_factor ** (attempt - 1))
         logger.info("Retrying MT5 initialize in %.1f seconds (attempt %d/%d)", delay, attempt + 1, retries)
@@ -52,9 +72,9 @@ def get_candles(symbol, timeframe, n):
     """
     # ensure MT5 is initialized
     try:
-        if not mt5.initialize():
-            # if initialize returns False, log and continue (initialize() may have been called already)
-            logger.debug('mt5.initialize() returned False (may already be initialized)')
+        if not initialize():
+            # if initialize returns False, log and continue
+            logger.debug('initialize() returned False (may already be initialized)')
     except Exception:
         logger.exception('Exception calling mt5.initialize')
 

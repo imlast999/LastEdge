@@ -716,7 +716,30 @@ class ConfidenceSystem:
             factors['signal_strength'] = signal_strength
             
             # Factor 4: Consistencia temporal
-            factors['temporal_consistency'] = 0.7  # Placeholder - podría analizar velas anteriores
+            # Mide si las últimas velas fluyen en la dirección de la señal.
+            # Ventana: 5 velas (H1 = ~5h). Más eficiente que lookbacks largos.
+            signal_direction = signal.get('type', 'BUY')
+            lookback = min(5, len(df) - 1)
+            if lookback >= 2:
+                recent_candles = df.iloc[-(lookback + 1):-1]  # excluir la vela actual
+                if signal_direction == 'BUY':
+                    # Vela alcista: close > open
+                    aligned = (recent_candles['close'] > recent_candles['open']).sum()
+                else:
+                    # Vela bajista: close < open
+                    aligned = (recent_candles['close'] < recent_candles['open']).sum()
+                ratio = aligned / lookback  # 0.0 – 1.0
+                # Mapeo no lineal: mayoría alineada = alta consistencia
+                if ratio >= 0.8:
+                    factors['temporal_consistency'] = 0.85
+                elif ratio >= 0.6:
+                    factors['temporal_consistency'] = 0.70
+                elif ratio >= 0.4:
+                    factors['temporal_consistency'] = 0.50
+                else:
+                    factors['temporal_consistency'] = 0.25
+            else:
+                factors['temporal_consistency'] = 0.50  # datos insuficientes → neutro
             
         except Exception as e:
             logger.warning(f"Error calculando factores de confianza: {e}")

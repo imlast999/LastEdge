@@ -38,9 +38,9 @@ class DashboardMetrics:
     uptime_seconds: int = 0
     last_signal_time: Optional[datetime] = None
     system_status: str = "RUNNING"
-    # Balance paper acumulado (persiste entre reinicios dentro de la misma semana)
-    paper_balance: float = 0.0          # 0 = usar balance MT5 como base
-    paper_balance_base: float = 0.0     # balance inicial de la sesión de paper
+    # Balance base de la sesión (desde MT5 al arrancar)
+    paper_balance: float = 0.0          # legacy — no usado
+    paper_balance_base: float = 0.0     # balance inicial MT5 de la sesión
 
 
 @dataclass
@@ -62,6 +62,7 @@ class SignalEvent:
     # P&L simulado en tiempo real (actualizado por el background loop)
     current_price: Optional[float] = None
     unrealized_pnl: Optional[float] = None   # en % del riesgo
+    mobile_signal_id: Optional[int] = None     # id en enhanced_signals (app móvil)
 
 
 class DashboardService:
@@ -83,7 +84,7 @@ class DashboardService:
         self.update_thread = None
         self.lock = threading.Lock()
         # Estado de ejecución real (sincronizado con autosignals)
-        self.auto_execute_enabled = os.getenv('AUTO_EXECUTE_SIGNALS', '0') == '1'
+        self.auto_execute_enabled = os.getenv('AUTO_EXECUTE_SIGNALS', '1') == '1'
         self.auto_execute_confidence = os.getenv('AUTO_EXECUTE_CONFIDENCE', 'HIGH')
         if self.dashboard_config['enable_persistence']:
             self._load_persisted_data()
@@ -95,10 +96,22 @@ class DashboardService:
                     return
                 self.is_running = True
                 self.start_time = datetime.now(timezone.utc)
-                self.update_thread = threading.Thread(target=self._update_loop, daemon=True)
-                self.update_thread.start()
-                self._start_web_server()
-                logger.info("Dashboard service started")
+
+            # Fuera del lock: get_equity_snapshot() también adquiere self.lock
+            try:
+                from services.mobile_store import get_mobile_store
+                store = get_mobile_store()
+                store.ensure_tables()
+                snap = self.get_equity_snapshot()
+                base = float(snap.get('base_balance') or 5000.0)
+                store.start_session(base)
+            except Exception as ms_err:
+                logger.warning(f"Mobile store init: {ms_err}")
+
+            self.update_thread = threading.Thread(target=self._update_loop, daemon=True)
+            self.update_thread.start()
+            self._start_web_server()
+            logger.info("Dashboard service started")
         except Exception as e:
             logger.error(f"Error starting dashboard: {e}")
             self.is_running = False
@@ -168,7 +181,6 @@ class DashboardService:
                                 pass
 
                         elif self.path == '/api/execution-status':
-                            # Estado actual del modo de ejecución
                             status = {
                                 'auto_execute': dashboard_service.auto_execute_enabled,
                                 'confidence': dashboard_service.auto_execute_confidence,
@@ -183,38 +195,6 @@ class DashboardService:
                             except (ConnectionAbortedError, BrokenPipeError, OSError):
                                 pass
 
-                        elif self.path == '/api/enable-real':
-                            # Activar modo real (ejecuta órdenes en MT5)
-                            dashboard_service.auto_execute_enabled = True
-                            dashboard_service.auto_execute_confidence = 'MEDIUM-HIGH'
-                            # Persistir en .env en memoria (no en disco por seguridad)
-                            os.environ['AUTO_EXECUTE_SIGNALS'] = '1'
-                            os.environ['AUTO_EXECUTE_CONFIDENCE'] = 'MEDIUM-HIGH'
-                            logger.warning("MODO REAL ACTIVADO desde el dashboard")
-                            body = json.dumps({'ok': True, 'mode': 'REAL'}).encode('utf-8')
-                            self.send_response(200)
-                            self.send_header('Content-type', 'application/json')
-                            self.send_header('Access-Control-Allow-Origin', '*')
-                            self.end_headers()
-                            try:
-                                self.wfile.write(body)
-                            except (ConnectionAbortedError, BrokenPipeError, OSError):
-                                pass
-
-                        elif self.path == '/api/disable-real':
-                            # Volver a modo paper trading
-                            dashboard_service.auto_execute_enabled = False
-                            os.environ['AUTO_EXECUTE_SIGNALS'] = '0'
-                            logger.warning("Modo real DESACTIVADO — volviendo a paper trading")
-                            body = json.dumps({'ok': True, 'mode': 'PAPER'}).encode('utf-8')
-                            self.send_response(200)
-                            self.send_header('Content-type', 'application/json')
-                            self.send_header('Access-Control-Allow-Origin', '*')
-                            self.end_headers()
-                            try:
-                                self.wfile.write(body)
-                            except (ConnectionAbortedError, BrokenPipeError, OSError):
-                                pass
                         else:
                             self.send_response(404)
                             self.end_headers()
@@ -231,7 +211,7 @@ class DashboardService:
                 def log_message(self, *args):
                     pass
 
-            port = int(os.getenv('DASHBOARD_PORT', '5000'))
+            port = int(os.getenv('DASHBOARD_PORT', '8080'))
 
             def run():
                 try:
@@ -258,7 +238,8 @@ class DashboardService:
     def add_signal_event(self, symbol: str, strategy: str, signal_type: str,
                          confidence: str, score: float, shown: bool,
                          executed: bool = False, rejection_reason: str = None,
-                         entry: float = None, sl: float = None, tp: float = None):
+                         entry: float = None, sl: float = None, tp: float = None,
+                         mobile_status: str = None):
         try:
             with self.lock:
                 event = SignalEvent(
@@ -271,6 +252,24 @@ class DashboardService:
                 self.signal_history.append(event)
                 self._update_signal_metrics(event)
                 self.metrics.last_signal_time = event.timestamp
+                # Persistir en SQLite para la app móvil
+                if shown and entry and sl and tp:
+                    try:
+                        from services.mobile_store import get_mobile_store
+                        mobile_id = get_mobile_store().insert_signal(
+                            symbol=symbol,
+                            direction=signal_type,
+                            price=float(entry),
+                            tp_price=float(tp),
+                            sl_price=float(sl),
+                            confidence_score=float(score),
+                            confidence=confidence,
+                            strategy=strategy,
+                            status=mobile_status or ('OPEN' if executed else 'PROPOSED'),
+                        )
+                        event.mobile_signal_id = mobile_id
+                    except Exception as ms_err:
+                        logger.debug(f"Mobile store insert_signal: {ms_err}")
         except Exception as e:
             logger.error(f"Error adding signal event: {e}")
 
@@ -616,7 +615,7 @@ class DashboardService:
                         f'<td>{tot}</td><td>{shw}</td><td>{avg:.2f}</td><td>{ltxt}</td></tr>')
 
             sym_rows = sym_row('EURUSD') + sym_row('XAUUSD') + sym_row('BTCEUR')
-            port = os.getenv('DASHBOARD_PORT', '5000')
+            port = os.getenv('DASHBOARD_PORT', '8080')
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
             return f"""<!DOCTYPE html>
@@ -674,12 +673,12 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
   <div class="card"><div class="card-title">Estado</div><div class="card-value" style="font-size:18px;color:var(--green)">{sys_st}</div><div class="card-sub">Uptime: {uptime}</div></div>
   <div class="card"><div class="card-title">Señales (sesión)</div><div class="card-value" style="color:var(--blue)">{s_today}</div><div class="card-sub">Mostradas: {s_shown} ({s_rate})</div></div>
   <div class="card"><div class="card-title">Posiciones abiertas</div><div class="card-value" style="color:var(--purple)">{pos_open}</div><div class="card-sub">Última señal: {ls_fmt}</div></div>
-  <div class="card"><div class="card-title">Profit total</div><div class="card-value" style="color:{p_color}">{t_profit:+.2f} €</div><div class="card-sub">Paper trading activo</div></div>
+  <div class="card"><div class="card-title">Profit total</div><div class="card-value" style="color:{p_color}">{t_profit:+.2f} €</div><div class="card-sub">Cuenta MT5</div></div>
 </div>
 
 <div class="grid-3">
   <div class="card" id="equity-card">
-    <div class="card-title">{'Equity real MT5' if eq_mode == 'real' else 'Equity paper (tiempo real)'}</div>
+    <div class="card-title">Equity MT5 (tiempo real)</div>
     <div style="display:flex;align-items:baseline;gap:10px">
       <span class="card-value" id="eq-total" style="color:{eq_color}">{eq_total:,.2f} €</span>
       <span style="font-size:13px;color:{eq_color}" id="eq-pct">{change_sign}{eq_pct:.2f}%</span>
@@ -694,7 +693,7 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
     </div>
   </div>
   <div class="card">
-    <div class="card-title">Winrate paper trading</div>
+    <div class="card-title">Winrate sesión</div>
     <div class="card-value" style="color:{wr_color}">{wr_pct:.0f}%</div>
     <div class="card-sub">✅ {wins_n} wins · ❌ {losses_n} losses · ⏳ {open_n} abiertas</div>
   </div>
@@ -748,76 +747,12 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
   </table>
 </div>
 
-<div id="real-mode-banner" style="display:{'none' if not self.auto_execute_enabled else 'flex'};background:rgba(248,81,73,.12);border:1px solid #f85149;border-radius:8px;padding:14px 18px;margin-bottom:20px;align-items:center;gap:12px">
-  <span style="font-size:18px">⚠️</span>
-  <div>
-    <div style="color:#f85149;font-weight:700;font-size:14px">MODO REAL ACTIVO — Las señales se ejecutan automáticamente en MT5</div>
-    <div style="color:#8b949e;font-size:12px;margin-top:2px">Confianza mínima: MEDIUM-HIGH · Las órdenes usan dinero real de la cuenta conectada</div>
-  </div>
-  <button onclick="disableReal()" style="margin-left:auto;background:rgba(248,81,73,.2);color:#f85149;border:1px solid #f85149;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">Desactivar</button>
-</div>
-
 <div class="footer">
   <span>Puerto: <a href="http://localhost:{port}">:{port}</a> · <a href="/api/metrics">API JSON</a> · <a href="/api/export">Export CSV</a></span>
-  <span id="exec-status">{'🔴 Modo real ACTIVO' if self.auto_execute_enabled else '🟡 Paper trading · Solo señales Discord'}</span>
-</div>
-
-<div style="position:fixed;bottom:24px;right:24px;z-index:999">
-  <button id="real-btn" onclick="{'disableReal()' if self.auto_execute_enabled else 'confirmReal()'}"
-    style="background:{'rgba(248,81,73,.15)' if self.auto_execute_enabled else 'rgba(63,185,80,.15)'};
-           color:{'#f85149' if self.auto_execute_enabled else '#3fb950'};
-           border:1px solid {'#f85149' if self.auto_execute_enabled else '#3fb950'};
-           padding:10px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;
-           box-shadow:0 4px 12px rgba(0,0,0,.4)">
-    {'🔴 Desactivar modo real' if self.auto_execute_enabled else '🟢 Activar modo real'}
-  </button>
-</div>
-
-<div id="confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#161b22;border:1px solid #f85149;border-radius:12px;padding:32px;max-width:480px;width:90%;text-align:center">
-    <div style="font-size:32px;margin-bottom:16px">⚠️</div>
-    <div style="font-size:18px;font-weight:700;color:#f0f6fc;margin-bottom:12px">Activar Modo Real</div>
-    <div style="color:#8b949e;font-size:14px;line-height:1.6;margin-bottom:24px">
-      Al activar el modo real, el bot ejecutará órdenes automáticamente en la cuenta de
-      <strong style="color:#e6edf3">MetaTrader 5 conectada</strong>.<br><br>
-      Las señales con confianza <strong style="color:#58a6ff">MEDIUM-HIGH o HIGH</strong> abrirán
-      posiciones reales usando el riesgo configurado (0.5–0.75% por trade).<br><br>
-      <strong style="color:#f85149">Esto implica pérdidas o ganancias reales de dinero.</strong>
-    </div>
-    <div style="display:flex;gap:12px;justify-content:center">
-      <button onclick="cancelReal()"
-        style="background:transparent;color:#8b949e;border:1px solid #30363d;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px">
-        Cancelar
-      </button>
-      <button onclick="enableReal()"
-        style="background:#f85149;color:white;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600">
-        Sí, activar modo real
-      </button>
-    </div>
-  </div>
+  <span id="exec-status">{'✅ Auto-ejecución MT5 activa' if self.auto_execute_enabled else '⏸ Auto-ejecución desactivada (AUTO_EXECUTE_SIGNALS=0)'}</span>
 </div>
 
 <script>
-function confirmReal() {{
-  document.getElementById('confirm-modal').style.display = 'flex';
-}}
-function cancelReal() {{
-  document.getElementById('confirm-modal').style.display = 'none';
-}}
-function enableReal() {{
-  document.getElementById('confirm-modal').style.display = 'none';
-  fetch('/api/enable-real').then(r => r.json()).then(d => {{
-    if (d.ok) location.reload();
-  }});
-}}
-function disableReal() {{
-  if (!confirm('¿Desactivar el modo real y volver a paper trading?')) return;
-  fetch('/api/disable-real').then(r => r.json()).then(d => {{
-    if (d.ok) location.reload();
-  }});
-}}
-
-// ── Equity Chart (Chart.js) ───────────────────────────────────────────────
 (function() {{
   try {{
     var eqData = {eq_pts_json};
@@ -955,6 +890,12 @@ setTimeout(()=>location.reload(),30000);
             try:
                 self._cleanup_old_data()
                 self._update_simulated_positions()   # actualizar P&L en tiempo real
+                # Sincronizar equity y acciones móviles (accept/reject)
+                try:
+                    from services.mobile_store import get_mobile_store
+                    get_mobile_store().sync_dashboard(self)
+                except Exception as ms_err:
+                    logger.debug(f"Mobile store sync: {ms_err}")
                 if self.dashboard_config['enable_persistence']:
                     self._save_persisted_data()
                 time.sleep(self.dashboard_config['update_interval'])
@@ -1022,30 +963,8 @@ setTimeout(()=>location.reload(),30000);
                         else:
                             ev.final_status = 'open'
 
-                    # ── Acumular balance paper cuando se cierra una señal ──────
+                    # Notificar al circuit breaker al cerrar señal
                     if prev_status not in ('win', 'loss') and ev.final_status in ('win', 'loss'):
-                        risk_pct = float(os.getenv('MT5_RISK_PCT', '0.5')) / 100.0
-                        base = self.metrics.paper_balance if self.metrics.paper_balance > 0 else (self.metrics.paper_balance_base or 5000.0)
-                        rr = abs(ev.tp - ev.entry) / risk if risk > 0 else 1.0
-
-                        # Descontar coste del R:R efectivo
-                        pip_sizes = {'EURUSD': 0.0001, 'XAUUSD': 0.1, 'BTCEUR': 1.0}
-                        pip_size  = pip_sizes.get(ev.symbol, 0.0001)
-                        cost_pips = get_round_trip_cost_pips(ev.symbol)
-                        tp_pips   = abs(ev.tp - ev.entry) / pip_size
-                        sl_pips   = abs(ev.entry - ev.sl) / pip_size
-                        tp_net    = max(0.0, tp_pips - cost_pips)
-                        sl_net    = sl_pips + cost_pips   # pérdida se hace mayor
-
-                        if ev.final_status == 'win':
-                            rr_net = tp_net / sl_pips if sl_pips > 0 else rr
-                            self.metrics.paper_balance = base + base * risk_pct * rr_net
-                        else:
-                            rr_loss = sl_net / sl_pips if sl_pips > 0 else 1.0
-                            self.metrics.paper_balance = base - base * risk_pct * rr_loss
-
-                        # ── Notificar al circuit breaker ──────────────────────
-                        # Calcular pips aproximados para el registro
                         try:
                             from core.circuit_breaker import get_circuit_breaker
                             pip_sizes = {'EURUSD': 0.0001, 'XAUUSD': 0.1, 'BTCEUR': 1.0}
@@ -1067,76 +986,34 @@ setTimeout(()=>location.reload(),30000);
 
     def get_equity_snapshot(self) -> Dict:
         """
-        Devuelve un snapshot de la equity actual.
-
-        Modo paper:
-          balance   = balance MT5 base + P&L acumulado de señales cerradas
-          floating  = P&L no realizado de señales OPEN actualmente (en €)
-          total     = balance + floating  ← equity en tiempo real
-
-        Modo real:
-          balance   = balance real MT5
-          floating  = equity MT5 - balance (P&L de posiciones abiertas)
-          total     = equity MT5
+        Snapshot de equity desde la cuenta MT5 (demo o real).
+        Sin simulación paper: balance/equity vienen siempre del terminal.
         """
         try:
             import MetaTrader5 as mt5
 
-            is_real = self.auto_execute_enabled
-            risk_pct = float(os.getenv('MT5_RISK_PCT', '0.5')) / 100.0
+            info = mt5.account_info()
+            if not info:
+                raise RuntimeError("MT5 account_info unavailable")
 
-            # Balance base MT5
-            mt5_balance = self.metrics.paper_balance_base or 5000.0
-            mt5_equity  = mt5_balance
-            try:
-                info = mt5.account_info()
-                if info:
-                    mt5_balance = float(info.balance)
-                    mt5_equity  = float(info.equity)
-                    # Inicializar base si aún no está
-                    if self.metrics.paper_balance_base == 0.0:
-                        self.metrics.paper_balance_base = mt5_balance
-                    if self.metrics.paper_balance == 0.0:
-                        self.metrics.paper_balance = mt5_balance
-            except Exception:
-                pass
+            balance = float(info.balance)
+            equity = float(info.equity)
+            margin = float(info.margin)
+            free_margin = float(info.margin_free)
 
-            if is_real:
-                floating = mt5_equity - mt5_balance
-                base     = mt5_balance
-                return {
-                    'mode': 'real',
-                    'balance': mt5_balance,
-                    'floating_pnl': floating,
-                    'total_equity': mt5_equity,
-                    'change': mt5_equity - base,
-                    'change_pct': ((mt5_equity - base) / base * 100) if base > 0 else 0.0,
-                    'base_balance': base,
-                }
+            if self.metrics.paper_balance_base == 0.0:
+                self.metrics.paper_balance_base = balance
 
-            # ── Modo paper ───────────────────────────────────────────────────
-            paper_balance = self.metrics.paper_balance if self.metrics.paper_balance > 0 else mt5_balance
-            base          = self.metrics.paper_balance_base if self.metrics.paper_balance_base > 0 else mt5_balance
-
-            # P&L flotante de señales OPEN (en €)
-            floating_eur = 0.0
-            with self.lock:
-                for ev in self.signal_history:
-                    if ev.final_status != 'open':
-                        continue
-                    if not (ev.entry and ev.sl and ev.tp and ev.shown and ev.unrealized_pnl is not None):
-                        continue
-                    risk_eur = paper_balance * risk_pct
-                    floating_eur += risk_eur * (ev.unrealized_pnl / 100.0)
-
-            total_equity = paper_balance + floating_eur
-            change       = total_equity - base
+            base = self.metrics.paper_balance_base
+            change = equity - base
 
             return {
-                'mode': 'paper',
-                'balance': paper_balance,
-                'floating_pnl': floating_eur,
-                'total_equity': total_equity,
+                'mode': 'mt5',
+                'balance': balance,
+                'floating_pnl': equity - balance,
+                'total_equity': equity,
+                'margin': margin,
+                'free_margin': free_margin,
                 'change': change,
                 'change_pct': (change / base * 100) if base > 0 else 0.0,
                 'base_balance': base,
@@ -1144,9 +1021,17 @@ setTimeout(()=>location.reload(),30000);
 
         except Exception as e:
             logger.debug(f"get_equity_snapshot error: {e}")
+            base = self.metrics.paper_balance_base or 5000.0
             return {
-                'mode': 'paper', 'balance': 5000.0, 'floating_pnl': 0.0,
-                'total_equity': 5000.0, 'change': 0.0, 'change_pct': 0.0, 'base_balance': 5000.0,
+                'mode': 'mt5',
+                'balance': base,
+                'floating_pnl': 0.0,
+                'total_equity': base,
+                'margin': 0.0,
+                'free_margin': base,
+                'change': 0.0,
+                'change_pct': 0.0,
+                'base_balance': base,
             }
 
     def _cleanup_old_data(self):
@@ -1204,13 +1089,10 @@ setTimeout(()=>location.reload(),30000);
 
     def _load_persisted_data(self):
         """
-        Al arrancar, todo empieza desde cero — historial de señales, métricas
-        y balance paper. Cada sesión es completamente independiente.
+        Al arrancar, todo empieza desde cero — historial de señales y métricas.
         El archivo dashboard_data.json se ignora al arrancar.
         """
-        # Intencionalmente vacío: cada sesión empieza limpia.
-        # El balance paper se inicializa desde MT5 en el primer ciclo de _update_simulated_positions.
-        logger.info("Dashboard: nueva sesión — historial y balance paper iniciados desde cero")
+        logger.info("Dashboard: nueva sesión — historial iniciado desde cero")
 
 
 # ── Instancia global ──────────────────────────────────────────────────────────

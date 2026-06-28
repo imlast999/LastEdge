@@ -45,7 +45,6 @@ STRATEGY_REGISTRY = {
     'eurusd_asian_breakout': lambda: _get_eurusd_asian_breakout(),   # mantenida para compatibilidad backtest
     # eurusd_mtf descartada (grid search mayo 2026, PF max 0.42) — ver strategies/experimental/
     'eurusd_mtf':       lambda: _get_eurusd_mtf(),   # mantenida para compatibilidad backtest
-    'eurusd_asian_breakout': lambda: _get_eurusd_asian_breakout(),
     'xauusd':           lambda: get_strategy('XAUUSD'),
     'xauusd_simple':    lambda: get_strategy('XAUUSD'),
     'xauusd_advanced':  lambda: _get_xauusd_advanced(),
@@ -59,7 +58,9 @@ STRATEGY_REGISTRY = {
     'btceur_advanced':       lambda: get_strategy('BTCEUR'),
     'btc_trend_pullback_v1': lambda: _get_btc_trend_pullback(),
     'btceur_weekly_breakout': lambda: _get_btceur_weekly_breakout(),
-    'btceur_regime_momentum': lambda: _get_btceur_regime_momentum(),
+    # btceur_regime_momentum — DESACTIVADA (requiere H4+Daily; replay_engine descarga H1)
+    # Mover a experimental si se quiere preservar el código. Ver nota en _get_btceur_regime_momentum().
+    # 'btceur_regime_momentum': lambda: _get_btceur_regime_momentum(),
     'btcusdt':               lambda: get_strategy('BTCEUR'),
     'btc':                   lambda: get_strategy('BTCEUR'),
 
@@ -103,12 +104,26 @@ def _get_btceur_weekly_breakout():
         return get_strategy('BTCEUR')
 
 def _get_btceur_regime_momentum():
-    try:
-        from strategies.btceur_regime_momentum import BTCEURRegimeMomentumStrategy
-        return BTCEURRegimeMomentumStrategy()
-    except Exception as e:
-        logger.warning(f"BTCEURRegimeMomentumStrategy no disponible: {e}")
-        return get_strategy('BTCEUR')
+    """
+    ESTADO: DESACTIVADA — no operable en backtest H1.
+
+    BTCEURRegimeMomentumStrategy requiere datos H4 y Daily para calcular el
+    régimen de mercado. El ReplayEngine descarga H1 por defecto, por lo que la
+    estrategia genera 0 señales y nunca ha producido resultados válidos.
+
+    Opciones para reactivar:
+      (A) Modificar ReplayEngine para descargar H4/Daily cuando la estrategia
+          lo requiera (a través de un atributo 'required_timeframes').
+      (B) Reimplementar la estrategia usando solo H1 (sin datos MTF).
+      (C) Mover a strategies/experimental/ con documentación de la limitación.
+
+    Mientras no se resuelva, la entrada del STRATEGY_REGISTRY está comentada
+    para que ningún código la invoque accidentalmente.
+    """
+    raise RuntimeError(
+        "btceur_regime_momentum está desactivada. "
+        "Ver docstring de _get_btceur_regime_momentum() en signals.py para opciones de reactivación."
+    )
 
 def _get_eurusd_advanced():
     try:
@@ -214,8 +229,10 @@ def detect_signal(
                 set_btceur_health(status="ERROR", last_error=err_msg)
                 return None, df
             cls_name = strategy_instance.__class__.__name__
-            # Clases válidas para BTCEUR: BTCEURStrategy (baseline) y BTCCycleV1Strategy (nueva)
-            valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy', 'BTCEURRegimeMomentumStrategy')
+            # Clases válidas para BTCEUR: BTCEURStrategy (baseline), BTCTrendPullbackV1Strategy,
+            # BTCEURWeeklyBreakoutStrategy.
+            # BTCEURRegimeMomentumStrategy desactivada — requiere H4+Daily.
+            valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy')
             if cls_name not in valid_btceur_classes:
                 err_msg = f"Estrategia incorrecta: {cls_name} (válidas: {valid_btceur_classes})."
                 logger.error("[CRITICAL][BTCEUR] %s Abortando detección.", err_msg)
