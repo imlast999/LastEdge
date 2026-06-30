@@ -30,6 +30,12 @@ class BaseStrategy(ABC):
     - Decisiones de ejecución
     """
     
+    # Timeframe requerido por la estrategia. Si es None, usa el timeframe
+    # por defecto del replay/backtest (normalmente H1).
+    # Estrategias multi-timeframe como btceur_regime_momentum deben
+    # declarar 'H4' aquí para que el ReplayEngine descargue los datos correctos.
+    required_timeframe: Optional[str] = None
+    
     def __init__(self, name: str):
         self.name = name
         self.default_config = self._get_default_config()

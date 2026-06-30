@@ -58,9 +58,8 @@ STRATEGY_REGISTRY = {
     'btceur_advanced':       lambda: get_strategy('BTCEUR'),
     'btc_trend_pullback_v1': lambda: _get_btc_trend_pullback(),
     'btceur_weekly_breakout': lambda: _get_btceur_weekly_breakout(),
-    # btceur_regime_momentum — DESACTIVADA (requiere H4+Daily; replay_engine descarga H1)
-    # Mover a experimental si se quiere preservar el código. Ver nota en _get_btceur_regime_momentum().
-    # 'btceur_regime_momentum': lambda: _get_btceur_regime_momentum(),
+    # btceur_regime_momentum — reactivada: ahora el ReplayEngine detecta su required_timeframe='H4'
+    'btceur_regime_momentum': lambda: _get_btceur_regime_momentum(),
     'btcusdt':               lambda: get_strategy('BTCEUR'),
     'btc':                   lambda: get_strategy('BTCEUR'),
 

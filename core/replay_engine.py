@@ -116,6 +116,26 @@ class ReplayEngine:
         start_time = time.time()
         
         try:
+            # Auto-detectar estrategia si no se especifica
+            if strategy is None:
+                strategy = self._auto_detect_strategy(symbol)
+            
+            # Resolver timeframe efectivo ANTES de descargar datos:
+            # si la estrategia declara required_timeframe, usar ese; si no, usar el timeframe pasado.
+            effective_timeframe = timeframe
+            try:
+                from signals import STRATEGY_REGISTRY
+                factory = STRATEGY_REGISTRY.get(strategy)
+                if factory is not None:
+                    strategy_instance = factory()
+                    if hasattr(strategy_instance, 'required_timeframe') and strategy_instance.required_timeframe:
+                        effective_timeframe = strategy_instance.required_timeframe
+                        logger.info(f"[WF] Estrategia '{strategy}' requiere timeframe '{effective_timeframe}'")
+            except Exception as e:
+                logger.debug(f"No se pudo resolver required_timeframe para '{strategy}': {e}")
+            
+            logger.info(f"Usando estrategia: {strategy} | timeframe efectivo: {effective_timeframe}")
+            
             # ── Obtener datos históricos ──────────────────────────────────────
             if df_override is not None:
                 # Datos ya proporcionados externamente (walk-forward, etc.)
@@ -134,7 +154,7 @@ class ReplayEngine:
                     'M15': mt5.TIMEFRAME_M15,
                     'M5': mt5.TIMEFRAME_M5,
                 }
-                mt5_timeframe = tf_map.get(timeframe.upper(), mt5.TIMEFRAME_H1)
+                mt5_timeframe = tf_map.get(effective_timeframe.upper(), mt5.TIMEFRAME_H1)
                 df_full = get_candles(symbol, mt5_timeframe, total_bars_needed)
 
             if df_full is None or len(df_full) < self.lookback_window + 10:
@@ -142,12 +162,6 @@ class ReplayEngine:
                 return ReplayStatistics()
             
             logger.info(f"Datos cargados: {len(df_full)} velas")
-            
-            # Auto-detectar estrategia si no se especifica
-            if strategy is None:
-                strategy = self._auto_detect_strategy(symbol)
-            
-            logger.info(f"Usando estrategia: {strategy}")
             
             # Obtener engine (estado limpio por cada run_replay / ventana WF)
             engine = get_trading_engine()
@@ -187,13 +201,25 @@ class ReplayEngine:
                 window = df_full.iloc[i - self.lookback_window:i].copy()
                 
                 # Evaluar señal usando el engine completo
+                # Para backtest: pasar el timestamp de la vela actual para que el
+                # filtro de duplicados use la fecha histórica y no datetime.now().
+                current_bar_time = None
+                if 'time' in window.columns:
+                    try:
+                        current_bar_time = pd.to_datetime(window.iloc[-1]['time'])
+                        if current_bar_time.tzinfo is None:
+                            current_bar_time = current_bar_time.replace(tzinfo=timezone.utc)
+                    except Exception:
+                        current_bar_time = None
+                
                 result = engine.evaluate_signal(
                     window, 
                     symbol, 
                     strategy, 
                     config,
                     skip_duplicate_filter=skip_duplicate_filter,
-                    current_index=i
+                    current_index=i,
+                    current_bar_time=current_bar_time,
                 )
                 
                 stats.bars_analyzed += 1

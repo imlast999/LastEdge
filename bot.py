@@ -52,6 +52,11 @@ from core import (
     is_symbol_active,
     symbol_health,
     set_btceur_health,
+    _,
+    set_language,
+    get_language,
+    get_language_name,
+    get_supported_languages_display,
 )
 
 # Services (consolidado)
@@ -585,6 +590,10 @@ async def on_ready():
         bot.loop.create_task(_session_summary_loop())
         log_event("Session summary loop iniciado (cierre London 17h, NY 22h UTC)")
     
+    # start backtest queue background task
+    bot.loop.create_task(_backtest_queue_loop())
+    log_event("Backtest queue loop iniciado (polling cada 5s)")
+    
     # Print helpful invite URL for adding the bot with application commands scope
     try:
         app_id = bot.application_id or bot.user.id
@@ -998,6 +1007,191 @@ async def _session_summary_loop():
 
 
 # ======================
+# BACKTEST QUEUE LOOP
+# ======================
+
+async def _backtest_queue_loop():
+    """
+    Loop que procesa las tareas de backtesting y Monte Carlo que la app móvil
+    o cualquier otro cliente inserte en la tabla backtest_tasks de SQLite.
+    Verifica la cola cada 5 segundos.
+    """
+    await bot.wait_until_ready()
+    log_event("Backtest queue loop iniciado (verificación cada 5 segundos)")
+
+    db_path = os.path.join(os.path.dirname(__file__), 'bot_state.db')
+
+    while True:
+        try:
+            await asyncio.sleep(5)
+
+            # Buscar tareas PENDING
+            def _check_queue():
+                try:
+                    conn = sqlite3.connect(db_path, timeout=10)
+                    conn.row_factory = sqlite3.Row
+                    c = conn.cursor()
+                    c.execute(
+                        "SELECT id, symbol, strategy, bars, timeframe, cb_losses, cb_pause "
+                        "FROM backtest_tasks WHERE status='PENDING' ORDER BY id ASC LIMIT 1"
+                    )
+                    row = c.fetchone()
+                    if row:
+                        task = dict(row)
+                        # Cambiar a PROCESSING para reclamarla
+                        c.execute(
+                            "UPDATE backtest_tasks SET status='PROCESSING', updated_at=(datetime('now')) WHERE id=?",
+                            (task['id'],)
+                        )
+                        conn.commit()
+                        conn.close()
+                        return task
+                    conn.close()
+                except Exception as e:
+                    logger.error(f"[BacktestQueue] Error revisando cola: {e}")
+                return None
+
+            task = await asyncio.to_thread(_check_queue)
+            if not task:
+                continue
+
+            log_event(f"🔄 Procesando backtest remoto ID {task['id']} ({task['symbol']} - {task['strategy']})")
+
+            # Ejecutar el backtest en un hilo separado
+            def _run_backtest(t):
+                from core.replay_engine import ReplayEngine
+                import json as _json
+
+                try:
+                    lookback = 210 if t['strategy'] in ('eurusd_asian_breakout', 'xauusd_psychological') else \
+                               900 if t['strategy'] in ('btc_trend_pullback_v1', 'btceur_weekly_breakout') else \
+                               1300 if t['strategy'] == 'eurusd_mtf' else 210
+
+                    engine = ReplayEngine(
+                        lookback_window=lookback,
+                        max_forward_bars=120,
+                        cb_consecutive_losses=t['cb_losses'],
+                        cb_pause_bars=t['cb_pause'],
+                    )
+
+                    stats = engine.run_replay(
+                        symbol=t['symbol'],
+                        bars=t['bars'],
+                        strategy=t['strategy'],
+                        timeframe=t.get('timeframe', 'H1') or 'H1',
+                        skip_duplicate_filter=True,
+                    )
+
+                    signals = engine.get_signals()
+                    wins = [s for s in signals if s.result == 'WIN']
+                    losses = [s for s in signals if s.result == 'LOSS']
+                    closed = len(wins) + len(losses)
+                    gp = sum(s.profit_pips or 0 for s in wins)
+                    gl = abs(sum(s.profit_pips or 0 for s in losses))
+                    pf = gp / gl if gl > 0 else float('inf')
+                    pf_str = f"{pf:.2f}" if pf != float('inf') else "∞"
+
+                    # Racha máxima de pérdidas
+                    max_streak = cur = 0
+                    for s in signals:
+                        if s.result == 'LOSS':
+                            cur += 1
+                            max_streak = max(max_streak, cur)
+                        elif s.result == 'WIN':
+                            cur = 0
+
+                    # Simulación Monte Carlo
+                    mc_data = {"status": "omitted", "reason": "less_than_5_trades"}
+                    if closed >= 5:
+                        try:
+                            from core.montecarlo import MonteCarlo, TradeRecord
+                            mc_records = [TradeRecord.from_replay_signal(s) for s in signals if s.result in ('WIN', 'LOSS')]
+                            ruin_threshold = -3000.0 if t['symbol'] == 'BTCEUR' else -300.0
+                            mc = MonteCarlo(n_simulations=5000, ruin_threshold=ruin_threshold)
+                            mc_report = mc.run(mc_records, symbol=t['symbol'])
+                            
+                            mc_data = {
+                                "status": "success",
+                                "prob_profitable": mc_report.prob_profitable,
+                                "prob_ruin": mc_report.prob_ruin,
+                                "ruin_threshold": ruin_threshold,
+                                "p50_drawdown": mc_report.p50_drawdown,
+                                "p75_drawdown": mc_report.p75_drawdown,
+                                "p95_drawdown": mc_report.p95_drawdown,
+                                "p5_equity": mc_report.p5_equity,
+                                "p50_equity": mc_report.p50_equity,
+                                "p95_equity": mc_report.p95_equity,
+                            }
+                        except Exception as mc_err:
+                            logger.error(f"[BacktestQueue] Error MonteCarlo: {mc_err}")
+                            mc_data = {"status": "error", "message": str(mc_err)}
+
+                    # Serializar resultados
+                    results = {
+                        "symbol": t['symbol'],
+                        "strategy": t['strategy'],
+                        "bars_analyzed": stats.bars_analyzed,
+                        "signals_final": stats.signals_final,
+                        "buy_signals": stats.buy_signals,
+                        "sell_signals": stats.sell_signals,
+                        "tp_hits": stats.tp_hits,
+                        "sl_hits": stats.sl_hits,
+                        "pending": stats.pending,
+                        "winrate": stats.winrate,
+                        "profit_factor": pf_str,
+                        "total_pips": stats.total_pips,
+                        "avg_rr": stats.avg_rr,
+                        "max_streak": max_streak,
+                        "cb_activations": stats.cb_activations,
+                        "bars_paused": stats.bars_paused,
+                        "signals_blocked_by_cb": stats.signals_blocked_by_cb,
+                        "monte_carlo": mc_data,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+
+                    # Guardar en base de datos como COMPLETED
+                    conn = sqlite3.connect(db_path, timeout=10)
+                    c = conn.cursor()
+                    c.execute(
+                        "UPDATE backtest_tasks "
+                        "SET status='COMPLETED', results_json=?, updated_at=(datetime('now')) "
+                        "WHERE id=?",
+                        (_json.dumps(results, ensure_ascii=False), t['id'])
+                    )
+                    conn.commit()
+                    conn.close()
+                    return True
+                except Exception as run_err:
+                    logger.error(f"[BacktestQueue] Error ejecutando backtest ID {t['id']}: {run_err}")
+                    try:
+                        conn = sqlite3.connect(db_path, timeout=10)
+                        c = conn.cursor()
+                        c.execute(
+                            "UPDATE backtest_tasks "
+                            "SET status='FAILED', error_message=?, updated_at=(datetime('now')) "
+                            "WHERE id=?",
+                            (str(run_err), t['id'])
+                        )
+                        conn.commit()
+                        conn.close()
+                    except Exception as db_err:
+                        logger.error(f"[BacktestQueue] Error guardando fallo en BD: {db_err}")
+                    return False
+
+            success = await asyncio.to_thread(_run_backtest, task)
+            if success:
+                log_event(f"✅ Backtest remoto ID {task['id']} procesado exitosamente")
+            else:
+                log_event(f"❌ Falló el backtest remoto ID {task['id']}", "ERROR")
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"[BacktestQueue] Excepción general en el loop: {e}")
+            await asyncio.sleep(10)
+
+
+# ======================
 # COMANDOS
 # ======================
 
@@ -1313,6 +1507,29 @@ async def slash_autosignals(
         f"🔍 Autosignals está actualmente **{status_str}**",
         ephemeral=True,
     )
+
+
+@bot.tree.command(name="lang")
+@discord.app_commands.describe(language="Select language / Seleccionar idioma")
+@discord.app_commands.choices(language=[
+    discord.app_commands.Choice(name="🇬🇧 English", value="en"),
+    discord.app_commands.Choice(name="🇪🇸 Español", value="es"),
+])
+async def slash_lang(interaction: discord.Interaction, language: str = "en"):
+    """Set the bot language / Cambiar el idioma del bot (English / Español)."""
+    if interaction.user.id != AUTHORIZED_USER_ID:
+        await interaction.response.send_message("⛔ Not authorized", ephemeral=True)
+        return
+
+    set_language(language)
+    
+    if language == "en":
+        msg = "🌐 Language changed to **English**"
+    else:
+        msg = "🌐 Language changed to **Español**"
+    
+    await interaction.response.send_message(msg, ephemeral=True)
+    log_event(f"Language changed to {language} by user {interaction.user.id}")
 
 
 async def build_pairs_overview_text() -> str:
@@ -2778,6 +2995,28 @@ class ReplayConfigModal(discord.ui.Modal, title="⚙️ Configurar Backtest"):
             if s.result == 'LOSS': cur += 1; max_streak = max(max_streak, cur)
             elif s.result == 'WIN': cur = 0
 
+        # ── Simulación Monte Carlo ─────────────────────────────────────────────
+        mc_summary = "Simulación omitida (menos de 5 trades cerrados)"
+        if closed >= 5:
+            try:
+                from core.montecarlo import MonteCarlo, TradeRecord
+                # Convertir ReplaySignal a TradeRecord
+                mc_records = [TradeRecord.from_replay_signal(s) for s in signals if s.result in ('WIN', 'LOSS')]
+                # Umbral de ruina: -300 pips (Forex) y -3000 pips (Bitcoin/Crypto)
+                ruin_threshold = -3000.0 if sym == 'BTCEUR' else -300.0
+                mc = MonteCarlo(n_simulations=5000, ruin_threshold=ruin_threshold)
+                mc_report = mc.run(mc_records, symbol=sym)
+                
+                mc_summary = (
+                    f"Probabilidad de Beneficio: **{mc_report.prob_profitable*100:.1f}%**\n"
+                    f"Riesgo de Ruina ({ruin_threshold:+.0f} pips): **{mc_report.prob_ruin*100:.1f}%**\n"
+                    f"DD Esperado (p50): **{mc_report.p50_drawdown:.1f} pips**\n"
+                    f"DD Máximo Probable (p95): **{mc_report.p95_drawdown:.1f} pips**"
+                )
+            except Exception as mc_err:
+                logger.error(f"Error en Monte Carlo: {mc_err}")
+                mc_summary = "⚠️ Error ejecutando simulación Monte Carlo"
+
         # ── Construir embed de resultados ─────────────────────────────────────
         has_edge = closed >= 10 and stats.winrate >= 50 and pf >= 1.2 and stats.total_pips > 0
         color = 0x3fb950 if has_edge else (0xd29922 if closed >= 10 else 0x8b949e)
@@ -2829,6 +3068,12 @@ class ReplayConfigModal(discord.ui.Modal, title="⚙️ Configurar Backtest"):
                 ),
                 inline=True,
             )
+
+        embed.add_field(
+            name="Simulación Monte Carlo (5,000 runs)",
+            value=mc_summary,
+            inline=False,
+        )
 
         if closed < 10:
             embed.set_footer(text="⚠️ Pocas señales cerradas — aumenta las velas para más fiabilidad")

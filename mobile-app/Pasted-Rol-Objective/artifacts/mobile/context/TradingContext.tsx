@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { getApiSecret, getApiUrl } from "@/lib/apiConfig";
+import { resolveApiConfig } from "@/lib/apiConfig";
 import { useSettings } from "@/context/SettingsContext";
 import { sendLocalNotification } from "@/services/notifications";
 
@@ -77,15 +77,12 @@ interface TradingContextValue {
 
 // ── API URL ───────────────────────────────────────────────────────────────────
 
-const API_URL = getApiUrl();
-const API_SECRET = getApiSecret();
-
 const TradingContext = createContext<TradingContextValue | null>(null);
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function TradingProvider({ children }: { children: React.ReactNode }) {
-  const { settings, shouldNotify } = useSettings();
+  const { settings, shouldNotify, apiOverrides } = useSettings();
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -113,24 +110,25 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
 
   const safeFetch = useCallback(
     async <T,>(path: string): Promise<T | null> => {
-      if (!API_URL) return null;
-      const res = await fetch(`${API_URL}${path}`, {
-        headers: API_SECRET
+      const { url: apiUrl, token: apiSecret } = resolveApiConfig(apiOverrides);
+      if (!apiUrl) return null;
+      const res = await fetch(`${apiUrl}${path}`, {
+        headers: apiSecret
           ? {
-              Authorization: `Bearer ${API_SECRET}`,
-              "X-Api-Key": API_SECRET,
+              Authorization: `Bearer ${apiSecret}`,
+              "X-Api-Key": apiSecret,
             }
           : {},
       });
       if (!res.ok) throw new Error(`${path} → HTTP ${res.status}`);
       return (await res.json()) as T;
     },
-    []
+    [apiOverrides]
   );
 
   const fetchAllData = useCallback(async () => {
-    // If no server URL is configured, fall back to mock data in dev
-    if (!API_URL) {
+    const { url: apiUrl, token: apiSecret } = resolveApiConfig(apiOverrides);
+    if (!apiUrl) {
       if (__DEV__) {
         const { MOCK_STATUS, MOCK_SIGNALS, MOCK_TRADES, generateMockEquityHistory } =
           await import("@/__mocks__/tradingData");
@@ -226,27 +224,28 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [safeFetch, status, shouldNotify]);
+  }, [safeFetch, status, shouldNotify, apiOverrides]);
 
   useEffect(() => {
     fetchAllData();
     if (!settings.autoRefresh) return;
     const interval = setInterval(fetchAllData, settings.pollIntervalMs);
     return () => clearInterval(interval);
-  }, [fetchAllData, settings.autoRefresh, settings.pollIntervalMs]);
+  }, [fetchAllData, settings.autoRefresh, settings.pollIntervalMs, apiOverrides.url, apiOverrides.token]);
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
   const acceptSignal = useCallback(
     async (id: string) => {
+      const { url: apiUrl, token: apiSecret } = resolveApiConfig(apiOverrides);
       try {
         setLoading(true);
-        const res = await fetch(`${API_URL}/api/signals/${id}/accept`, {
+        const res = await fetch(`${apiUrl}/api/signals/${id}/accept`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(API_SECRET
-              ? { Authorization: `Bearer ${API_SECRET}`, "X-Api-Key": API_SECRET }
+            ...(apiSecret
+              ? { Authorization: `Bearer ${apiSecret}`, "X-Api-Key": apiSecret }
               : {}),
           },
         });
@@ -263,19 +262,20 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     },
-    [fetchAllData]
+    [fetchAllData, apiOverrides]
   );
 
   const rejectSignal = useCallback(
     async (id: string) => {
+      const { url: apiUrl, token: apiSecret } = resolveApiConfig(apiOverrides);
       try {
         setLoading(true);
-        const res = await fetch(`${API_URL}/api/signals/${id}/reject`, {
+        const res = await fetch(`${apiUrl}/api/signals/${id}/reject`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(API_SECRET
-              ? { Authorization: `Bearer ${API_SECRET}`, "X-Api-Key": API_SECRET }
+            ...(apiSecret
+              ? { Authorization: `Bearer ${apiSecret}`, "X-Api-Key": apiSecret }
               : {}),
           },
         });
@@ -292,7 +292,7 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     },
-    [fetchAllData]
+    [fetchAllData, apiOverrides]
   );
 
   const refresh = useCallback(async () => {

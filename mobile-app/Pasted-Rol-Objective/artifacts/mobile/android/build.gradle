@@ -12,6 +12,15 @@ buildscript {
   }
 }
 
+ext {
+    compileSdkVersion = 36
+    minSdkVersion = 24
+    targetSdkVersion = 36
+    REACT_NATIVE_NODE_MODULES_DIR = 'C:/BOT-MT5/mobile-app/Pasted-Rol-Objective/node_modules/react-native'
+    REACT_NATIVE_WORKLETS_NODE_MODULES_DIR = 'C:/BOT-MT5/mobile-app/Pasted-Rol-Objective/node_modules/react-native-worklets'
+    reactNativeAndroidRoot = 'C:/BOT-MT5/mobile-app/Pasted-Rol-Objective/node_modules/react-native/android'
+}
+
 allprojects {
   repositories {
     google()

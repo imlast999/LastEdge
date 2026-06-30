@@ -64,6 +64,15 @@ from .journal import (
     get_journal,
 )
 
+from .i18n import (
+    _,
+    set_language,
+    get_language,
+    get_language_name,
+    get_supported_languages,
+    get_supported_languages_display,
+)
+
 # Aliases for compatibility
 get_engine = get_trading_engine
 

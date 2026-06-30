@@ -141,7 +141,24 @@ class ExecutionService:
             
             # Actualizar estadísticas
             self._update_execution_stats(signal, lot_size, execution_result['success'])
-            
+
+            journal_id = None
+            if execution_result['success']:
+                try:
+                    from core.journal import get_journal
+                    journal_id = get_journal().log_entry(
+                        signal,
+                        confidence=str(signal.get('confidence', 'MEDIUM')),
+                        confidence_score=float(signal.get('confidence_score', 0) or 0),
+                        score=float(signal.get('score', 0) or 0),
+                        lot_size=lot_size,
+                        mt5_ticket=execution_result.get('order_id'),
+                        mode='live',
+                        notes='Ejecutado vía ExecutionService',
+                    )
+                except Exception as journal_err:
+                    logger.warning(f"Trade journal log_entry: {journal_err}")
+
             return ExecutionResult(
                 success=execution_result['success'],
                 order_id=execution_result.get('order_id'),
@@ -151,7 +168,8 @@ class ExecutionService:
                     'lot_size': lot_size,
                     'order_request': order_request,
                     'mt5_result': execution_result.get('mt5_result'),
-                    'validation': validation_result
+                    'validation': validation_result,
+                    'journal_id': journal_id,
                 },
                 execution_time=execution_time
             )

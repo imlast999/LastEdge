@@ -1,37 +1,47 @@
 import { BlurView } from "expo-blur";
-import { isLiquidGlassAvailable } from "expo-glass-effect";
-import { Tabs } from "expo-router";
-import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
-import { SymbolView } from "expo-symbols";
+import { Tabs, router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import {
+  Platform,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  useColorScheme,
+} from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 
-function NativeTabLayout() {
+// ── Botón de ajustes que aparece en el header de todas las pantallas ──────────
+function SettingsButton() {
+  const colors = useColors();
   return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
-        <Label>Dashboard</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="signals">
-        <Icon sf={{ default: "bell", selected: "bell.fill" }} />
-        <Label>Señales</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="history">
-        <Icon sf={{ default: "list.bullet", selected: "list.bullet" }} />
-        <Label>Historial</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="settings">
-        <Icon sf={{ default: "gearshape", selected: "gearshape.fill" }} />
-        <Label>Ajustes</Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <TouchableOpacity
+      onPress={() => router.push("/settings")}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      style={styles.settingsBtn}
+      accessibilityLabel="Abrir ajustes"
+      accessibilityRole="button"
+    >
+      <Feather name="settings" size={22} color={colors.foreground} />
+    </TouchableOpacity>
   );
 }
 
+// ── Opciones de header compartidas ───────────────────────────────────────────
+function sharedHeaderOptions(colors: ReturnType<typeof useColors>) {
+  return {
+    headerShown: true,
+    headerStyle: {
+      backgroundColor: colors.background,
+    },
+    headerTintColor: colors.foreground,
+    headerShadowVisible: false,
+    headerRight: () => <SettingsButton />,
+  };
+}
+
+// ── Layout estándar Android / Web ─────────────────────────────────────────────
 function ClassicTabLayout() {
   const colors = useColors();
   const colorScheme = useColorScheme();
@@ -39,12 +49,18 @@ function ClassicTabLayout() {
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
+  const headerOpts = sharedHeaderOptions(colors);
+
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
-        headerShown: false,
+        headerShown: true,
+        headerStyle: headerOpts.headerStyle,
+        headerTintColor: headerOpts.headerTintColor,
+        headerShadowVisible: false,
+        headerRight: () => <SettingsButton />,
         tabBarStyle: {
           position: "absolute",
           backgroundColor: isIOS ? "transparent" : colors.background,
@@ -67,52 +83,39 @@ function ClassicTabLayout() {
           ) : null,
       }}
     >
+      {/* ── Tab 1: Dashboard ── */}
       <Tabs.Screen
         name="index"
         options={{
           title: "Dashboard",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="chart.bar.fill" tintColor={color} size={22} />
-            ) : (
-              <Feather name="bar-chart-2" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color }) => <Feather name="bar-chart-2" size={22} color={color} />,
         }}
       />
+
+      {/* ── Tab 2: Trades (Pendientes + Cerradas) ── */}
       <Tabs.Screen
-        name="signals"
+        name="trades"
         options={{
-          title: "Señales",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="bell.fill" tintColor={color} size={22} />
-            ) : (
-              <Feather name="bell" size={22} color={color} />
-            ),
+          title: "Trades",
+          tabBarIcon: ({ color }) => <Feather name="repeat" size={22} color={color} />,
         }}
       />
+
+      {/* ── Tab 3: Backtests ── */}
       <Tabs.Screen
-        name="history"
+        name="backtests"
         options={{
-          title: "Historial",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="list.bullet" tintColor={color} size={22} />
-            ) : (
-              <Feather name="list" size={22} color={color} />
-            ),
+          title: "Backtests",
+          tabBarIcon: ({ color }) => <Feather name="activity" size={22} color={color} />,
         }}
       />
+
+      {/* ── Pantalla de Ajustes: oculta de la tab bar, accesible por push ── */}
       <Tabs.Screen
         name="settings"
         options={{
           title: "Ajustes",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="gearshape.fill" tintColor={color} size={22} />
-            ) : (
-              <Feather name="settings" size={22} color={color} />
-            ),
+          href: null, // oculto de la barra de navegación
         }}
       />
     </Tabs>
@@ -120,8 +123,12 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
   return <ClassicTabLayout />;
 }
+
+const styles = StyleSheet.create({
+  settingsBtn: {
+    marginRight: 16,
+    padding: 2,
+  },
+});

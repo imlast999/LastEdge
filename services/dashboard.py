@@ -11,7 +11,7 @@ import threading
 import time
 
 try:
-    from core import active_symbols
+    from core import active_symbols, set_language, get_language, get_language_name, get_supported_languages_display
 except Exception:
     active_symbols = {}
 
@@ -124,10 +124,42 @@ class DashboardService:
             dashboard_service = self
 
             class Handler(BaseHTTPRequestHandler):
+                def _get_lang_from_cookie(self) -> str:
+                    """Parse 'lang' cookie from request headers. Default: 'en'."""
+                    cookie_header = self.headers.get('Cookie', '')
+                    for part in cookie_header.split(';'):
+                        part = part.strip()
+                        if part.startswith('lang='):
+                            val = part.split('=', 1)[1].strip()
+                            return val if val in ('en', 'es') else 'en'
+                    return 'en'
+
                 def do_GET(self):
                     try:
+                        # ── Language-switch endpoint ──────────────────────────────────
+                        if self.path.startswith('/api/set-language'):
+                            from urllib.parse import urlparse, parse_qs
+                            qs = parse_qs(urlparse(self.path).query)
+                            lang = qs.get('lang', ['en'])[0]
+                            if lang in ('en', 'es'):
+                                set_language(lang)
+                            # Set cookie + redirect back
+                            from http.cookies import SimpleCookie
+                            c = SimpleCookie()
+                            c['lang'] = lang
+                            c['lang']['path'] = '/'
+                            c['lang']['max-age'] = 31536000  # 1 year
+                            redirect = qs.get('redirect', ['/'])[0]
+                            self.send_response(302)
+                            self.send_header('Location', redirect)
+                            self.send_header('Set-Cookie', c['lang'].OutputString())
+                            self.end_headers()
+                            return
+
                         if self.path in ('/', '/dashboard'):
-                            body = dashboard_service.get_dashboard_html().encode('utf-8')
+                            # Pass language from cookie to HTML generator
+                            lang = self._get_lang_from_cookie()
+                            body = dashboard_service.get_dashboard_html(lang=lang).encode('utf-8')
                             self.send_response(200)
                             self.send_header('Content-type', 'text/html; charset=utf-8')
                             self.end_headers()
@@ -426,8 +458,11 @@ class DashboardService:
             logger.debug(f"Error getting real positions: {e}")
             return []
 
-    def get_dashboard_html(self) -> str:
+    def get_dashboard_html(self, lang: str = 'en') -> str:
         try:
+            # Apply language setting for this request
+            set_language(lang)
+            
             metrics   = self.get_current_metrics()
             history   = self.get_signal_history(hours=168)          # para CSV/export
             session_history = self.get_signal_history(hours=24, session_only=True)  # solo sesión actual para tabla
@@ -658,12 +693,20 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
 .filter-bar{{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}}
 .filter-btn{{background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:20px;font-size:12px;cursor:pointer;transition:all .15s}}
 .filter-btn.active{{background:var(--blue);color:#0d1117;border-color:var(--blue);font-weight:600}}
+.lang-bar{{display:flex;gap:4px;margin-bottom:4px;justify-content:flex-end}}
+.lang-btn{{display:inline-block;padding:2px 6px;border-radius:4px;font-size:16px;text-decoration:none;opacity:0.4;transition:opacity.15s}}
+.lang-btn:hover{{opacity:0.8}}
+.lang-btn.lang-active{{opacity:1.0;background:rgba(88,166,255,.15)}}
 </style></head>
 <body><div class="page">
 <div class="topbar">
   <h1>🤖 Trading Bot <span style="color:var(--muted);font-weight:400">/ Dashboard</span></h1>
   <div class="meta">
-    <div><span class="dot-live"></span>En vivo · actualiza cada 30s</div>
+    <div class="lang-bar">
+      <a href="/api/set-language?lang=en&redirect=/" title="English" class="lang-btn {'lang-active' if lang == 'en' else ''}">🇬🇧</a>
+      <a href="/api/set-language?lang=es&redirect=/" title="Español" class="lang-btn {'lang-active' if lang == 'es' else ''}">🇪🇸</a>
+    </div>
+    <div><span class="dot-live"></span>{'Live · updates every 30s' if lang == 'en' else 'En vivo · actualiza cada 30s'}</div>
     <div>{now_str}</div>
     <div style="color:{mt5_col}">{mt5_ind}</div>
   </div>

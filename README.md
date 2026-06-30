@@ -4,7 +4,7 @@
 
 **Quantitative Trading Research Framework**
 
-Backtesting · Optimization · Paper Trading · MT5 Execution · Discord Integration
+Backtesting · Optimization · Paper Trading · MT5 Execution · Discord Integration · Mobile App
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
 ![Phase](https://img.shields.io/badge/Phase-Paper%20Trading-yellow)
@@ -18,7 +18,7 @@ Backtesting · Optimization · Paper Trading · MT5 Execution · Discord Integra
 
 ## What is this?
 
-BOT-MT5 is a personal quantitative research framework built around MetaTrader 5. It combines a strategy engine, a full backtesting pipeline, and a Discord-controlled paper trading system into a single modular codebase.
+BOT-MT5 is a personal quantitative research framework built around MetaTrader 5. It combines a strategy engine, a full backtesting pipeline, a Discord-controlled paper trading system, and a mobile monitoring app into a single modular codebase.
 
 The goal is not to chase high backtest numbers. It is to find strategies that survive when market conditions change — then validate them thoroughly before committing real capital.
 
@@ -42,7 +42,8 @@ Strategy ideas → Backtest → Optimization → Progressive Retest → Walk-For
 | **Progressive Retest** | Auto-classifies strategies at 10k / 15k / 20k candles |
 | **Walk-Forward** | Detects overfitting via rolling TRAIN/TEST windows |
 | **Discord Bot** | 17 slash commands for monitoring, analysis, and control |
-| **Dashboard** | Web UI on `localhost:5000` with real-time equity and signal table |
+| **Dashboard** | Web UI on `localhost:8080` with real-time equity and signal table |
+| **Mobile App** | React Native + Express API for Android monitoring |
 
 ---
 
@@ -79,7 +80,7 @@ flowchart TD
 - Grid search optimizer (~7h run, 200+ parameter combinations)
 - Progressive retest framework (10k / 15k / 20k candles, auto-classification)
 - Walk-forward testing with TRAIN/TEST rolling windows
-- Circuit breaker with dynamic risk scaling
+- Circuit breaker with dynamic risk scaling and disk persistence
 - News event filter (exact 2025–2026 dates: NFP, CPI, FOMC, ECB)
 - Real-time web dashboard with equity simulation and Chart.js curve
 - Discord bot with 17 slash commands
@@ -87,18 +88,24 @@ flowchart TD
 - Automatic weekly summary (Discord, every Monday 08:00 UTC)
 - MT5 watchdog with auto-reconnect (non-blocking asyncio)
 - Trade costs model (spread + commission per symbol)
+- Trailing stops with breakeven, partial close, and dynamic trailing
+- Market opening alerts (London, New York sessions)
+- Session summary system (London close 17h, NY close 22h UTC)
+- Encrypted MT5 credentials via Fernet
+- Mobile app (React Native + Express API) with dashboard, signals, and history
+- Monte Carlo simulation (5000 simulations, ruin probability, drawdown percentiles)
+- Trade journal with SQLite (full trade history with metadata)
+- Backtest queue system (processes tasks from mobile app)
 
 ### 🔄 In Progress
 
 - Paper trading validation (target: ≥ 50 closed trades per strategy)
-- Walk-forward bug fix (windows 2–6 producing 0 signals)
-- `btceur_regime_momentum` investigation (0 signals, possible H4 data issue)
 
 ### 📋 Planned
 
-- Monte Carlo simulation (`core/montecarlo.py`)
 - Position analytics from trade journal
 - Live trading (after paper validation criteria are met)
+- Automated go-live criteria verification (`/go_live_check` command)
 
 ---
 
@@ -123,7 +130,7 @@ All results include real spread + commission costs for a Professional account (F
 | `xauusd_momentum` | XAUUSD | 1.25 | ROBUST, small sample (78 trades) |
 | `btc_trend_pullback_v1` | BTCEUR | 1.21 | CB triggered on 53% of signals |
 | `btceur_weekly_breakout` | BTCEUR | 2.66 | PF inflated by CB; not validated without it |
-| `btceur_regime_momentum` | BTCEUR | — | H4+Daily; 0 signals in backtest (data bug) |
+| `btceur_regime_momentum` | BTCEUR | — | H4+Daily; now functional with `required_timeframe` mechanism |
 
 ### Discarded (`strategies/experimental/`)
 
@@ -184,24 +191,29 @@ BOT-MT5/
 ├── rules_config.json           # Per-symbol configuration
 │
 ├── core/
-│   ├── engine.py               # Main signal engine
+│   ├── engine.py               # Main signal engine + BotState
 │   ├── scoring.py              # Confidence scoring system
 │   ├── risk.py                 # Lot sizing and drawdown protection
 │   ├── filters.py              # Duplicate and cooldown filters
 │   ├── replay_engine.py        # Backtesting replay loop
 │   ├── circuit_breaker.py      # Auto-pause on losing streaks
 │   ├── walkforward.py          # Rolling TRAIN/TEST validation
-│   └── trade_costs.py          # Spread + commission model
+│   ├── trade_costs.py          # Spread + commission model
+│   ├── montecarlo.py           # Monte Carlo simulation (5000 runs)
+│   └── journal.py              # Trade journal with SQLite
 │
 ├── services/
 │   ├── autosignals.py          # Scan loop (every 20s)
-│   ├── dashboard.py            # Web dashboard (port 5000)
+│   ├── dashboard.py            # Web dashboard (port 8080)
 │   ├── execution.py            # MT5 order execution
 │   ├── logging.py              # Session logging system
 │   ├── news_filter.py          # High-impact event blackout
-│   └── commands.py             # Discord slash commands
+│   ├── commands.py             # Discord slash commands
+│   ├── database.py             # SQLite persistence
+│   └── mobile_store.py         # Mobile app data bridge
 │
 ├── strategies/
+│   ├── base.py                 # BaseStrategy abstract class
 │   ├── eurusd.py               # eurusd_simple (active)
 │   ├── xauusd.py               # xauusd_simple + momentum (active)
 │   ├── btceur_new.py           # btceur_simple (active)
@@ -209,22 +221,38 @@ BOT-MT5/
 │   ├── btceur_weekly_breakout.py
 │   ├── btceur_regime_momentum.py
 │   └── experimental/           # Discarded strategies (reference only)
+│       ├── eurusd_asian_breakout.py
+│       ├── eurusd_mtf.py
+│       └── xauusd_psychological.py
+│
+├── mobile-app/
+│   └── Pasted-Rol-Objective/   # React Native + Express API project
+│       ├── mobile/             # Expo React Native app
+│       ├── api-server/         # Express 5 + SQLite backend
+│       └── scripts/            # Build and start scripts
+│
+├── backtest_results/
+│   ├── optimization/           # Grid search JSONs
+│   ├── retests/                # Progressive retest results
+│   ├── walk_forward/           # Walk-forward results
+│   └── monte_carlo/            # Monte Carlo results
 │
 ├── tests/
 │   ├── backtest_runner.py      # CLI backtest with CB simulation
 │   ├── optimize_strategies.py  # Grid search
 │   ├── apply_optimization.py   # Apply optimal params to strategy files
-│   ├── run_progressive_retests.py   # Multi-horizon 10k/15k/20k
-│   ├── run_long_retests.py     # Long retests with persistent logging
-│   ├── run_full_backtest.bat   # Run all backtests + walk-forward
+│   ├── run_progressive_retests.py
+│   ├── run_long_retests.py
+│   ├── run_full_backtest.bat
 │   ├── run_progressive_retests.bat
 │   └── run_optimization.bat
 │
-└── backtest_results/
-    ├── optimization/           # Grid search JSONs
-    ├── progressive_retests/    # Session folders (10k/15k/20k results)
-    ├── walk_forward/           # Walk-forward results (planned)
-    └── monte_carlo/            # Monte Carlo results (planned)
+├── start_bot.bat               # Start Python bot
+├── start_all.bat               # Start bot + API server
+├── install_requirements.bat    # Dependency installer
+├── requirements.txt            # Python dependencies
+├── .env.example                # Environment template
+└── .gitignore
 ```
 
 ---
@@ -269,7 +297,7 @@ MT5_SERVER=YourBroker-Demo
 
 ```bash
 start_bot.bat
-# Dashboard available at http://localhost:5000
+# Dashboard available at http://localhost:8080
 # Bot responds to Discord slash commands
 ```
 
@@ -301,7 +329,7 @@ tests\run_full_backtest.bat
 tests\run_optimization.bat
 
 # Apply optimal parameters found
-python tests/apply_optimization.py backtest_results/optimization/optimization_YYYYMMDD.json
+python tests\apply_optimization.py backtest_results/optimization/optimization_YYYYMMDD.json
 ```
 
 ### Progressive retest (multi-horizon validation)
@@ -311,6 +339,22 @@ python tests/apply_optimization.py backtest_results/optimization/optimization_YY
 tests\run_progressive_retests.bat
 
 # Results saved to backtest_results/progressive_retests/session_YYYYMMDD_HHMMSS/
+```
+
+### Mobile app (Android)
+
+```bash
+# Start the API server (separate terminal)
+start_all.bat
+
+# Or manually:
+cd mobile-app\Pasted-Rol-Objective\artifacts\api-server
+pnpm run build
+pnpm run start
+
+# Build APK:
+cd mobile-app\Pasted-Rol-Objective
+pnpm run build:apk:release
 ```
 
 ---
@@ -346,7 +390,7 @@ tests\run_progressive_retests.bat
 
 ### Circuit Breaker
 
-Implemented in `core/circuit_breaker.py`. Resets on each bot restart.
+Implemented in `core/circuit_breaker.py`. Persists state to disk; survives bot restarts (pauses older than 48h are discarded).
 
 | Condition | Action |
 |---|---|
@@ -369,6 +413,16 @@ Pauses trading 30 minutes before and after high-impact events. Exact dates hardc
 | ECB Meeting | EURUSD | 12:15 |
 | ECB Press Conference | EURUSD | 12:45 |
 
+### Trailing Stops
+
+Automatic trailing stop management (`trailing_stops.py`), updated every 30s:
+
+| Profit Level | Action |
+|---|---|
+| ≥ 50% of TP | Move SL to breakeven |
+| ≥ 75% of TP | Activate trailing stop |
+| ≥ 100% of TP | Close 50% of position |
+
 ### Operational limits
 
 | Rule | Value |
@@ -380,6 +434,62 @@ Pauses trading 30 minutes before and after high-impact events. Exact dates hardc
 | XAUUSD cooldown | 240 minutes |
 | BTCEUR cooldown | 60 minutes |
 | XAUUSD session | 06:00–22:00 UTC only |
+
+---
+
+## Code Quality & Known Issues
+
+### ✅ Implemented correctly
+
+| Component | Status |
+|---|---|
+| Circuit Breaker (disk persistence, risk scaling) | ✅ Robust |
+| Backtesting / Replay Engine (real costs included) | ✅ Functional |
+| Scoring / Confidence System | ✅ Functional (temporal consistency calculated from candle alignment) |
+| Trailing Stops (breakeven, partial close, trailing) | ✅ Implemented |
+| Market Opening Alerts (London, NY) | ✅ Implemented |
+| News Filter (2025–2026 dates) | ✅ Complete |
+| Risk Manager (per-symbol limits) | ✅ Functional |
+| Session Summary (London 17h, NY 22h UTC) | ✅ Implemented |
+| Discord Bot (17 slash commands) | ✅ Operational |
+| Monte Carlo Simulation (5000 runs) | ✅ Implemented |
+| Trade Journal (SQLite) | ✅ Implemented |
+| Walk-Forward Testing | ✅ Implemented (with known bug) |
+| MT5 Watchdog (non-blocking asyncio) | ✅ Operational |
+| Encrypted Credentials (Fernet) | ✅ Implemented |
+| Mobile App (React Native + Express API) | ✅ Implemented |
+
+### ✅ Recently Fixed (June 2026)
+
+1. **Walk-forward windows 2–6 producing 0 signals** — Fixed by:
+   - Passing historical bar timestamps to `DuplicateFilter` instead of using `datetime.now()`
+   - Clearing `duplicate_filter.recent_signals` in `reset_replay_state()` between windows
+   - Files: `core/engine.py`, `core/replay_engine.py`
+
+2. **`btceur_regime_momentum` — 0 signals in backtest** — Fixed by:
+   - Adding `required_timeframe` attribute to `BaseStrategy`
+   - Setting `required_timeframe = 'H4'` in `BTCEURRegimeMomentumStrategy`
+   - Making `ReplayEngine` respect strategy timeframes when downloading data
+   - Files: `strategies/base.py`, `strategies/btceur_regime_momentum.py`, `core/replay_engine.py`
+
+3. **Duplicate key in `STRATEGY_REGISTRY`** — Fixed by:
+   - Reactivating the commented-out `'btceur_regime_momentum'` entry
+   - Updated comment to reflect new `required_timeframe` mechanism
+   - File: `signals.py`
+
+4. **Mobile app dynamic strategy loading** — Added:
+   - `GET /api/strategies` endpoint in API server
+   - `fetchAvailableStrategies()` in mobile API client
+   - Strategy list now includes all registered strategies with symbol grouping
+   - Files: `mobile-app/.../api-server/src/routes/bot.ts`, `mobile-app/.../services/backtestApi.ts`
+
+### 🟡 Areas for improvement
+
+1. **Unify trade counters** — `ConsolidatedFilters.daily_trades` in `core/filters.py` is independent from `state.trades_today` in `bot.py`. Two parallel counting systems can desynchronize.
+
+2. **`get_stats()` in `filters.py`** — Always reports 0 rejected signals (placeholder). Stats are incomplete.
+
+3. **Automated go-live verification** — The 6 go-live criteria are documented but checked manually. A `/go_live_check` command would eliminate human error.
 
 ---
 
@@ -402,14 +512,11 @@ Pauses trading 30 minutes before and after high-impact events. Exact dates hardc
 ### Current phase — Paper Trading Validation
 - [ ] Accumulate ≥ 50 closed trades per active strategy
 - [ ] Confirm live winrate vs backtest winrate (±10% tolerance)
-- [ ] Fix walk-forward window bug (windows 2–6 returning 0 signals)
-- [ ] Investigate `btceur_regime_momentum` H4 data issue
 
 ### Next phase — Statistical Confidence
-- [ ] Monte Carlo simulation (`core/montecarlo.py`)
-- [ ] Trade journal with SQLite (`core/journal.py`)
 - [ ] Position analytics (session performance, duration analysis)
 - [ ] Strategy correlation analysis
+- [ ] Automated go-live verification command
 
 ### Long-term — Live Deployment
 - [ ] Meet all 6 go-live validation criteria

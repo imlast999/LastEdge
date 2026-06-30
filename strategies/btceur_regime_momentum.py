@@ -51,6 +51,10 @@ class BTCEURRegimeMomentumStrategy(BaseStrategy):
     alcista estructural y solo opera en la dirección del régimen.
     """
 
+    # Esta estrategia requiere datos H4 como mínimo, porque internamente
+    # resamplea H4 → Daily para el filtro de régimen.
+    required_timeframe: str = 'H4'
+
     def __init__(self):
         super().__init__("BTCEUR_RegimeMomentum")
 

@@ -1,24 +1,45 @@
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { router } from "expo-router";
 
 export type NotificationCategory = "CRITICAL_ERROR" | "NEW_SIGNAL" | "TRADE_CLOSE";
 
-Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    const category = notification.request.content.data?.category as NotificationCategory | undefined;
-    return {
-      shouldShowAlert: true,
-      shouldPlaySound: category === "CRITICAL_ERROR",
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    };
-  },
-});
+type NotificationsModule = typeof import("expo-notifications");
+
+let notificationsModule: NotificationsModule | null = null;
+
+function getNotificationsModule(): NotificationsModule | null {
+  if (notificationsModule) return notificationsModule;
+
+  try {
+    notificationsModule = require("expo-notifications") as NotificationsModule;
+  } catch (error) {
+    console.warn("[Notifications] expo-notifications is unavailable:", error);
+    return null;
+  }
+
+  try {
+    notificationsModule.setNotificationHandler({
+      handleNotification: async (notification) => {
+        const category = notification.request.content.data?.category as NotificationCategory | undefined;
+        return {
+          shouldShowAlert: true,
+          shouldPlaySound: category === "CRITICAL_ERROR",
+          shouldSetBadge: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        };
+      },
+    });
+  } catch (error) {
+    console.warn("[Notifications] Unable to set notification handler:", error);
+  }
+
+  return notificationsModule;
+}
 
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  if (Platform.OS === "web") return null;
+  const Notifications = getNotificationsModule();
+  if (!Notifications || Platform.OS === "web") return null;
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
@@ -76,8 +97,13 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 }
 
 export function setupNotificationListeners(
-  onNotification?: (notification: Notifications.Notification) => void
+  onNotification?: (notification: import("expo-notifications").Notification) => void
 ) {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) {
+    return () => undefined;
+  }
+
   const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
     onNotification?.(notification);
   });
@@ -87,9 +113,9 @@ export function setupNotificationListeners(
     const category = data?.category as NotificationCategory | undefined;
 
     if (category === "NEW_SIGNAL") {
-      router.push("/(tabs)/signals");
+      router.push("/(tabs)/trades");
     } else if (category === "TRADE_CLOSE") {
-      router.push("/(tabs)/history");
+      router.push("/(tabs)/trades");
     } else if (category === "CRITICAL_ERROR") {
       router.push("/(tabs)");
     }
@@ -107,6 +133,9 @@ export async function sendLocalNotification(
   body: string,
   data?: Record<string, unknown>
 ) {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
+
   await Notifications.scheduleNotificationAsync({
     content: {
       title,

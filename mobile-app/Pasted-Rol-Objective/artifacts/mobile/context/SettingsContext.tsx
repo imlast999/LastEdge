@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 
-const STORAGE_KEY = "@bot_mt5_settings_v1";
+const STORAGE_KEY = "@bot_mt5_settings_v2";
 
 export const POLL_INTERVAL_OPTIONS = [
   { label: "3 s", value: 3000 },
@@ -25,6 +25,12 @@ export interface AppSettings {
   notifyTradeClose: boolean;
   notifyDisconnect: boolean;
   hapticsEnabled: boolean;
+  /** Vacío = usar URL del APK */
+  serverUrl: string;
+  /** Vacío = usar token del APK */
+  serverToken: string;
+  /** Idioma de la app: 'en' | 'es' */
+  language: "en" | "es";
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -35,6 +41,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifyTradeClose: true,
   notifyDisconnect: true,
   hapticsEnabled: true,
+  serverUrl: "",
+  serverToken: "",
+  language: "en",
 };
 
 interface SettingsContextValue {
@@ -43,6 +52,7 @@ interface SettingsContextValue {
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void;
   resetSettings: () => Promise<void>;
   shouldNotify: (category: "NEW_SIGNAL" | "TRADE_CLOSE" | "CRITICAL_ERROR") => boolean;
+  apiOverrides: { url: string; token: string };
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -57,7 +67,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         if (raw) {
           const parsed = JSON.parse(raw) as Partial<AppSettings>;
           setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+          return;
         }
+        return AsyncStorage.getItem("@bot_mt5_settings_v1").then((legacy) => {
+          if (legacy) {
+            const parsed = JSON.parse(legacy) as Partial<AppSettings>;
+            setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+          }
+        });
       })
       .catch(() => {})
       .finally(() => setLoaded(true));
@@ -105,9 +122,21 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     [settings]
   );
 
+  const apiOverrides = useMemo(
+    () => ({ url: settings.serverUrl, token: settings.serverToken }),
+    [settings.serverUrl, settings.serverToken]
+  );
+
   const value = useMemo(
-    () => ({ settings, loaded, updateSetting, resetSettings, shouldNotify }),
-    [settings, loaded, updateSetting, resetSettings, shouldNotify]
+    () => ({
+      settings,
+      loaded,
+      updateSetting,
+      resetSettings,
+      shouldNotify,
+      apiOverrides,
+    }),
+    [settings, loaded, updateSetting, resetSettings, shouldNotify, apiOverrides]
   );
 
   return (

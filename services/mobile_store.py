@@ -53,6 +53,34 @@ class MobileStore:
                         "ALTER TABLE enhanced_signals "
                         "ADD COLUMN mobile_processed INTEGER DEFAULT 0"
                     )
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS backtest_tasks (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        symbol          TEXT    NOT NULL,
+                        strategy        TEXT    NOT NULL,
+                        bars            INTEGER NOT NULL,
+                        timeframe       TEXT    DEFAULT 'H1',
+                        cb_losses       INTEGER DEFAULT 4,
+                        cb_pause        INTEGER DEFAULT 168,
+                        status          TEXT    NOT NULL DEFAULT 'PENDING',
+                        results_json    TEXT,
+                        error_message   TEXT,
+                        created_at      TEXT    DEFAULT (datetime('now')),
+                        updated_at      TEXT    DEFAULT (datetime('now'))
+                    )
+                """)
+                cols_bt = {r[1] for r in conn.execute("PRAGMA table_info(backtest_tasks)")}
+                if cols_bt and "timeframe" not in cols_bt:
+                    conn.execute(
+                        "ALTER TABLE backtest_tasks "
+                        "ADD COLUMN timeframe TEXT DEFAULT 'H1'"
+                    )
+            # Garantizar trade_journal
+            try:
+                from core.journal import get_journal
+                get_journal(self.db_path)
+            except Exception as journal_err:
+                logger.error(f"[MobileStore] Error inicializando trade_journal: {journal_err}")
         except Exception as e:
             logger.error(f"[MobileStore] Error en migración: {e}")
 
@@ -240,6 +268,55 @@ class MobileStore:
                     "UPDATE enhanced_signals SET status=?, pnl=?, closed_at=?, close_price=? WHERE id=?",
                     (close_reason.upper(), pnl, now, close_price, signal_id),
                 )
+
+                # Calcular P&L en pips para el diario cuantitativo (trade_journal)
+                pip_sizes = {'EURUSD': 0.0001, 'XAUUSD': 0.1, 'BTCEUR': 1.0, 'BTCUSDT': 1.0}
+                pip_size = pip_sizes.get(symbol.upper(), 0.0001)
+                pips = 0.0
+                if entry_price and close_price:
+                    if trade_type.upper() == 'BUY':
+                        pips = (close_price - entry_price) / pip_size
+                    else:
+                        pips = (entry_price - close_price) / pip_size
+
+                result = 'WIN' if pnl > 0 else ('LOSS' if pnl < 0 else 'BREAKEVEN')
+
+                try:
+                    from core.journal import get_journal
+                    closed = get_journal(self.db_path).close_matching_pending(
+                        symbol,
+                        entry_price=entry_price,
+                        close_price=close_price,
+                        result=result,
+                        pnl_pips=pips,
+                        pnl_eur=pnl,
+                        notes=f"Cierre MobileStore · signal_id={signal_id}",
+                    )
+                    if not closed:
+                        get_journal(self.db_path).log_entry(
+                            {
+                                'symbol': symbol,
+                                'type': trade_type,
+                                'entry': entry_price,
+                                'sl': sl_price,
+                                'tp': tp_price,
+                                'strategy_used': strategy or 'unknown',
+                            },
+                            lot_size=lot_size,
+                            mode='live',
+                            notes=f"Apertura+cierre en un paso · signal_id={signal_id}",
+                        )
+                        get_journal(self.db_path).close_matching_pending(
+                            symbol,
+                            entry_price=entry_price,
+                            close_price=close_price,
+                            result=result,
+                            pnl_pips=pips,
+                            pnl_eur=pnl,
+                        )
+                except Exception as journal_err:
+                    logger.warning(f"[MobileStore] trade_journal: {journal_err}")
+
             self._closed_logged.add(signal_id)
         except Exception as e:
             logger.warning(f"[MobileStore] log_closed_trade: {e}")

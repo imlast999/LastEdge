@@ -241,6 +241,51 @@ class TradeJournal:
             logger.error(f"[Journal] Error en log_close: {e}")
             return False
 
+    def close_matching_pending(
+        self,
+        symbol: str,
+        *,
+        entry_price: float,
+        close_price: float,
+        result: str,
+        pnl_pips: float = 0.0,
+        pnl_eur: float = 0.0,
+        mt5_ticket: Optional[int] = None,
+        notes: str = '',
+    ) -> bool:
+        """Cierra el trade PENDING que coincida por ticket MT5 o por entrada."""
+        try:
+            with self._conn() as conn:
+                if mt5_ticket:
+                    row = conn.execute(
+                        """SELECT id FROM trade_journal
+                           WHERE mt5_ticket=? AND result='PENDING'
+                           ORDER BY id DESC LIMIT 1""",
+                        (mt5_ticket,),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        """SELECT id FROM trade_journal
+                           WHERE symbol=? AND result='PENDING'
+                             AND ABS(entry_price - ?) < 0.00001
+                           ORDER BY id DESC LIMIT 1""",
+                        (symbol.upper(), entry_price),
+                    ).fetchone()
+                if not row:
+                    return False
+                trade_id = row[0]
+            return self.log_close(
+                trade_id,
+                result=result,
+                close_price=close_price,
+                pnl_pips=pnl_pips,
+                pnl_eur=pnl_eur,
+                notes=notes,
+            )
+        except Exception as e:
+            logger.error(f"[Journal] close_matching_pending: {e}")
+            return False
+
     # ── Lectura y estadísticas ────────────────────────────────────────────────
 
     def get_report(

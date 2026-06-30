@@ -233,7 +233,8 @@ class MonteCarlo:
     ):
         self.n_simulations    = n_simulations
         self.with_replacement = with_replacement
-        self.ruin_threshold   = ruin_threshold
+        # Enforce ruin threshold is negative pips relative to start
+        self.ruin_threshold   = -abs(ruin_threshold)
         self._rng = random.Random(seed)
 
     # ── API pública ───────────────────────────────────────────────────────────
@@ -344,8 +345,13 @@ class MonteCarlo:
         total_wins_pips  = 0.0
         total_loss_pips  = 0.0
         ruined = False
+        processed_count = 0
 
         for trade in sequence:
+            if ruined:
+                break
+
+            processed_count += 1
             equity += trade.profit_pips
 
             if equity > peak:
@@ -359,11 +365,11 @@ class MonteCarlo:
             if dd_pct > max_dd_pct:
                 max_dd_pct = dd_pct
 
-            # Verificar ruina
-            if not ruined and -current_dd <= self.ruin_threshold:
+            # Verificar ruina: si la equity acumulada cae por debajo del umbral negativo de ruina
+            if equity <= self.ruin_threshold:
                 ruined = True
 
-            # Acumuladores de PF
+            # Acumuladores de PF/WR
             if trade.profit_pips > 0:
                 wins += 1
                 total_wins_pips += trade.profit_pips
@@ -373,7 +379,7 @@ class MonteCarlo:
         pf = total_wins_pips / total_loss_pips if total_loss_pips > 0 else (
             float('inf') if total_wins_pips > 0 else 0.0
         )
-        wr = (wins / len(sequence)) * 100
+        wr = (wins / processed_count) * 100 if processed_count > 0 else 0.0
 
         return SimulationPath(
             final_equity=equity,

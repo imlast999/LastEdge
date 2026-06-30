@@ -7,6 +7,7 @@ import {
   Platform,
   TouchableOpacity,
   Alert,
+  TextInput,
   ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,9 +28,9 @@ import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle } from "@/components/settings/SettingsToggle";
 import { ApiErrorBanner } from "@/components/ApiErrorBanner";
 import {
-  getApiUrl,
-  getApiSecret,
-  hasApiSecret,
+  getBuildApiUrl,
+  getBuildApiSecret,
+  resolveApiConfig,
   maskSecret,
   getAppVersion,
 } from "@/lib/apiConfig";
@@ -51,13 +52,15 @@ export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { status, loading, refresh, lastSyncAt, usingMockData } = useTrading();
-  const { settings, updateSetting, resetSettings } = useSettings();
+  const { settings, updateSetting, resetSettings, apiOverrides } = useSettings();
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [permStatus, setPermStatus] = useState<string | null>(null);
+  const [urlDraft, setUrlDraft] = useState(settings.serverUrl);
+  const [tokenDraft, setTokenDraft] = useState(settings.serverToken);
 
-  const apiUrl = getApiUrl();
+  const effective = resolveApiConfig(apiOverrides);
   const connected = status?.connected ?? false;
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
@@ -69,7 +72,7 @@ export default function SettingsScreen() {
     if (settings.hapticsEnabled) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
-    const result = await testServerConnection();
+    const result = await testServerConnection(apiOverrides);
     setTesting(false);
     if (result.ok && result.status) {
       const s = result.status;
@@ -79,7 +82,13 @@ export default function SettingsScreen() {
     } else {
       setTestResult(result.error ?? "No se pudo conectar al servidor");
     }
-  }, [settings.hapticsEnabled]);
+  }, [settings.hapticsEnabled, apiOverrides]);
+
+  const saveConnection = useCallback(() => {
+    updateSetting("serverUrl", urlDraft.trim());
+    updateSetting("serverToken", tokenDraft.trim());
+    Alert.alert("Guardado", "Conexión actualizada. La app recargará datos automáticamente.");
+  }, [urlDraft, tokenDraft, updateSetting]);
 
   const handleRequestPermissions = useCallback(async () => {
     const token = await registerForPushNotificationsAsync();
@@ -147,6 +156,45 @@ export default function SettingsScreen() {
 
       {/* ── Servidor ── */}
       <SettingsSection title="Servidor">
+        <View style={[styles.connEdit, { borderBottomColor: colors.border }]}>
+          <Text style={[styles.connLabel, { color: colors.mutedForeground }]}>
+            URL personalizada (vacío = APK)
+          </Text>
+          <TextInput
+            value={urlDraft}
+            onChangeText={setUrlDraft}
+            placeholder={getBuildApiUrl() || "http://192.168.1.X:5000"}
+            placeholderTextColor={colors.mutedForeground}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[
+              styles.connInput,
+              { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.secondary },
+            ]}
+          />
+          <Text style={[styles.connLabel, { color: colors.mutedForeground }]}>
+            Token API personalizado
+          </Text>
+          <TextInput
+            value={tokenDraft}
+            onChangeText={setTokenDraft}
+            placeholder={maskSecret(getBuildApiSecret())}
+            placeholderTextColor={colors.mutedForeground}
+            secureTextEntry
+            autoCapitalize="none"
+            style={[
+              styles.connInput,
+              { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.secondary },
+            ]}
+          />
+          <TouchableOpacity
+            onPress={saveConnection}
+            style={[styles.saveConnBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+          >
+            <Feather name="save" size={15} color={colors.primary} />
+            <Text style={[styles.saveConnText, { color: colors.primary }]}>Guardar conexión</Text>
+          </TouchableOpacity>
+        </View>
         <SettingsRow
           icon="activity"
           label="Estado MT5"
@@ -155,18 +203,18 @@ export default function SettingsScreen() {
         />
         <SettingsRow
           icon="globe"
-          label="URL del servidor"
-          value={apiUrl || "No configurada (recompila el APK)"}
+          label="URL efectiva"
+          value={effective.url || "No configurada"}
         />
         <SettingsRow
           icon="key"
           label="Token API"
           value={
-            hasApiSecret()
-              ? `Configurado · ${maskSecret(getApiSecret())}`
+            effective.token
+              ? `Configurado · ${maskSecret(effective.token)}`
               : "No configurado"
           }
-          valueColor={hasApiSecret() ? colors.connected : colors.pending}
+          valueColor={effective.token ? colors.connected : colors.pending}
         />
         <SettingsRow
           icon="clock"
@@ -302,11 +350,62 @@ export default function SettingsScreen() {
       </SettingsSection>
 
       {/* ── Interfaz ── */}
-      <SettingsSection title="Interfaz">
+      <SettingsSection title={settings.language === 'es' ? "Interfaz" : "Interface"}>
+        {/* ── Language selector ── */}
+        <View style={[styles.intervalBlock, { borderBottomColor: colors.border }]}>
+          <Text style={[styles.intervalLabel, { color: colors.mutedForeground }]}>
+            {settings.language === 'es' ? "Idioma de la app" : "App language"}
+          </Text>
+          <Text style={[styles.connLabel, { color: colors.mutedForeground, marginBottom: 8 }]}>
+            {settings.language === 'es' ? "Cambiar el idioma de la interfaz" : "Change the app interface language"}
+          </Text>
+          <View style={styles.intervalRow}>
+            <TouchableOpacity
+              onPress={() => updateSetting("language", "en")}
+              style={[
+                styles.intervalBtn,
+                {
+                  backgroundColor: settings.language === 'en' ? colors.primary : colors.secondary,
+                  borderColor: settings.language === 'en' ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <Text style={[styles.intervalText, { fontSize: 20 }]}>🇬🇧</Text>
+              <Text
+                style={[
+                  styles.intervalText,
+                  { color: settings.language === 'en' ? colors.primaryForeground : colors.foreground },
+                ]}
+              >
+                English
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => updateSetting("language", "es")}
+              style={[
+                styles.intervalBtn,
+                {
+                  backgroundColor: settings.language === 'es' ? colors.primary : colors.secondary,
+                  borderColor: settings.language === 'es' ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <Text style={[styles.intervalText, { fontSize: 20 }]}>🇪🇸</Text>
+              <Text
+                style={[
+                  styles.intervalText,
+                  { color: settings.language === 'es' ? colors.primaryForeground : colors.foreground },
+                ]}
+              >
+                Español
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
         <SettingsToggle
           icon="smartphone"
-          label="Vibración háptica"
-          description="Feedback al pulsar botones de prueba"
+          label={settings.language === 'es' ? "Vibración háptica" : "Haptic feedback"}
+          description={settings.language === 'es' ? "Feedback al pulsar botones de prueba" : "Feedback when pressing test buttons"}
           value={settings.hapticsEnabled}
           onValueChange={(v) => updateSetting("hapticsEnabled", v)}
           isLast
@@ -457,4 +556,25 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 4,
   },
+  connEdit: { padding: 14, gap: 8, borderBottomWidth: 1 },
+  connLabel: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  connInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+  },
+  saveConnBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  saveConnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });

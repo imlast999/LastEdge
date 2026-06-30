@@ -221,18 +221,30 @@ class TradingEngine:
     
     def reset_replay_state(self, symbol: Optional[str] = None) -> None:
         """
-        Reinicia estado acumulado entre ventanas de backtest / walk-forward.
-        Limpia cooldown por símbolo para que los índices relativos no bloqueen señales.
+        Reinicia TODO el estado acumulado entre ventanas de backtest / walk-forward.
+        Limpia: cooldown, filtro de duplicados, instancias de estrategias cacheadas.
+        Sin esto, las ventanas 2+ de walk-forward producen 0 señales porque el
+        filtro de duplicados retiene señales de ventanas anteriores.
         """
+        # 1. Reset cooldown state
         symbols = [symbol.upper()] if symbol else list(self.cooldown_state.keys())
         for sym in symbols:
             if sym in self.cooldown_state:
                 self.cooldown_state[sym]['last_signal_index'] = None
+        
+        # 2. Reset duplicate filter — esta es la causa raíz del bug de walk-forward
+        #    El DuplicateFilter guarda señales recientes y sin resetearlas, las
+        #    ventanas 2+ detectan TODAS las señales como duplicadas de la ventana 1.
+        self.duplicate_filter.recent_signals.clear()
+        
+        # 3. Reset cached strategy instances (stateful strategies como asian_breakout)
         try:
             from signals import reset_strategy_instances
             reset_strategy_instances()
         except Exception:
             pass
+        
+        logger.debug(f"Replay state reset for {symbol or 'ALL symbols'}")
 
     def _update_cooldown(self, symbol: str, current_index: int):
         """
@@ -253,7 +265,8 @@ class TradingEngine:
     
     def evaluate_signal(self, df: pd.DataFrame, symbol: str, strategy: str = 'ema50_200', 
                        config: Dict = None, skip_duplicate_filter: bool = False, 
-                       current_index: Optional[int] = None) -> SignalResult:
+                       current_index: Optional[int] = None,
+                       current_bar_time: Optional[datetime] = None) -> SignalResult:
         """
         Evaluación completa de señal con pipeline integrado:
         1. Detectar setup básico
@@ -268,6 +281,8 @@ class TradingEngine:
             config: Configuración específica (opcional)
             skip_duplicate_filter: Si True, omite el filtro de duplicados (para diagnóstico)
             current_index: Índice de la vela actual (para cooldown en replay)
+            current_bar_time: Timestamp de la vela actual (para deduplicación en backtest).
+                             Si es None, usa datetime.now() (producción).
         """
         try:
             # 0. Verificar si el símbolo está activo antes de cualquier cálculo
@@ -304,7 +319,9 @@ class TradingEngine:
             
             # 4. Verificar filtro de duplicados (solo si no se omite)
             if not skip_duplicate_filter:
-                is_duplicate, duplicate_reason = self.duplicate_filter.is_duplicate(raw_signal, symbol)
+                is_duplicate, duplicate_reason = self.duplicate_filter.is_duplicate(
+                    raw_signal, symbol, current_time=current_bar_time
+                )
                 if is_duplicate:
                     return self._create_rejection_result(
                         symbol, strategy, f"Duplicado: {duplicate_reason}"
@@ -773,10 +790,20 @@ class DuplicateFilter:
         self.max_history = 10
         self.time_window_minutes = 30
     
-    def is_duplicate(self, signal: Dict, symbol: str) -> Tuple[bool, str]:
-        """Verifica si una señal es duplicada"""
+    def is_duplicate(self, signal: Dict, symbol: str, current_time: Optional[datetime] = None) -> Tuple[bool, str]:
+        """
+        Verifica si una señal es duplicada.
+        
+        Args:
+            signal: Señal a verificar
+            symbol: Símbolo de la señal
+            current_time: Timestamp de la vela actual. Si es None, usa datetime.now() (producción).
+                         En backtest/walk-forward, pasar el timestamp de la vela para evitar
+                         que señales de ventanas anteriores se consideren duplicadas.
+        """
         try:
-            current_time = datetime.now(timezone.utc)
+            if current_time is None:
+                current_time = datetime.now(timezone.utc)
             
             # Limpiar señales antiguas
             self._cleanup_old_signals(symbol, current_time)

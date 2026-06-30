@@ -1,4 +1,4 @@
-import { getApiSecret, getApiUrl } from "@/lib/apiConfig";
+import { resolveApiConfig } from "@/lib/apiConfig";
 import type { BotStatus } from "@/context/TradingContext";
 
 export interface ConnectionTestResult {
@@ -9,8 +9,10 @@ export interface ConnectionTestResult {
   error?: string;
 }
 
-export async function testServerConnection(): Promise<ConnectionTestResult> {
-  const baseUrl = getApiUrl();
+export async function testServerConnection(
+  overrides?: { url?: string; token?: string }
+): Promise<ConnectionTestResult> {
+  const { url: baseUrl, token } = resolveApiConfig(overrides);
   if (!baseUrl) {
     return { ok: false, latencyMs: 0, healthOk: false, error: "URL del servidor no configurada" };
   }
@@ -30,7 +32,7 @@ export async function testServerConnection(): Promise<ConnectionTestResult> {
   }
 
   try {
-    const secret = getApiSecret();
+    const secret = token;
     const statusRes = await fetch(`${baseUrl}/api/status`, {
       headers: secret
         ? { Authorization: `Bearer ${secret}`, "X-Api-Key": secret }
