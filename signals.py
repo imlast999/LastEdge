@@ -104,25 +104,18 @@ def _get_btceur_weekly_breakout():
 
 def _get_btceur_regime_momentum():
     """
-    ESTADO: DESACTIVADA — no operable en backtest H1.
+    ESTADO: ACTIVADA — requiere H4+Daily (ReplayEngine respeta required_timeframe).
 
-    BTCEURRegimeMomentumStrategy requiere datos H4 y Daily para calcular el
-    régimen de mercado. El ReplayEngine descarga H1 por defecto, por lo que la
-    estrategia genera 0 señales y nunca ha producido resultados válidos.
-
-    Opciones para reactivar:
-      (A) Modificar ReplayEngine para descargar H4/Daily cuando la estrategia
-          lo requiera (a través de un atributo 'required_timeframes').
-      (B) Reimplementar la estrategia usando solo H1 (sin datos MTF).
-      (C) Mover a strategies/experimental/ con documentación de la limitación.
-
-    Mientras no se resuelva, la entrada del STRATEGY_REGISTRY está comentada
-    para que ningún código la invoque accidentalmente.
+    BTCEURRegimeMomentumStrategy usa datos H4 y Daily para calcular el
+    régimen de mercado. El ReplayEngine ahora detecta el atributo
+    'required_timeframe' de la estrategia y descarga los datos correctos.
     """
-    raise RuntimeError(
-        "btceur_regime_momentum está desactivada. "
-        "Ver docstring de _get_btceur_regime_momentum() en signals.py para opciones de reactivación."
-    )
+    try:
+        from strategies.btceur_regime_momentum import BTCEURRegimeMomentumStrategy
+        return BTCEURRegimeMomentumStrategy()
+    except Exception as e:
+        logger.warning(f"BTCEURRegimeMomentumStrategy no disponible: {e}")
+        return get_strategy('BTCEUR')
 
 def _get_eurusd_advanced():
     try:
@@ -229,9 +222,8 @@ def detect_signal(
                 return None, df
             cls_name = strategy_instance.__class__.__name__
             # Clases válidas para BTCEUR: BTCEURStrategy (baseline), BTCTrendPullbackV1Strategy,
-            # BTCEURWeeklyBreakoutStrategy.
-            # BTCEURRegimeMomentumStrategy desactivada — requiere H4+Daily.
-            valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy')
+            # BTCEURWeeklyBreakoutStrategy, BTCEURRegimeMomentumStrategy.
+            valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy', 'BTCEURRegimeMomentumStrategy')
             if cls_name not in valid_btceur_classes:
                 err_msg = f"Estrategia incorrecta: {cls_name} (válidas: {valid_btceur_classes})."
                 logger.error("[CRITICAL][BTCEUR] %s Abortando detección.", err_msg)
