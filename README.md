@@ -200,7 +200,8 @@ BOT-MT5/
 │   ├── walkforward.py          # Rolling TRAIN/TEST validation
 │   ├── trade_costs.py          # Spread + commission model
 │   ├── montecarlo.py           # Monte Carlo simulation (5000 runs)
-│   └── journal.py              # Trade journal with SQLite
+│   ├── journal.py              # Trade journal with SQLite
+│   └── exit_research/          # Exit strategy research pipeline (isolated)
 │
 ├── services/
 │   ├── autosignals.py          # Scan loop (every 20s)
@@ -208,7 +209,7 @@ BOT-MT5/
 │   ├── execution.py            # MT5 order execution
 │   ├── logging.py              # Session logging system
 │   ├── news_filter.py          # High-impact event blackout
-│   ├── commands.py             # Discord slash commands
+│   ├── commands_refactored.py  # Discord slash commands (25+ commands)
 │   ├── database.py             # SQLite persistence
 │   └── mobile_store.py         # Mobile app data bridge
 │

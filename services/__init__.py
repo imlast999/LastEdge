@@ -54,7 +54,7 @@ from .database import (
     reset_trades_today
 )
 
-from .commands import (
+from .commands_refactored import (
     create_commands_service
 )
 

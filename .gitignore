@@ -45,12 +45,14 @@ venv/
 ENV/
 env/
 
-# ── IDEs ──────────────────────────────────────────────────────────────────────
+# ── IDEs y herramientas de desarrollo ────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+# Kiro IDE (specs, steering, hooks — útiles localmente, no pertenecen al repo)
+.kiro/
 
 # ── Archivos temporales y generados ──────────────────────────────────────────
 *.tmp
