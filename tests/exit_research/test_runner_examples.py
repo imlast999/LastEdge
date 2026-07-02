@@ -151,7 +151,7 @@ def test_json_export_failure():
          patch.object(runner, "_run_montecarlo"), \
          patch.object(runner, "_update_stability_scores"), \
          patch.object(runner, "_build_report_dict", return_value=mock_report_dict), \
-         patch.object(runner, "_save", side_effect=PermissionError("no write")):
+         patch.object(runner, "_save_session", side_effect=PermissionError("no write")):
 
         result = runner.run_all(bars=20000, save=True, verbose=False)
 
@@ -215,19 +215,20 @@ def test_smoke_run():
     # A synthetic 20,200-bar OHLCV dataset with indicators already computed
     df = make_ohlcv(20_200, seed=123)
 
-    # Minimal mock strategy: detect_setup returns None always (no signals).
-    # This exercises the entire pipeline with 0 trades, testing that the
-    # runner handles empty results gracefully and still produces the report.
-    mock_strategy = MagicMock()
-    mock_strategy.add_indicators.side_effect = lambda window, cfg: window
-    mock_strategy.detect_setup.return_value = None
+    # Minimal mock adapter: get_signal returns None always (no signals),
+    # get_atr returns a fixed value. This exercises the entire pipeline with
+    # 0 trades, testing that the runner handles empty results gracefully.
+    mock_adapter = MagicMock()
+    mock_adapter.get_signal.return_value = None
+    mock_adapter.get_atr.return_value = 0.0010
+    mock_adapter.reload.return_value = None
 
     with patch(
         "core.exit_research.runner.ExitResearchRunner._download_data",
         return_value=df,
     ), patch(
-        "core.exit_research.runner.ExitResearchRunner._get_eurusd_strategy",
-        return_value=mock_strategy,
+        "core.exit_research.runner.ExitResearchRunner._get_strategy_adapter",
+        return_value=mock_adapter,
     ):
         # Use only 2 variants and the 5k level for speed
         runner = ExitResearchRunner(

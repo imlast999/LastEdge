@@ -48,6 +48,16 @@ class ExtendedMetrics:
     # ── Duración ──────────────────────────────────────────────────────────────
     avg_duration_bars:   float = 0.0   # velas H1
 
+    # ── MAE / MFE ─────────────────────────────────────────────────────────────
+    # Maximum Adverse Excursion y Maximum Favorable Excursion (en pips)
+    mae_mean:            float = 0.0   # MAE medio (todos los trades cerrados)
+    mfe_mean:            float = 0.0   # MFE medio (todos los trades cerrados)
+    mae_winners:         float = 0.0   # MAE medio solo en trades ganadores
+    mae_losers:          float = 0.0   # MAE medio solo en trades perdedores
+    mfe_winners:         float = 0.0   # MFE medio solo en trades ganadores
+    mfe_losers:          float = 0.0   # MFE medio solo en trades perdedores
+    profit_captured_pct: float = 0.0   # avg_win / mfe_winners × 100
+
     # ── Ratios de riesgo ─────────────────────────────────────────────────────
     recovery_factor: float = 0.0   # total_pips / max_drawdown
     sharpe:          float = 0.0   # simplificado (media/std trades)
@@ -177,6 +187,43 @@ def compute_metrics(
         if t.exit_bar is not None and t.bar_index is not None:
             durations.append(t.exit_bar - t.bar_index)
     m.avg_duration_bars = sum(durations) / len(durations) if durations else 0.0
+
+    # ── MAE / MFE ─────────────────────────────────────────────────────────────
+    # Los campos mae_pips / mfe_pips se añadieron a _Trade en runner.py.
+    # Si el objeto trade no tiene esos atributos (compatibilidad con código
+    # antiguo que usa ReplaySignal) los tratamos como 0.
+    def _get_mae(t) -> float:
+        return float(getattr(t, "mae_pips", 0.0) or 0.0)
+
+    def _get_mfe(t) -> float:
+        return float(getattr(t, "mfe_pips", 0.0) or 0.0)
+
+    all_mae = [_get_mae(t) for t in closed]
+    all_mfe = [_get_mfe(t) for t in closed]
+
+    m.mae_mean = sum(all_mae) / len(all_mae) if all_mae else 0.0
+    m.mfe_mean = sum(all_mfe) / len(all_mfe) if all_mfe else 0.0
+
+    winners = [t for t in closed if t.result == "WIN"]
+    losers  = [t for t in closed if t.result == "LOSS"]
+
+    mae_w = [_get_mae(t) for t in winners]
+    mfe_w = [_get_mfe(t) for t in winners]
+    mae_l = [_get_mae(t) for t in losers]
+    mfe_l = [_get_mfe(t) for t in losers]
+
+    m.mae_winners = sum(mae_w) / len(mae_w) if mae_w else 0.0
+    m.mfe_winners = sum(mfe_w) / len(mfe_w) if mfe_w else 0.0
+    m.mae_losers  = sum(mae_l) / len(mae_l) if mae_l else 0.0
+    m.mfe_losers  = sum(mfe_l) / len(mfe_l) if mfe_l else 0.0
+
+    # Profit Captured % = cuánto del movimiento favorable capturó la salida.
+    # Se calcula sobre trades ganadores donde MFE > 0.
+    # Si avg_win > mfe_winners (por ej. en algunos casos de parcial) se limita a 100 %.
+    if m.mfe_winners > 0 and m.avg_win > 0:
+        m.profit_captured_pct = min(100.0, round(m.avg_win / m.mfe_winners * 100, 2))
+    else:
+        m.profit_captured_pct = 0.0
 
     # ── Ratios ────────────────────────────────────────────────────────────────
     m.recovery_factor = m.total_pips / m.max_drawdown if m.max_drawdown > 0 else float("inf")

@@ -7,7 +7,7 @@ Task 12.1 — All 10 variants registered in VARIANT_BY_NAME
 
 def test_all_variants_registered():
     """
-    All 10 exit-strategy variants must be present in VARIANT_BY_NAME.
+    All 12 exit-strategy variants must be present in VARIANT_BY_NAME.
 
     Validates: Requirements 2.1
     """
@@ -24,10 +24,12 @@ def test_all_variants_registered():
         "dynamic_atr",
         "break_even",
         "partial_close",
+        "trailing_donchian",
+        "time_exit",
     }
 
-    assert len(VARIANT_BY_NAME) == 10, (
-        f"Expected 10 variants, got {len(VARIANT_BY_NAME)}. "
+    assert len(VARIANT_BY_NAME) == 12, (
+        f"Expected 12 variants, got {len(VARIANT_BY_NAME)}. "
         f"Found: {set(VARIANT_BY_NAME.keys())}"
     )
     assert set(VARIANT_BY_NAME.keys()) == expected_slugs, (

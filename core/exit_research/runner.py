@@ -27,8 +27,9 @@ from typing import List, Optional, Dict, Any
 
 import pandas as pd
 
-from .variants import ALL_VARIANTS, ExitVariant, VARIANT_BY_NAME
-from .metrics  import ExtendedMetrics, compute_metrics, monthly_consistency
+from .variants          import ALL_VARIANTS, ExitVariant, VARIANT_BY_NAME
+from .metrics           import ExtendedMetrics, compute_metrics, monthly_consistency
+from .strategy_adapter  import StrategyAdapter, adapter_for_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -208,13 +209,18 @@ class ExitResearchRunner:
     """
     Ejecuta el pipeline completo de investigación de salidas.
 
-    Uso:
+    Uso con cualquier estrategia:
+        from core.exit_research.strategy_adapter import adapter_for_symbol
+        runner = ExitResearchRunner(strategy=adapter_for_symbol("XAUUSD"))
+        report = runner.run_all(bars=20000, save=True)
+
+    Uso con la estrategia por defecto (EURUSD, retrocompatible):
         runner = ExitResearchRunner()
         report = runner.run_all(bars=20000, save=True)
-        print(report["symbol"])
 
     Parámetros:
         symbol:     Par a analizar (por defecto EURUSD)
+        strategy:   StrategyAdapter (None = crear uno para `symbol` automáticamente)
         lookback:   Ventana de indicadores (velas)
         max_fwd:    Máximo de velas hacia adelante para simular cierre
         variants:   Lista de variantes (None = todas)
@@ -224,6 +230,7 @@ class ExitResearchRunner:
     def __init__(
         self,
         symbol:   str  = "EURUSD",
+        strategy: Optional[StrategyAdapter] = None,
         lookback: int  = 200,
         max_fwd:  int  = 300,
         variants: Optional[List[ExitVariant]] = None,
@@ -234,6 +241,15 @@ class ExitResearchRunner:
         self.max_fwd  = max_fwd
         self.variants = variants or ALL_VARIANTS
         self.levels   = levels   or BACKTEST_LEVELS
+
+        # Resolver el adapter de estrategia
+        if strategy is not None:
+            self._strategy_adapter: Optional[StrategyAdapter] = strategy
+        else:
+            # Lazy: se crea en el primer uso para que el ImportError
+            # se propague durante el backtest (no en __init__)
+            self._strategy_adapter = None
+
         self._df_cache: Dict[int, pd.DataFrame] = {}
 
     # ── API pública ───────────────────────────────────────────────────────────
@@ -348,40 +364,39 @@ class ExitResearchRunner:
         # ── Guardar ───────────────────────────────────────────────────────────
         if save:
             try:
-                self._save(report_dict, run_id)
+                self._save_session(report_dict, variant_trades, run_id)
             except (OSError, PermissionError) as e:
-                logger.error(f"[ExitResearch] JSON export failed: {e}")
+                logger.error(f"[ExitResearch] Session export failed: {e}")
 
         return report_dict
 
-    # ── Hot-reload helper (Requirement 1.4) ──────────────────────────────────
+    # ── Strategy adapter ─────────────────────────────────────────────────────
 
-    def _get_eurusd_strategy(self):
+    def _get_strategy_adapter(self) -> StrategyAdapter:
         """
-        Reimports strategies.eurusd on every call so that external edits to
-        strategies/eurusd.py are picked up without restarting the process.
+        Devuelve el StrategyAdapter activo.
 
-        On ImportError or SyntaxError: logs the exception with the file path
-        and re-raises so the caller receives a non-zero exit (Req 1.4).
+        Si no se pasó uno en __init__, crea uno para self.symbol usando el
+        registro interno. Soporta hot-reload: si el módulo de la estrategia
+        fue editado externamente, llama a adapter.reload() para recargar.
+
+        Raises:
+            ValueError:   Si el símbolo no está en el registro.
+            ImportError:  Si el módulo de la estrategia no se puede importar.
         """
-        import importlib, sys
+        if self._strategy_adapter is None:
+            self._strategy_adapter = adapter_for_symbol(self.symbol)
+
         try:
-            if "strategies.eurusd" in sys.modules:
-                importlib.reload(sys.modules["strategies.eurusd"])
-            from strategies.eurusd import EURUSDStrategy
-            return EURUSDStrategy()
-        except (ImportError, SyntaxError) as e:
-            import inspect
-            try:
-                mod = sys.modules.get("strategies.eurusd")
-                fpath = inspect.getfile(mod) if mod else "strategies/eurusd.py"
-            except Exception:
-                fpath = "strategies/eurusd.py"
+            self._strategy_adapter.reload()
+        except Exception as e:
             logger.error(
-                f"[ExitResearch] Failed to import strategies.eurusd ({fpath}): {e}",
-                exc_info=True,
+                "[ExitResearch] Strategy reload failed (%s): %s",
+                self.symbol, e, exc_info=True,
             )
             raise
+
+        return self._strategy_adapter
 
     # ── Backtest de una variante ──────────────────────────────────────────────
 
@@ -393,14 +408,14 @@ class ExitResearchRunner:
         verbose: bool = False,
     ) -> tuple[VariantResult, List["_Trade"]]:
         """
-        Detecta señales con EURUSDStrategy (sin modificarla) y simula
+        Detecta señales con la estrategia configurada (sin modificarla) y simula
         el cierre con la variante de salida.
 
         Returns:
             (VariantResult, list[_Trade]) — el resultado y la lista cruda de
             trades para uso en Walk-Forward y Monte Carlo.
         """
-        strategy = self._get_eurusd_strategy()
+        adapter = self._get_strategy_adapter()
 
         df_full = df_full.reset_index(drop=True)
         total   = len(df_full)
@@ -415,8 +430,7 @@ class ExitResearchRunner:
                 continue
 
             try:
-                window = strategy.add_indicators(window, ENTRY_CONFIG)
-                signal = strategy.detect_setup(window, ENTRY_CONFIG)
+                signal = adapter.get_signal(window)
             except Exception:
                 continue
 
@@ -425,8 +439,7 @@ class ExitResearchRunner:
 
             entry     = float(signal["entry"])
             direction = str(signal["type"])
-            last_row  = window.iloc[-1]
-            atr       = float(last_row.get("atr", 0.0010))
+            atr       = adapter.get_atr(window)
 
             # Calcular niveles con la variante
             sl, tp = variant.compute_levels(entry, direction, atr, window)
@@ -451,6 +464,8 @@ class ExitResearchRunner:
                         profit_pips=res.profit_pips,
                         bar_index=i,
                         exit_bar=res.exit_bar,
+                        mae_pips=res.mae_pips,
+                        mfe_pips=res.mfe_pips,
                     ))
             else:
                 trades.append(_Trade(
@@ -458,6 +473,8 @@ class ExitResearchRunner:
                     profit_pips=exit_res.profit_pips,
                     bar_index=i,
                     exit_bar=exit_res.exit_bar,
+                    mae_pips=exit_res.mae_pips,
+                    mfe_pips=exit_res.mfe_pips,
                 ))
 
         elapsed = time.time() - t0
@@ -938,32 +955,363 @@ class ExitResearchRunner:
 
     # ── Guardar resultados ────────────────────────────────────────────────────
 
-    def _save(self, report_dict: dict, run_id: str) -> str:
-        os.makedirs(RESULTS_DIR, exist_ok=True)
-        path = os.path.join(RESULTS_DIR, f"exit_research_{run_id}.json")
-        # Task 9.3: guard against writes outside allowed directories (Req 1.3)
-        _assert_safe_path(path)
-        # Task 9.2: handle export failure gracefully — log error, do NOT re-raise (Req 8.6)
+    def _save_session(
+        self,
+        report_dict:    dict,
+        variant_trades: Dict[str, List["_Trade"]],
+        run_id:         str,
+    ) -> str:
+        """
+        Guarda la sesión completa en una subcarpeta propia:
+
+            backtest_results/exit_research/{run_id}/
+                summary.json      ← report_dict completo
+                comparison.csv    ← tabla comparativa ordenada por stability_score
+                trades.csv        ← todos los trades individuales con MAE/MFE
+                mae_mfe.csv       ← análisis MAE/MFE por variante
+                report.md         ← informe legible en Markdown
+
+        Returns la ruta de la carpeta de sesión.
+        """
+        session_dir = os.path.join(RESULTS_DIR, run_id)
+        _assert_safe_path(session_dir)
+        os.makedirs(session_dir, exist_ok=True)
+
+        # 1. summary.json ────────────────────────────────────────────────────
         try:
-            with open(path, "w", encoding="utf-8") as f:
+            summary_path = os.path.join(session_dir, "summary.json")
+            with open(summary_path, "w", encoding="utf-8") as f:
                 json.dump(report_dict, f, indent=2, ensure_ascii=False, default=str)
-            logger.info(f"[ExitResearch] Reporte guardado: {path}")
+            logger.info(f"[ExitResearch] summary.json → {summary_path}")
         except (OSError, PermissionError) as e:
-            logger.error(f"[ExitResearch] JSON export failed at {path}: {e}")
-        return path
+            logger.error(f"[ExitResearch] summary.json failed: {e}")
+
+        # 2. comparison.csv ──────────────────────────────────────────────────
+        try:
+            self._save_comparison_csv(report_dict, session_dir)
+        except Exception as e:
+            logger.error(f"[ExitResearch] comparison.csv failed: {e}")
+
+        # 3. trades.csv ──────────────────────────────────────────────────────
+        try:
+            self._save_trades_csv(variant_trades, session_dir)
+        except Exception as e:
+            logger.error(f"[ExitResearch] trades.csv failed: {e}")
+
+        # 4. mae_mfe.csv ─────────────────────────────────────────────────────
+        try:
+            self._save_mae_mfe_csv(report_dict, session_dir)
+        except Exception as e:
+            logger.error(f"[ExitResearch] mae_mfe.csv failed: {e}")
+
+        # 5. report.md ───────────────────────────────────────────────────────
+        try:
+            self._save_report_md(report_dict, session_dir)
+        except Exception as e:
+            logger.error(f"[ExitResearch] report.md failed: {e}")
+
+        logger.info(f"[ExitResearch] Sesión guardada en: {session_dir}")
+        return session_dir
+
+    # ── Exportación individual ────────────────────────────────────────────────
+
+    @staticmethod
+    def _save_comparison_csv(report_dict: dict, session_dir: str) -> None:
+        """Genera comparison.csv con una fila por variante, ordenada por stability_score."""
+        import csv
+        rows = report_dict.get("comparison_table", [])
+        if not rows:
+            return
+
+        # Añadir columnas de MAE/MFE y WF desde el bloque results
+        results = report_dict.get("results", {})
+        max_level_str = str(max(
+            int(k) for v in results.values() for k in v.keys()
+            if v.get(k) and v[k].get("metrics")
+        )) if results else "20000"
+
+        enriched = []
+        for row in rows:
+            vname = row["variant"]
+            r_data = results.get(vname, {}).get(max_level_str, {})
+            m = (r_data.get("metrics") or {}) if r_data else {}
+            enriched.append({
+                "rank":               row["rank"],
+                "variant":            vname,
+                "profit_factor":      row["profit_factor"],
+                "winrate":            row["winrate"],
+                "total_pips":         row["total_pips"],
+                "max_drawdown":       row["max_drawdown"],
+                "sharpe":             row["sharpe"],
+                "sortino":            m.get("sortino"),
+                "calmar":             m.get("calmar"),
+                "ulcer_index":        m.get("ulcer_index"),
+                "recovery_factor":    m.get("recovery_factor"),
+                "expectancy":         m.get("expectancy"),
+                "avg_win":            m.get("avg_win"),
+                "avg_loss":           m.get("avg_loss"),
+                "mae_mean":           m.get("mae_mean"),
+                "mfe_mean":           m.get("mfe_mean"),
+                "mae_winners":        m.get("mae_winners"),
+                "mfe_winners":        m.get("mfe_winners"),
+                "profit_captured_pct": m.get("profit_captured_pct"),
+                "avg_duration_bars":  m.get("avg_duration_bars"),
+                "longest_loss_streak": m.get("longest_loss_streak"),
+                "wf_stability":       m.get("wf_stability"),
+                "mc_prob_ruin":       m.get("mc_prob_ruin"),
+                "mc_prob_profit":     m.get("mc_prob_profit"),
+                "stability_score":    row["stability_score"],
+            })
+
+        path = os.path.join(session_dir, "comparison.csv")
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=list(enriched[0].keys()))
+            writer.writeheader()
+            writer.writerows(enriched)
+        logger.info(f"[ExitResearch] comparison.csv → {path}")
+
+    @staticmethod
+    def _save_trades_csv(
+        variant_trades: Dict[str, List["_Trade"]],
+        session_dir: str,
+    ) -> None:
+        """
+        Genera trades.csv con una fila por trade individual.
+        Incluye: variant, trade_id, bar_index, exit_bar, direction (desconocida
+        a este nivel — se omite), result, profit_pips, mae_pips, mfe_pips,
+        duration_bars.
+        """
+        import csv
+        path = os.path.join(session_dir, "trades.csv")
+        fieldnames = [
+            "variant", "trade_id", "bar_index", "exit_bar",
+            "result", "profit_pips", "mae_pips", "mfe_pips", "duration_bars",
+        ]
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for vname, trades in variant_trades.items():
+                for idx, t in enumerate(trades):
+                    duration = (
+                        (t.exit_bar - t.bar_index)
+                        if t.exit_bar is not None and t.bar_index is not None
+                        else None
+                    )
+                    writer.writerow({
+                        "variant":      vname,
+                        "trade_id":     idx + 1,
+                        "bar_index":    t.bar_index,
+                        "exit_bar":     t.exit_bar,
+                        "result":       t.result,
+                        "profit_pips":  round(t.profit_pips, 4) if t.profit_pips is not None else 0,
+                        "mae_pips":     round(getattr(t, "mae_pips", 0.0), 4),
+                        "mfe_pips":     round(getattr(t, "mfe_pips", 0.0), 4),
+                        "duration_bars": duration,
+                    })
+        logger.info(f"[ExitResearch] trades.csv → {path}")
+
+    @staticmethod
+    def _save_mae_mfe_csv(report_dict: dict, session_dir: str) -> None:
+        """
+        Genera mae_mfe.csv: resumen MAE/MFE por variante a nivel máximo.
+        Una fila por variante con las 7 métricas de excursión.
+        """
+        import csv
+        results = report_dict.get("results", {})
+        if not results:
+            return
+
+        max_level_str = str(max(
+            int(k) for v in results.values() for k in v.keys()
+            if v.get(k) and v[k].get("metrics")
+        )) if results else "20000"
+
+        rows = []
+        for vname, levels in results.items():
+            r_data = levels.get(max_level_str, {})
+            m = (r_data.get("metrics") or {}) if r_data else {}
+            if not m:
+                continue
+            rows.append({
+                "variant":            vname,
+                "mae_mean":           m.get("mae_mean", 0),
+                "mfe_mean":           m.get("mfe_mean", 0),
+                "mae_winners":        m.get("mae_winners", 0),
+                "mae_losers":         m.get("mae_losers", 0),
+                "mfe_winners":        m.get("mfe_winners", 0),
+                "mfe_losers":         m.get("mfe_losers", 0),
+                "profit_captured_pct": m.get("profit_captured_pct", 0),
+                "avg_win":            m.get("avg_win", 0),
+                "avg_loss":           m.get("avg_loss", 0),
+            })
+
+        if not rows:
+            return
+
+        path = os.path.join(session_dir, "mae_mfe.csv")
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
+        logger.info(f"[ExitResearch] mae_mfe.csv → {path}")
+
+    @staticmethod
+    def _save_report_md(report_dict: dict, session_dir: str) -> None:
+        """
+        Genera report.md: informe legible en Markdown con todas las secciones.
+        """
+        run_id       = report_dict.get("run_id", "unknown")
+        generated_at = report_dict.get("generated_at", "")
+        symbol       = report_dict.get("symbol", "")
+        conclusions  = report_dict.get("conclusions", {})
+        table        = report_dict.get("comparison_table", [])
+        degradation  = report_dict.get("degradation_table", {})
+        results      = report_dict.get("results", {})
+
+        # Nivel máximo disponible
+        max_level_str = str(max(
+            int(k) for v in results.values() for k in v.keys()
+            if v.get(k) and v[k].get("metrics")
+        )) if results else "20000"
+
+        lines = [
+            f"# Exit Research Report — {symbol}",
+            f"",
+            f"**Run ID:** `{run_id}`  ",
+            f"**Generated:** {generated_at}  ",
+            f"**Validation mode:** no_optimization  ",
+            f"",
+            "---",
+            "",
+            "## Tabla comparativa",
+            "",
+        ]
+
+        # Encabezado tabla
+        lines.append(
+            "| Rank | Variante | PF | WR% | Pips | MaxDD | MAE | MFE | Capturado% | Sharpe | WF | MC Ruin | Stability |"
+        )
+        lines.append(
+            "|-----:|---------|---:|----:|-----:|------:|----:|----:|-----------:|-------:|----:|--------:|----------:|"
+        )
+
+        for row in table:
+            vname  = row["variant"]
+            r_data = results.get(vname, {}).get(max_level_str, {})
+            m      = (r_data.get("metrics") or {}) if r_data else {}
+
+            def _fmt(v, decimals=2):
+                if v is None: return "—"
+                try:    return f"{float(v):.{decimals}f}"
+                except: return str(v)
+
+            pf_str   = _fmt(row.get("profit_factor"))
+            wf_str   = m.get("wf_stability") or "—"
+            ruin_str = _fmt(m.get("mc_prob_ruin"), 3) if m.get("mc_prob_ruin") is not None else "—"
+
+            lines.append(
+                f"| {row['rank']} "
+                f"| {vname} "
+                f"| {pf_str} "
+                f"| {_fmt(row.get('winrate'), 1)} "
+                f"| {_fmt(row.get('total_pips'), 1)} "
+                f"| {_fmt(row.get('max_drawdown'), 1)} "
+                f"| {_fmt(m.get('mae_mean'), 1)} "
+                f"| {_fmt(m.get('mfe_mean'), 1)} "
+                f"| {_fmt(m.get('profit_captured_pct'), 1)} "
+                f"| {_fmt(row.get('sharpe'), 3)} "
+                f"| {wf_str} "
+                f"| {ruin_str} "
+                f"| **{_fmt(row.get('stability_score'), 2)}** |"
+            )
+
+        # Degradación PF
+        lines += [
+            "",
+            "---",
+            "",
+            "## Degradación Profit Factor",
+            "",
+            "| Variante | 5k | 10k | 15k | 20k |",
+            "|---------|---:|----:|----:|----:|",
+        ]
+        for vname, levels in degradation.items():
+            def _pf(k):
+                v = levels.get(k)
+                if v is None: return "—"
+                try:    return f"{float(v):.2f}"
+                except: return "—"
+            lines.append(f"| {vname} | {_pf('5000')} | {_pf('10000')} | {_pf('15000')} | {_pf('20000')} |")
+
+        # MAE / MFE
+        lines += [
+            "",
+            "---",
+            "",
+            "## Análisis MAE / MFE",
+            "",
+            "| Variante | MAE medio | MFE medio | MAE ganadores | MFE ganadores | Capturado% |",
+            "|---------|----------:|----------:|--------------:|--------------:|-----------:|",
+        ]
+        for vname, levels in results.items():
+            r_data = levels.get(max_level_str, {})
+            m = (r_data.get("metrics") or {}) if r_data else {}
+            if not m:
+                continue
+            def _v(k): return f"{float(m.get(k, 0)):.1f}"
+            lines.append(
+                f"| {vname} | {_v('mae_mean')} | {_v('mfe_mean')} | "
+                f"{_v('mae_winners')} | {_v('mfe_winners')} | {_v('profit_captured_pct')} |"
+            )
+
+        # Conclusiones
+        lines += [
+            "",
+            "---",
+            "",
+            "## Conclusiones",
+            "",
+        ]
+        labels = {
+            "highest_profit":          "🏆 Mayor rentabilidad",
+            "lowest_drawdown":         "🛡 Menor drawdown",
+            "most_robust":             "💎 Más robusta (Stability Score)",
+            "best_walk_forward":       "📈 Mejor Walk-Forward",
+            "lowest_ruin_probability": "🎲 Menor probabilidad de ruina",
+            "recommended_for_live":    "✅ Recomendada para operar",
+        }
+        for key, label in labels.items():
+            winner = conclusions.get(key) or "—"
+            lines.append(f"- **{label}:** `{winner}`")
+
+        lines += [
+            "",
+            "---",
+            "",
+            "> *Generado automáticamente por Exit Research Framework — BOT-MT5*",
+            "",
+        ]
+
+        path = os.path.join(session_dir, "report.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+        logger.info(f"[ExitResearch] report.md → {path}")
 
 
 # ── Trade auxiliar ─────────────────────────────────────────────────────────────
 
 class _Trade:
     """Objeto mínimo compatible con compute_metrics."""
-    __slots__ = ("result", "profit_pips", "bar_index", "exit_bar")
+    __slots__ = ("result", "profit_pips", "bar_index", "exit_bar", "mae_pips", "mfe_pips")
 
-    def __init__(self, result, profit_pips, bar_index, exit_bar):
+    def __init__(self, result, profit_pips, bar_index, exit_bar,
+                 mae_pips: float = 0.0, mfe_pips: float = 0.0):
         self.result      = result
         self.profit_pips = profit_pips
         self.bar_index   = bar_index
         self.exit_bar    = exit_bar
+        self.mae_pips    = mae_pips
+        self.mfe_pips    = mfe_pips
 
 
 # ── Nota: run_exit_research() se define en core/exit_research/__init__.py ──────

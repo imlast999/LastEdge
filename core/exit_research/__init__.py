@@ -18,9 +18,10 @@ Uso desde Discord / bot.py:
     runner.run_all(bars=10000, save=True)
 """
 
-from .runner import ExitResearchRunner
+from .runner           import ExitResearchRunner
+from .strategy_adapter import StrategyAdapter, adapter_for_symbol
 
-__all__ = ["ExitResearchRunner", "run_exit_research"]
+__all__ = ["ExitResearchRunner", "run_exit_research", "StrategyAdapter", "adapter_for_symbol"]
 
 
 def run_exit_research(
