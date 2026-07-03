@@ -11,16 +11,18 @@ import {
 } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
+import { useTranslation } from "@/hooks/useTranslation";
 
 // ── Botón de ajustes que aparece en el header de todas las pantallas ──────────
 function SettingsButton() {
   const colors = useColors();
+  const { t } = useTranslation();
   return (
     <TouchableOpacity
-      onPress={() => router.push("/settings")}
+      onPress={() => router.push("/(tabs)/settings" as any)}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       style={styles.settingsBtn}
-      accessibilityLabel="Abrir ajustes"
+      accessibilityLabel={t("settingsTitle")}
       accessibilityRole="button"
     >
       <Feather name="settings" size={22} color={colors.foreground} />
@@ -28,28 +30,13 @@ function SettingsButton() {
   );
 }
 
-// ── Opciones de header compartidas ───────────────────────────────────────────
-function sharedHeaderOptions(colors: ReturnType<typeof useColors>) {
-  return {
-    headerShown: true,
-    headerStyle: {
-      backgroundColor: colors.background,
-    },
-    headerTintColor: colors.foreground,
-    headerShadowVisible: false,
-    headerRight: () => <SettingsButton />,
-  };
-}
-
 // ── Layout estándar Android / Web ─────────────────────────────────────────────
 function ClassicTabLayout() {
   const colors = useColors();
+  const { t } = useTranslation();
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
-
-  const headerOpts = sharedHeaderOptions(colors);
 
   return (
     <Tabs
@@ -57,8 +44,8 @@ function ClassicTabLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
         headerShown: true,
-        headerStyle: headerOpts.headerStyle,
-        headerTintColor: headerOpts.headerTintColor,
+        headerStyle: { backgroundColor: colors.background },
+        headerTintColor: colors.foreground,
         headerShadowVisible: false,
         headerRight: () => <SettingsButton />,
         tabBarStyle: {
@@ -71,19 +58,12 @@ function ClassicTabLayout() {
         },
         tabBarBackground: () =>
           isIOS ? (
-            <BlurView
-              intensity={80}
-              tint="dark"
-              style={StyleSheet.absoluteFill}
-            />
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
           ) : isWeb ? (
-            <View
-              style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]}
-            />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
           ) : null,
       }}
     >
-      {/* ── Tab 1: Dashboard ── */}
       <Tabs.Screen
         name="index"
         options={{
@@ -91,8 +71,6 @@ function ClassicTabLayout() {
           tabBarIcon: ({ color }) => <Feather name="bar-chart-2" size={22} color={color} />,
         }}
       />
-
-      {/* ── Tab 2: Trades (Pendientes + Cerradas) ── */}
       <Tabs.Screen
         name="trades"
         options={{
@@ -100,8 +78,6 @@ function ClassicTabLayout() {
           tabBarIcon: ({ color }) => <Feather name="repeat" size={22} color={color} />,
         }}
       />
-
-      {/* ── Tab 3: Backtests ── */}
       <Tabs.Screen
         name="backtests"
         options={{
@@ -109,13 +85,19 @@ function ClassicTabLayout() {
           tabBarIcon: ({ color }) => <Feather name="activity" size={22} color={color} />,
         }}
       />
-
-      {/* ── Pantalla de Ajustes: oculta de la tab bar, accesible por push ── */}
+      <Tabs.Screen
+        name="research"
+        options={{
+          title: "Research",
+          tabBarIcon: ({ color }) => <Feather name="layers" size={22} color={color} />,
+        }}
+      />
+      {/* Settings: oculta de la tab bar, título traducido */}
       <Tabs.Screen
         name="settings"
         options={{
-          title: "Ajustes",
-          href: null, // oculto de la barra de navegación
+          title: t("settingsTitle"),
+          href: null,
         }}
       />
     </Tabs>

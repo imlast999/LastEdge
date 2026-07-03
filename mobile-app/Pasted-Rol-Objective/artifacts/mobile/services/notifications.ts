@@ -113,11 +113,11 @@ export function setupNotificationListeners(
     const category = data?.category as NotificationCategory | undefined;
 
     if (category === "NEW_SIGNAL") {
-      router.push("/(tabs)/trades");
+      router.push("/(tabs)/trades" as any);
     } else if (category === "TRADE_CLOSE") {
-      router.push("/(tabs)/trades");
+      router.push("/(tabs)/trades" as any);
     } else if (category === "CRITICAL_ERROR") {
-      router.push("/(tabs)");
+      router.push("/(tabs)" as any);
     }
   });
 

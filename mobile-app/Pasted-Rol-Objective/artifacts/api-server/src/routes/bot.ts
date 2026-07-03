@@ -448,10 +448,11 @@ botRouter.post("/backtests", (req: Request, res: Response) => {
 botRouter.get("/strategies", (_req: Request, res: Response) => {
   try {
     const strategies = [
-      { id: "eurusd_simple",         name: "EURUSD SIMPLE",         symbol: "EURUSD" },
-      { id: "eurusd_advanced",       name: "EURUSD ADVANCED",       symbol: "EURUSD" },
-      { id: "eurusd_asian_breakout", name: "EURUSD ASIAN BREAKOUT", symbol: "EURUSD" },
-      { id: "eurusd_mtf",            name: "EURUSD MTF",            symbol: "EURUSD" },
+      { id: "eurusd_partial",        name: "EURUSD PARTIAL (v1.1 activa)", symbol: "EURUSD" },
+      { id: "eurusd_simple",         name: "EURUSD SIMPLE (legacy)",       symbol: "EURUSD" },
+      { id: "eurusd_advanced",       name: "EURUSD ADVANCED",              symbol: "EURUSD" },
+      { id: "eurusd_asian_breakout", name: "EURUSD ASIAN BREAKOUT",        symbol: "EURUSD" },
+      { id: "eurusd_mtf",            name: "EURUSD MTF",                   symbol: "EURUSD" },
       { id: "xauusd_simple",         name: "XAUUSD SIMPLE",         symbol: "XAUUSD" },
       { id: "xauusd_advanced",       name: "XAUUSD ADVANCED",       symbol: "XAUUSD" },
       { id: "xauusd_reversal",       name: "XAUUSD REVERSAL",       symbol: "XAUUSD" },

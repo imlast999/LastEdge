@@ -3,7 +3,13 @@ export const BACKTEST_SYMBOLS = ["EURUSD", "XAUUSD", "BTCEUR"] as const;
 export type BacktestSymbol = (typeof BACKTEST_SYMBOLS)[number];
 
 export const STRATEGIES_BY_SYMBOL: Record<BacktestSymbol, string[]> = {
-  EURUSD: ["eurusd_simple", "eurusd_advanced", "eurusd_mtf", "eurusd_asian_breakout"],
+  EURUSD: [
+    "eurusd_partial",      // v1.1 — activa en producción (Exit Research jul 2026)
+    "eurusd_simple",       // legacy — referencia histórica
+    "eurusd_advanced",
+    "eurusd_mtf",
+    "eurusd_asian_breakout",
+  ],
   XAUUSD: ["xauusd_simple", "xauusd_reversal", "xauusd_momentum", "xauusd_psychological"],
   BTCEUR: [
     "btceur_simple",
@@ -14,7 +20,7 @@ export const STRATEGIES_BY_SYMBOL: Record<BacktestSymbol, string[]> = {
 };
 
 export const DEFAULT_STRATEGY: Record<BacktestSymbol, string> = {
-  EURUSD: "eurusd_asian_breakout",
+  EURUSD: "eurusd_partial",   // v1.1 activa — fix: era eurusd_asian_breakout (descartada)
   XAUUSD: "xauusd_simple",
   BTCEUR: "btceur_simple",
 };
