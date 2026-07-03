@@ -8,7 +8,7 @@ import logging
 from .base import BaseStrategy
 
 logger = logging.getLogger(__name__)
-from .eurusd import EURUSDStrategy
+from .eurusd import EURUSDStrategy, EURUSDPartialStrategy
 from .xauusd import XAUUSDStrategy
 
 # Import BTCEUR desde la implementación oficial (btceur_new.py)
@@ -23,7 +23,8 @@ except ImportError as e:
 
 # Strategy registry
 STRATEGY_REGISTRY = {
-    'EURUSD': EURUSDStrategy,
+    'EURUSD': EURUSDPartialStrategy,   # v1.1 — partial_close validado (jul 2026)
+    'EURUSD_LEGACY': EURUSDStrategy,   # referencia histórica — no activo en producción
     'XAUUSD': XAUUSDStrategy,
 }
 
@@ -76,7 +77,8 @@ def register_strategy(symbol: str, strategy_class):
 
 __all__ = [
     'BaseStrategy',
-    'EURUSDStrategy', 
+    'EURUSDStrategy',
+    'EURUSDPartialStrategy',
     'XAUUSDStrategy',
     'get_strategy',
     'get_available_symbols',

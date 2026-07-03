@@ -94,7 +94,7 @@ class IntelligentLogger:
             # Crear archivo con header
             with open(self.current_log_file, 'w', encoding='utf-8') as f:
                 startup_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                f.write(f"=== BOT STARTED: {startup_time} ===\n")
+                f.write(f"=== LastEdge STARTED: {startup_time} ===\n")
                 f.write(f"=== LOG FILE: {log_filename} ===\n")
                 f.write("=" * 60 + "\n\n")
             

@@ -39,7 +39,8 @@ def reset_strategy_instances() -> None:
 STRATEGY_REGISTRY = {
     'ema50_200':        lambda: get_strategy('EURUSD'),
     'eurusd':           lambda: get_strategy('EURUSD'),
-    'eurusd_simple':    lambda: get_strategy('EURUSD'),
+    'eurusd_partial':   lambda: get_strategy('EURUSD'),          # v1.1 — partial_close (activo)
+    'eurusd_simple':    lambda: get_strategy('EURUSD_LEGACY'),   # legacy — referencia histórica
     'eurusd_advanced':  lambda: _get_eurusd_advanced(),
     # eurusd_asian_breakout descartada (retest progresivo junio 2026, PF<1.0 en 10k/15k/20k) — ver strategies/experimental/
     'eurusd_asian_breakout': lambda: _get_eurusd_asian_breakout(),   # mantenida para compatibilidad backtest

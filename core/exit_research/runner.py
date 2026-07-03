@@ -1288,7 +1288,7 @@ class ExitResearchRunner:
             "",
             "---",
             "",
-            "> *Generado automáticamente por Exit Research Framework — BOT-MT5*",
+            "> *Generado automáticamente por Exit Research Framework — LastEdge*",
             "",
         ]
 

@@ -510,6 +510,91 @@ class EURUSDAdvancedStrategy(BaseStrategy):
 
 
 # ============================================================================
+# EURUSD PARTIAL — validada mediante Exit Research (julio 2026)
+# ============================================================================
+
+class EURUSDPartialStrategy(EURUSDStrategy):
+    """
+    EURUSD v3 — Partial Close (LastEdge v1.1)
+
+    Entrada: idéntica a EURUSDStrategy (eurusd_simple).
+    Salida:  50% Parcial + Trailing — variante validada mediante Exit Research
+             (run_id: 20260702_225143, validación: val_20260703_160132).
+
+    Resultados de validación (20.000 velas H1):
+        PF = 1.85  |  WR = 54.1%  |  MaxDD = 2,125 pips
+        Expectancy = 7.88 pips/trade  |  MC Ruin = 0.0%
+        WF = MARGINAL  |  Stability Score = 51.73/100
+
+    Parámetros de salida validados (NO modificar sin nueva validación):
+        SL inicial   = 1.5 × ATR
+        Cierre 50%   = 2.0 × ATR de beneficio
+        Trailing SL  = 1.5 × ATR del segundo tramo
+        TP máximo    = 5.0 × ATR (segundo tramo)
+
+    La lógica de entrada (detect_setup) es exactamente la de eurusd_simple.
+    Solo se sobreescriben los parámetros de SL/TP en _get_default_config()
+    para que el sistema de ejecución en producción use los niveles correctos.
+    El cierre parcial y el trailing son gestionados por trailing_stops.py
+    con la configuración definida en rules_config.json.
+
+    Referencia:
+        backtest_results/exit_research/20260702_225143/
+        backtest_results/validation/val_20260703_160132/
+    """
+
+    VARIANT = "partial_close"
+    EXIT_RESEARCH_RUN   = "20260702_225143"
+    VALIDATION_RUN      = "val_20260703_160132"
+
+    # Parámetros validados — no modificar
+    _SL_ATR_MULT      = 1.5   # SL inicial
+    _PARTIAL_ATR_MULT = 2.0   # trigger del cierre parcial (50%)
+    _TRAIL_ATR_MULT   = 1.5   # trailing del segundo tramo
+    _MAX_TP_ATR_MULT  = 5.0   # TP máximo del segundo tramo
+
+    def __init__(self):
+        super().__init__()
+        # Actualizar nombre interno para trazabilidad en el journal
+        self.strategy_name = "EURUSD_Partial"
+
+    def _get_default_config(self) -> Dict:
+        """
+        Extiende la config de eurusd_simple con los parámetros de salida validados.
+        Solo SL y TP se modifican respecto al padre — la lógica de entrada es idéntica.
+        """
+        cfg = super()._get_default_config()
+        cfg.update({
+            # Niveles de salida validados (exit_research 20260702_225143)
+            'sl_atr_multiplier':      self._SL_ATR_MULT,
+            'tp_atr_multiplier':      self._MAX_TP_ATR_MULT,   # TP máximo del trailing
+            'partial_close_enabled':  True,
+            'partial_close_atr_mult': self._PARTIAL_ATR_MULT,
+            'trailing_atr_mult':      self._TRAIL_ATR_MULT,
+            # Identificación
+            'strategy_variant':       self.VARIANT,
+            'exit_research_run':      self.EXIT_RESEARCH_RUN,
+            'validation_run':         self.VALIDATION_RUN,
+        })
+        return cfg
+
+    def detect_setup(self, df: pd.DataFrame, config: Dict = None) -> Optional[Dict]:
+        """
+        Entrada idéntica a eurusd_simple.
+        Solo sobreescribe el campo 'strategy' en la señal para trazabilidad.
+        """
+        signal = super().detect_setup(df, config)
+        if signal is None:
+            return None
+
+        # Actualizar identificación de estrategia en la señal
+        signal['context']['strategy'] = 'eurusd_partial'
+        signal['context']['exit_variant'] = self.VARIANT
+        signal['context']['exit_research_run'] = self.EXIT_RESEARCH_RUN
+        return signal
+
+
+# ============================================================================
 # FACTORY FUNCTION
 # ============================================================================
 

@@ -1,14 +1,15 @@
 <div align="center">
 
-# BOT-MT5
+# LastEdge
 
 **Quantitative Trading Research Framework**
 
-Backtesting · Optimization · Paper Trading · MT5 Execution · Discord Integration · Mobile App
+Backtesting · Optimization · Exit Research · MT5 Demo Validation · Discord Integration · Mobile App
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
-![Phase](https://img.shields.io/badge/Phase-Paper%20Trading-yellow)
+![Phase](https://img.shields.io/badge/Phase-Demo%20MT5%20Validation-yellow)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
+![Version](https://img.shields.io/badge/Version-v1.1--lastedge-purple)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/Platform-Windows-informational)
 
@@ -18,18 +19,19 @@ Backtesting · Optimization · Paper Trading · MT5 Execution · Discord Integra
 
 ## What is this?
 
-BOT-MT5 is a personal quantitative research framework built around MetaTrader 5. It combines a strategy engine, a full backtesting pipeline, a Discord-controlled paper trading system, and a mobile monitoring app into a single modular codebase.
+LastEdge is a personal quantitative research framework built around MetaTrader 5. It combines a strategy engine, a full backtesting pipeline, an Exit Research system, and a mobile monitoring app into a single modular codebase.
 
-The goal is not to chase high backtest numbers. It is to find strategies that survive when market conditions change — then validate them thoroughly before committing real capital.
+The goal is not to chase high backtest numbers. It is to find strategies that survive when market conditions change — then validate them rigorously before committing real capital.
 
-> **Current phase:** Paper trading validation. No live capital is at risk until quantitative criteria are met.
+> **Current phase:** Demo MT5 validation — `eurusd_partial` (partial close, validated via Exit Research Jul 2026).  
+> No live capital is at risk. All validation runs on a MetaTrader 5 Demo account.
 
 ---
 
 ## Overview
 
 ```
-Strategy ideas → Backtest → Optimization → Progressive Retest → Walk-Forward → Paper Trading → Live
+Strategy ideas → Backtest → Optimization → Progressive Retest → Walk-Forward → Exit Research → Demo MT5 → Live
 ```
 
 | Layer | What it does |
@@ -41,6 +43,7 @@ Strategy ideas → Backtest → Optimization → Progressive Retest → Walk-For
 | **Optimization** | Grid search over SL/TP/CB parameter space |
 | **Progressive Retest** | Auto-classifies strategies at 10k / 15k / 20k candles |
 | **Walk-Forward** | Detects overfitting via rolling TRAIN/TEST windows |
+| **Exit Research** | Compares 13 exit variants per strategy using MAE/MFE/Monte Carlo |
 | **Discord Bot** | 17 slash commands for monitoring, analysis, and control |
 | **Dashboard** | Web UI on `localhost:8080` with real-time equity and signal table |
 | **Mobile App** | React Native + Express API for Android monitoring |
@@ -53,7 +56,7 @@ Strategy ideas → Backtest → Optimization → Progressive Retest → Walk-For
 flowchart TD
     A[MT5 Market Data] --> B[Replay Engine / Live Candles]
     B --> C{Strategy Layer}
-    C --> D[eurusd_simple]
+    C --> D[eurusd_partial ✅ v1.1]
     C --> E[xauusd_simple]
     C --> F[btceur_simple]
     D & E & F --> G[Scoring System]
@@ -63,7 +66,7 @@ flowchart TD
     I -->|MEDIUM| K[Discord Alert Only]
     I -->|LOW| L[Dropped]
     J --> M[Circuit Breaker]
-    M -->|OK| N[MT5 Order / Paper Trade]
+    M -->|OK| N[MT5 Order — Demo Account]
     M -->|Triggered| O[Auto-Pause 24h]
     N --> P[Dashboard + Discord]
     Q[News Filter] -->|Blackout active| L
@@ -73,18 +76,21 @@ flowchart TD
 
 ## Project Status
 
-### ✅ Completed
+### ✅ Completed (v1.1)
 
 - Multi-strategy signal engine (EURUSD, XAUUSD, BTCEUR)
 - Full backtesting pipeline with real trade costs included
 - Grid search optimizer (~7h run, 200+ parameter combinations)
 - Progressive retest framework (10k / 15k / 20k candles, auto-classification)
 - Walk-forward testing with TRAIN/TEST rolling windows
+- Monte Carlo simulation (2000 simulations, ruin probability, drawdown percentiles)
+- **Exit Research framework** — compares 13 exit variants per strategy with MAE/MFE/WF/MC
+- **Validation pipeline** — phases 3–8 with stability, WF, MC, and recommendation engine
+- **eurusd_partial** — first strategy promoted via Exit Research (PF=1.85, WR=54%, MC Ruin=0%)
 - Circuit breaker with dynamic risk scaling and disk persistence
 - News event filter (exact 2025–2026 dates: NFP, CPI, FOMC, ECB)
 - Real-time web dashboard with equity simulation and Chart.js curve
 - Discord bot with 17 slash commands
-- Paper trading mode with full P&L simulation
 - Automatic weekly summary (Discord, every Monday 08:00 UTC)
 - MT5 watchdog with auto-reconnect (non-blocking asyncio)
 - Trade costs model (spread + commission per symbol)
@@ -93,19 +99,18 @@ flowchart TD
 - Session summary system (London close 17h, NY close 22h UTC)
 - Encrypted MT5 credentials via Fernet
 - Mobile app (React Native + Express API) with dashboard, signals, and history
-- Monte Carlo simulation (5000 simulations, ruin probability, drawdown percentiles)
 - Trade journal with SQLite (full trade history with metadata)
 - Backtest queue system (processes tasks from mobile app)
 
 ### 🔄 In Progress
 
-- Paper trading validation (target: ≥ 50 closed trades per strategy)
+- Demo MT5 validation of `eurusd_partial` (target: ≥ 50 closed trades, WR ≥ 48%)
 
 ### 📋 Planned
 
-- Position analytics from trade journal
-- Live trading (after paper validation criteria are met)
+- Exit Research for XAUUSD and BTCEUR
 - Automated go-live criteria verification (`/go_live_check` command)
+- Live trading (after demo validation criteria are met)
 
 ---
 
@@ -113,24 +118,23 @@ flowchart TD
 
 ### Active Strategies
 
-| Symbol | Strategy | SL | TP | WR (20k) | PF (20k) | Classification |
-|---|---|---|---|---|---|---|
-| EURUSD | `eurusd_simple` | 1.5× ATR | 6.0× ATR | 27.0% | **1.19** | ✅ ROBUST |
-| XAUUSD | `xauusd_simple` | 2.0× ATR | 5.0× ATR | 35.5% | **1.17** | ✅ ROBUST |
-| BTCEUR | `btceur_simple` | 2.0× ATR | 3.0× ATR | 46.4% | **1.23** (10k) | ⚠️ INCONCLUSIVE |
+| Symbol | Strategy | Exit | SL | TP | WR (20k) | PF (20k) | MC Ruin | Notes |
+|---|---|---|---|---|---|---|---|---|
+| EURUSD | `eurusd_partial` | 50% Partial + Trailing | 1.5× ATR | 2×ATR + trail | 54.1% | **1.85** | **0.0%** | ✅ Validated via Exit Research Jul 2026 |
+| XAUUSD | `xauusd_simple` | Fixed RR | 2.0× ATR | 5.0× ATR | 35.5% | **1.17** | — | ✅ ROBUST |
+| BTCEUR | `btceur_simple` | Fixed RR | 2.0× ATR | 3.0× ATR | 46.4% | **1.23** (10k) | — | ⚠️ INCONCLUSIVE |
 
-All results include real spread + commission costs for a Professional account (FXLiveCapital).
+All results include real spread + commission costs for a Professional account.
 
-> BTCEUR is classified INCONCLUSIVE due to significant drawdown growth beyond 15k candles — regime dependency suspected. Monitoring in paper trading.
+### Reference (not active)
 
-### Available (not active)
-
-| Strategy | Symbol | PF | Notes |
-|---|---|---|---|
-| `xauusd_momentum` | XAUUSD | 1.25 | ROBUST, small sample (78 trades) |
-| `btc_trend_pullback_v1` | BTCEUR | 1.21 | CB triggered on 53% of signals |
-| `btceur_weekly_breakout` | BTCEUR | 2.66 | PF inflated by CB; not validated without it |
-| `btceur_regime_momentum` | BTCEUR | — | H4+Daily; now functional with `required_timeframe` mechanism |
+| Strategy | Symbol | Notes |
+|---|---|---|
+| `eurusd_simple` | EURUSD | Previous production config — SL 1.5×ATR, TP 6×ATR, RR 1:4. Superseded by `eurusd_partial`. |
+| `xauusd_momentum` | XAUUSD | ROBUST, small sample (78 trades) |
+| `btc_trend_pullback_v1` | BTCEUR | CB triggered on 53% of signals |
+| `btceur_weekly_breakout` | BTCEUR | PF inflated by CB; not validated without it |
+| `btceur_regime_momentum` | BTCEUR | H4+Daily; functional with `required_timeframe` mechanism |
 
 ### Discarded (`strategies/experimental/`)
 
@@ -153,24 +157,37 @@ flowchart LR
     D --> E{Classification}
     E -->|ROBUST / STABLE| F[Walk-Forward\nwalkforward.py]
     E -->|DEGRADING / FAILED| G[Discard to\nexperimental/]
-    F --> H{Overfitting?}
-    H -->|No| I[Paper Trading\n≥ 50 closed trades]
-    H -->|Yes| G
-    I --> J{Meets criteria?}
-    J -->|Yes| K[Live Trading]
-    J -->|No| L[Extended paper\nor discard]
+    F --> H[Exit Research\n13 variants × WF × MC]
+    H --> I[Validation Pipeline\nPhases 3-8]
+    I --> J{Passes all filters?}
+    J -->|Yes| K[Demo MT5 Validation\n≥ 50 closed trades]
+    J -->|No| L[Document & investigate]
+    K --> M{Meets criteria?}
+    M -->|Yes| N[Live Trading]
+    M -->|No| L
 ```
+
+### Exit Research — what it evaluates
+
+For each active strategy, 13 exit variants are compared using 20,000 H1 candles:
+
+| Metric group | Metrics |
+|---|---|
+| Profitability | PF, Net Pips, Win Rate, Expectancy, Avg Win, Avg Loss |
+| Risk | Max Drawdown, Consecutive Losses, Recovery Factor |
+| Exit quality | MAE Winners/Losers, MFE Winners/Losers, Profit Captured % |
+| Robustness | Walk-Forward (4 windows), Monte Carlo (2000 simulations), Stability Score (0–100) |
 
 ### Validation criteria for going live
 
 A strategy must satisfy **all** of the following:
 
 1. Progressive retest classification: **ROBUST** or **STABLE**
-2. PF ≥ 1.10 in paper trading with ≥ 50 closed trades
-3. Max drawdown in paper trading < 10% of allocated capital
-4. Live winrate within ±10 percentage points of backtest winrate
-5. Walk-forward: ≥ 4 of 7 TEST windows with PF > 1.0
-6. PF > 1.0 **without** circuit breaker (CB can improve results but must not be a requirement)
+2. Exit Research: Stability Score ≥ 20, WF MARGINAL or better, MC Ruin ≤ 5%
+3. PF ≥ 1.20 in Demo MT5 with ≥ 50 closed trades
+4. Demo winrate within ±10 percentage points of backtest winrate
+5. Demo drawdown < 10% of allocated capital
+6. PF > 1.0 **without** circuit breaker
 
 ### Trade costs included in all backtests
 
@@ -185,10 +202,10 @@ A strategy must satisfy **all** of the following:
 ## Project Structure
 
 ```
-BOT-MT5/
+LastEdge/  (c:\BOT-MT5)
 ├── bot.py                      # Entry point — Discord bot + MT5
 ├── signals.py                  # Strategy dispatcher
-├── rules_config.json           # Per-symbol configuration
+├── rules_config.json           # Per-symbol configuration (active: eurusd_partial)
 │
 ├── core/
 │   ├── engine.py               # Main signal engine + BotState
@@ -199,9 +216,13 @@ BOT-MT5/
 │   ├── circuit_breaker.py      # Auto-pause on losing streaks
 │   ├── walkforward.py          # Rolling TRAIN/TEST validation
 │   ├── trade_costs.py          # Spread + commission model
-│   ├── montecarlo.py           # Monte Carlo simulation (5000 runs)
+│   ├── montecarlo.py           # Monte Carlo simulation (2000 runs)
 │   ├── journal.py              # Trade journal with SQLite
 │   └── exit_research/          # Exit strategy research pipeline (isolated)
+│       ├── runner.py           # Orchestrates all exit research phases
+│       ├── variants.py         # 12 exit variants implemented
+│       ├── metrics.py          # MAE/MFE/Stability Score computation
+│       └── strategy_adapter.py # Adapts any strategy to the runner
 │
 ├── services/
 │   ├── autosignals.py          # Scan loop (every 20s)
@@ -209,51 +230,42 @@ BOT-MT5/
 │   ├── execution.py            # MT5 order execution
 │   ├── logging.py              # Session logging system
 │   ├── news_filter.py          # High-impact event blackout
-│   ├── commands_refactored.py  # Discord slash commands (25+ commands)
+│   ├── commands_refactored.py  # Discord slash commands
 │   ├── database.py             # SQLite persistence
 │   └── mobile_store.py         # Mobile app data bridge
 │
 ├── strategies/
 │   ├── base.py                 # BaseStrategy abstract class
-│   ├── eurusd.py               # eurusd_simple (active)
+│   ├── eurusd.py               # EURUSDPartialStrategy (active) + EURUSDStrategy (legacy)
 │   ├── xauusd.py               # xauusd_simple + momentum (active)
 │   ├── btceur_new.py           # btceur_simple (active)
 │   ├── btc_trend_pullback_v1.py
 │   ├── btceur_weekly_breakout.py
 │   ├── btceur_regime_momentum.py
 │   └── experimental/           # Discarded strategies (reference only)
-│       ├── eurusd_asian_breakout.py
-│       ├── eurusd_mtf.py
-│       └── xauusd_psychological.py
 │
-├── mobile-app/
-│   └── Pasted-Rol-Objective/   # React Native + Express API project
-│       ├── mobile/             # Expo React Native app
-│       ├── api-server/         # Express 5 + SQLite backend
-│       └── scripts/            # Build and start scripts
+├── run_exit_research.py        # Run Exit Research for EURUSD
+├── run_validation.py           # Run validation pipeline (phases 3-8)
 │
 ├── backtest_results/
+│   ├── exit_research/          # Exit Research sessions
+│   │   └── 20260702_225143/    # EURUSD exit research (13 variants, 20k bars)
+│   ├── validation/             # Validation pipeline sessions
+│   │   ├── val_20260703_160132/        # EURUSD partial_close validation
+│   │   └── EURUSD_PARTIAL_CLOSE_DECISION.md  # Decision record
 │   ├── optimization/           # Grid search JSONs
-│   ├── retests/                # Progressive retest results
-│   ├── walk_forward/           # Walk-forward results
-│   └── monte_carlo/            # Monte Carlo results
+│   └── monte_carlo/            # Standalone Monte Carlo results
 │
 ├── tests/
 │   ├── backtest_runner.py      # CLI backtest with CB simulation
 │   ├── optimize_strategies.py  # Grid search
-│   ├── apply_optimization.py   # Apply optimal params to strategy files
-│   ├── run_progressive_retests.py
-│   ├── run_long_retests.py
-│   ├── run_full_backtest.bat
-│   ├── run_progressive_retests.bat
-│   └── run_optimization.bat
+│   └── ...
 │
+├── mobile-app/                 # React Native + Express API
 ├── start_bot.bat               # Start Python bot
 ├── start_all.bat               # Start bot + API server
-├── install_requirements.bat    # Dependency installer
-├── requirements.txt            # Python dependencies
-├── .env.example                # Environment template
-└── .gitignore
+├── requirements.txt
+└── .env.example
 ```
 
 ---
@@ -271,7 +283,7 @@ cd BOT-MT5
 copy .env.example .env
 # Edit .env with your Discord token, MT5 credentials, etc.
 
-# 3. Install dependencies and start (recommended)
+# 3. Install dependencies and start
 start_bot.bat
 
 # Or manually
@@ -294,68 +306,61 @@ MT5_SERVER=YourBroker-Demo
 
 ## Usage
 
-### Paper trading (default)
+### Starting the bot (Demo MT5 validation mode)
 
 ```bash
 start_bot.bat
 # Dashboard available at http://localhost:8080
-# Bot responds to Discord slash commands
+# Bot connects to MT5 Demo and starts scanning every 20s
 ```
 
-The bot always starts in paper trading mode (`AUTO_EXECUTE_SIGNALS=0`). To enable real execution, use the button in the dashboard.
+The bot uses the Demo MT5 account configured in `.env`. No live capital involved.
+
+### Running Exit Research
+
+```bash
+# Full exit research for EURUSD (20,000 H1 bars, ~90 minutes)
+python run_exit_research.py --bars 20000
+
+# Quick analysis (5,000 bars)
+python run_exit_research.py --bars 5000
+```
+
+Results saved to `backtest_results/exit_research/{run_id}/`.
+
+### Running the validation pipeline
+
+```bash
+# Validate finalist variants (phases 3-8)
+python run_validation.py
+
+# Specify variants explicitly
+python run_validation.py --variants partial_close rr_1_3
+
+# Dry run (check config only)
+python run_validation.py --dry-run
+```
+
+Results saved to `backtest_results/validation/{run_id}/`.
 
 ### Running backtests
 
 ```bash
-# Single strategy, interactive mode
-python tests/backtest_runner.py
+# Single strategy
+python tests/backtest_runner.py --symbol EURUSD --strategy eurusd_partial --bars 10000 --save
 
-# CLI — single pair
-python tests/backtest_runner.py --symbol XAUUSD --strategy xauusd_simple --bars 10000 --save
-
-# With circuit breaker simulation
-python tests/backtest_runner.py --symbol EURUSD --bars 10000 --cb-losses 3 --cb-pause 72
-
-# Walk-forward analysis
+# With walk-forward
 python tests/backtest_runner.py --symbol EURUSD --bars 10000 --walkforward
 
 # All active strategies
 tests\run_full_backtest.bat
 ```
 
-### Running optimization (grid search)
+### Running optimization
 
 ```bash
-# Full grid search (~7h for all strategies, 5000 candles)
 tests\run_optimization.bat
-
-# Apply optimal parameters found
 python tests\apply_optimization.py backtest_results/optimization/optimization_YYYYMMDD.json
-```
-
-### Progressive retest (multi-horizon validation)
-
-```bash
-# Runs 10k, 15k, 20k candles for each active strategy sequentially
-tests\run_progressive_retests.bat
-
-# Results saved to backtest_results/progressive_retests/session_YYYYMMDD_HHMMSS/
-```
-
-### Mobile app (Android)
-
-```bash
-# Start the API server (separate terminal)
-start_all.bat
-
-# Or manually:
-cd mobile-app\Pasted-Rol-Objective\artifacts\api-server
-pnpm run build
-pnpm run start
-
-# Build APK:
-cd mobile-app\Pasted-Rol-Objective
-pnpm run build:apk:release
 ```
 
 ---
@@ -391,8 +396,6 @@ pnpm run build:apk:release
 
 ### Circuit Breaker
 
-Implemented in `core/circuit_breaker.py`. Persists state to disk; survives bot restarts (pauses older than 48h are discarded).
-
 | Condition | Action |
 |---|---|
 | 2 consecutive losses | Risk × 0.8 |
@@ -404,33 +407,24 @@ Implemented in `core/circuit_breaker.py`. Persists state to disk; survives bot r
 
 ### News Filter
 
-Pauses trading 30 minutes before and after high-impact events. Exact dates hardcoded for 2025–2026.
+Pauses trading 30 minutes before and after high-impact events (2025–2026 hardcoded dates).
 
-| Event | Affects | UTC |
-|---|---|---|
-| NFP | EURUSD, XAUUSD | 13:30 |
-| US CPI | EURUSD, XAUUSD | 13:30 |
-| Fed FOMC | EURUSD, XAUUSD | 19:00 |
-| ECB Meeting | EURUSD | 12:15 |
-| ECB Press Conference | EURUSD | 12:45 |
+### Trailing Stops / Partial Close
 
-### Trailing Stops
+The active EURUSD strategy (`eurusd_partial`) uses a validated partial close mechanism:
 
-Automatic trailing stop management (`trailing_stops.py`), updated every 30s:
-
-| Profit Level | Action |
+| Event | Action |
 |---|---|
-| ≥ 50% of TP | Move SL to breakeven |
-| ≥ 75% of TP | Activate trailing stop |
-| ≥ 100% of TP | Close 50% of position |
+| Price reaches 2× ATR profit | Close 50% of position |
+| Remaining 50% | Trailing SL at 1.5× ATR |
+| Max profit target | 5× ATR from entry |
 
 ### Operational limits
 
 | Rule | Value |
 |---|---|
-| Startup cooldown | 2 minutes (no signals on first scan) |
-| Max trades per 12h period | 5 (global) |
-| BTCEUR directional limit | Max 3 signals in same direction per day |
+| Startup cooldown | 2 minutes |
+| Max trades per 12h (global) | 5 |
 | EURUSD cooldown | 10 candles |
 | XAUUSD cooldown | 240 minutes |
 | BTCEUR cooldown | 60 minutes |
@@ -438,59 +432,26 @@ Automatic trailing stop management (`trailing_stops.py`), updated every 30s:
 
 ---
 
-## Code Quality & Known Issues
+## Demo MT5 Validation Phase
 
-### ✅ Implemented correctly
+This version (v1.1) marks the beginning of the Demo MT5 validation phase for `eurusd_partial`.
 
-| Component | Status |
-|---|---|
-| Circuit Breaker (disk persistence, risk scaling) | ✅ Robust |
-| Backtesting / Replay Engine (real costs included) | ✅ Functional |
-| Scoring / Confidence System | ✅ Functional (temporal consistency calculated from candle alignment) |
-| Trailing Stops (breakeven, partial close, trailing) | ✅ Implemented |
-| Market Opening Alerts (London, NY) | ✅ Implemented |
-| News Filter (2025–2026 dates) | ✅ Complete |
-| Risk Manager (per-symbol limits) | ✅ Functional |
-| Session Summary (London 17h, NY 22h UTC) | ✅ Implemented |
-| Discord Bot (17 slash commands) | ✅ Operational |
-| Monte Carlo Simulation (5000 runs) | ✅ Implemented |
-| Trade Journal (SQLite) | ✅ Implemented |
-| Walk-Forward Testing | ✅ Implemented (with known bug) |
-| MT5 Watchdog (non-blocking asyncio) | ✅ Operational |
-| Encrypted Credentials (Fernet) | ✅ Implemented |
-| Mobile App (React Native + Express API) | ✅ Implemented |
+**Philosophy for this phase: observe before intervening.**
 
-### ✅ Recently Fixed (June 2026)
+- No parameter changes during validation
+- No strategy swaps during validation
+- No optimizations during validation
+- Only data collection and comparison against backtest expectations
 
-1. **Walk-forward windows 2–6 producing 0 signals** — Fixed by:
-   - Passing historical bar timestamps to `DuplicateFilter` instead of using `datetime.now()`
-   - Clearing `duplicate_filter.recent_signals` in `reset_replay_state()` between windows
-   - Files: `core/engine.py`, `core/replay_engine.py`
+### Metrics to monitor
 
-2. **`btceur_regime_momentum` — 0 signals in backtest** — Fixed by:
-   - Adding `required_timeframe` attribute to `BaseStrategy`
-   - Setting `required_timeframe = 'H4'` in `BTCEURRegimeMomentumStrategy`
-   - Making `ReplayEngine` respect strategy timeframes when downloading data
-   - Files: `strategies/base.py`, `strategies/btceur_regime_momentum.py`, `core/replay_engine.py`
-
-3. **Duplicate key in `STRATEGY_REGISTRY`** — Fixed by:
-   - Reactivating the commented-out `'btceur_regime_momentum'` entry
-   - Updated comment to reflect new `required_timeframe` mechanism
-   - File: `signals.py`
-
-4. **Mobile app dynamic strategy loading** — Added:
-   - `GET /api/strategies` endpoint in API server
-   - `fetchAvailableStrategies()` in mobile API client
-   - Strategy list now includes all registered strategies with symbol grouping
-   - Files: `mobile-app/.../api-server/src/routes/bot.ts`, `mobile-app/.../services/backtestApi.ts`
-
-### 🟡 Areas for improvement
-
-1. **Unify trade counters** — `ConsolidatedFilters.daily_trades` in `core/filters.py` is independent from `state.trades_today` in `bot.py`. Two parallel counting systems can desynchronize.
-
-2. **`get_stats()` in `filters.py`** — Always reports 0 rejected signals (placeholder). Stats are incomplete.
-
-3. **Automated go-live verification** — The 6 go-live criteria are documented but checked manually. A `/go_live_check` command would eliminate human error.
+| Metric | Backtest baseline | Alert threshold |
+|---|---|---|
+| Win Rate | 54.1% | < 48% after 30 trades |
+| Profit Factor | 1.85 | < 1.20 after 50 trades |
+| Max Drawdown | 2,125 pips | > 3,000 pips from peak |
+| Expectancy | 7.88 pips/trade | < 3.0 pips/trade |
+| Partial close rate | ~50% of trades | < 30% (would indicate execution issue) |
 
 ---
 
@@ -500,40 +461,33 @@ Automatic trailing stop management (`trailing_stops.py`), updated every 30s:
 
 **Evidence over assumptions** — Every claim about a strategy's performance is backed by backtests on real H1 data with actual trade costs included. No theoretical PF numbers.
 
-**Validation before deployment** — The progression from backtest → optimization → progressive retest → walk-forward → paper trading exists specifically to avoid deploying strategies that work in-sample but fail out-of-sample.
+**Validation before deployment** — The progression from backtest → optimization → progressive retest → walk-forward → exit research → demo MT5 exists specifically to avoid deploying strategies that work in-sample but fail out-of-sample.
 
-**Reproducibility first** — Every backtest session saves a full JSON with exact parameters, timestamp, candle count, and results. Results can be reproduced months later.
+**Reproducibility first** — Every research session saves a full JSON with exact parameters, timestamp, candle count, and results. Results can be reproduced months later.
 
 **Single developer scope** — The system is intentionally sized for one person to maintain. No microservices, no Docker, no cloud infrastructure. Just a Python process and a running MT5 terminal.
 
 ---
 
-## Roadmap
+## Changelog
 
-### Current phase — Paper Trading Validation
-- [ ] Accumulate ≥ 50 closed trades per active strategy
-- [ ] Confirm live winrate vs backtest winrate (±10% tolerance)
+### v1.1 — LastEdge (July 2026)
+- **New:** Exit Research framework (`core/exit_research/`, `run_exit_research.py`)
+- **New:** Validation pipeline phases 3–8 (`run_validation.py`)
+- **New:** `EURUSDPartialStrategy` — first strategy promoted via quantitative exit research
+- **Changed:** EURUSD production config updated from `eurusd_simple` (RR 1:4) to `eurusd_partial` (partial close + trailing)
+- **Changed:** Project renamed from BOT-MT5 to LastEdge
+- **Changed:** Demo MT5 replaces internal paper trading as the validation mechanism
 
-### Next phase — Statistical Confidence
-- [ ] Position analytics (session performance, duration analysis)
-- [ ] Strategy correlation analysis
-- [ ] Automated go-live verification command
-
-### Long-term — Live Deployment
-- [ ] Meet all 6 go-live validation criteria
-- [ ] Start with minimal capital ($200) at 0.5% risk per trade
-- [ ] Scale progressively based on live performance
-
----
-
-## Contributing
-
-This is a personal research project, but the codebase is open. If you want to add a strategy, the pattern is in `strategies/base.py` — inherit `BaseStrategy`, implement `evaluate()`, and register in `signals.py` and `backtest_runner.py`.
-
-Before submitting a pull request:
-- Run the progressive retest on your strategy (`tests/run_progressive_retests.bat`)
-- Include the `session_summary.json` from the results
-- A strategy should reach at least **STABLE** classification before being considered for the active set
+### v1.0 — BOT-MT5 (May–June 2026)
+- Grid search optimizer
+- Progressive retest framework
+- Walk-forward testing
+- Monte Carlo simulation
+- Trade journal (SQLite)
+- Discord bot (17 commands)
+- Web dashboard
+- Mobile app (React Native)
 
 ---
 

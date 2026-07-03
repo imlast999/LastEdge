@@ -1,5 +1,5 @@
 """
-Internationalization (i18n) system for BOT-MT5.
+Internationalization (i18n) system for LastEdge.
 
 Provides English and Spanish translations for all user-facing strings.
 Default language is English. Language can be changed at runtime.
@@ -660,8 +660,8 @@ _TRANSLATIONS["Check market conditions"] = {
 # ── Weekly Summary ─────────────────────────────────────────────────────────────
 
 _TRANSLATIONS["Weekly Summary — Trading Bot"] = {
-    "en": "📊 Weekly Summary — Trading Bot",
-    "es": "📊 Resumen Semanal — Trading Bot",
+    "en": "📊 Weekly Summary — LastEdge",
+    "es": "📊 Resumen Semanal — LastEdge",
 }
 _TRANSLATIONS["Week of {start} to {end}"] = {
     "en": "Week of {start} to {end}",
@@ -1185,8 +1185,8 @@ _TRANSLATIONS["Settings"] = {
     "es": "Ajustes",
 }
 _TRANSLATIONS["Trading Bot Monitor"] = {
-    "en": "Trading Bot Monitor",
-    "es": "Monitor del Bot de Trading",
+    "en": "LastEdge Monitor",
+    "es": "Monitor LastEdge",
 }
 _TRANSLATIONS["EQUITY"] = {
     "en": "EQUITY",
