@@ -524,8 +524,17 @@ class ExecutionService:
         return request
     
     def _execute_order_with_retries(self, order_request: Dict) -> Dict:
-        """Ejecuta orden con reintentos en caso de fallo"""
+        """Ejecuta orden con reintentos en caso de fallo."""
         last_error = None
+
+        # Retcodes que NO deben reintentarse — son errores permanentes hasta
+        # que cambie una condición externa (mercado cerrado, símbolo inválido…)
+        PERMANENT_ERRORS = {
+            10018,  # Market closed
+            10036,  # Requests too frequent (MT5 lo bloquea temporalmente)
+            10038,  # Invalid volume
+            10006,  # Request rejected
+        }
         
         for attempt in range(self.execution_config['retry_attempts']):
             try:
@@ -544,6 +553,14 @@ class ExecutionService:
                     }
                 else:
                     last_error = f"MT5 error {result.retcode}: {result.comment}"
+
+                    # Errores permanentes: no reintentar, salir inmediatamente
+                    if result.retcode in PERMANENT_ERRORS:
+                        logger.debug(
+                            f"[Execution] Permanent error {result.retcode} "
+                            f"({result.comment}) — aborting retries"
+                        )
+                        break
                     
                     # Si es un error de precio, intentar con precio actual
                     if result.retcode in [mt5.TRADE_RETCODE_PRICE_OFF, mt5.TRADE_RETCODE_INVALID_PRICE]:

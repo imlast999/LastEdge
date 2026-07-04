@@ -363,8 +363,29 @@ class MobileStore:
             if status != "ACCEPTED":
                 continue
 
+            symbol = row.get("symbol", "UNKNOWN")
+
+            # ── Comprobar si el mercado está abierto ANTES de intentar ────────
+            if not self._is_market_open(symbol):
+                # Loguear solo una vez cada 10 minutos para no saturar el log.
+                # Usamos el sid como clave para evitar repeticiones.
+                if sid not in getattr(self, "_market_closed_logged", set()):
+                    logger.warning(
+                        f"[MobileStore] Señal {sid} ({symbol}): mercado cerrado "
+                        f"(MT5 error 10018). Se reintentará automáticamente cuando "
+                        f"el mercado abra."
+                    )
+                    if not hasattr(self, "_market_closed_logged"):
+                        self._market_closed_logged: set[int] = set()
+                    self._market_closed_logged.add(sid)
+                continue  # NO marcar como procesada — reintentar cuando abra
+
+            # Si el mercado acaba de abrir, limpiar el set de logs silenciados
+            if hasattr(self, "_market_closed_logged"):
+                self._market_closed_logged.discard(sid)
+
             signal = {
-                "symbol": row["symbol"],
+                "symbol": symbol,
                 "type": row["direction"],
                 "entry": row["price"],
                 "sl": row["sl_price"],
@@ -383,9 +404,27 @@ class MobileStore:
                         f"(ticket {result.order_id})"
                     )
                 else:
-                    logger.warning(
-                        f"[MobileStore] Fallo ejecutando señal {sid}: {result.message}"
-                    )
+                    # Detectar errores permanentes que no deben reintentarse
+                    msg = result.message or ""
+                    if "10018" in msg or "Market closed" in msg.lower():
+                        # El mercado se cerró entre la comprobación y el envío
+                        # (race condition mínima). Silenciar y reintentar más tarde.
+                        if not hasattr(self, "_market_closed_logged"):
+                            self._market_closed_logged = set()
+                        if sid not in self._market_closed_logged:
+                            logger.warning(
+                                f"[MobileStore] Señal {sid} ({symbol}): mercado cerrado "
+                                f"durante la ejecución. Esperando reapertura."
+                            )
+                            self._market_closed_logged.add(sid)
+                    else:
+                        # Error genuino no recuperable — marcar como procesada
+                        # para que no bloquee el ciclo indefinidamente.
+                        logger.warning(
+                            f"[MobileStore] Fallo ejecutando señal {sid}: {result.message}"
+                        )
+                        self.mark_mobile_processed(sid, executed=False)
+                        self.update_signal_status(sid, "FAILED")
             except Exception as e:
                 logger.error(f"[MobileStore] Error ejecutando señal {sid}: {e}")
 
@@ -397,6 +436,30 @@ class MobileStore:
             return len(positions) if positions else 0
         except Exception:
             return 0
+
+    def _is_market_open(self, symbol: str) -> bool:
+        """
+        Comprueba si el mercado de un símbolo está abierto en MT5.
+
+        Usa mt5.symbol_info() para leer el campo `trade_mode`:
+          - SYMBOL_TRADE_MODE_FULL (4)  → mercado abierto
+          - cualquier otro valor        → cerrado, solo lectura, etc.
+
+        Si MT5 no está disponible o hay error, devuelve True para no
+        bloquear señales en caso de fallo de conexión temporal.
+        """
+        try:
+            import MetaTrader5 as mt5
+
+            info = mt5.symbol_info(symbol)
+            if info is None:
+                # MT5 no reconoce el símbolo — dejar pasar para que
+                # el error se maneje en execute_signal con más contexto
+                return True
+            # trade_mode == 4 (SYMBOL_TRADE_MODE_FULL) = mercado abierto
+            return info.trade_mode == mt5.SYMBOL_TRADE_MODE_FULL
+        except Exception:
+            return True  # fail-open: si no podemos comprobar, intentamos
 
     def sync_dashboard(self, dashboard) -> None:
         """Sincroniza equity MT5, acciones móviles y trades cerrados."""
