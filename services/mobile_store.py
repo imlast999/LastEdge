@@ -351,9 +351,21 @@ class MobileStore:
 
     def process_mobile_actions(self) -> None:
         """Ejecuta señales ACCEPTED desde la app en MT5 demo."""
+        import time as _time
+
         if not hasattr(self, "_market_closed_last_log"):
-            # Dict[signal_id -> last_log_timestamp]  — throttle de 10 min por señal
+            # Dict[signal_id -> last_log_timestamp]
+            # Throttle: loguear market-closed como máximo 1 vez por hora por señal.
             self._market_closed_last_log: dict[int, float] = {}
+
+        # ── Helper de throttle ────────────────────────────────────────────────
+        def _should_log_closed(sid: int) -> bool:
+            now = _time.monotonic()
+            last = self._market_closed_last_log.get(sid, 0.0)
+            if now - last >= 3600:          # 1 hora
+                self._market_closed_last_log[sid] = now
+                return True
+            return False
 
         for row in self.get_unprocessed_mobile_actions():
             sid = row["id"]
@@ -370,9 +382,6 @@ class MobileStore:
             symbol = row.get("symbol", "UNKNOWN")
 
             # ── Expiración de señales antiguas ────────────────────────────────
-            # Si la señal fue creada hace más de MAX_PENDING_HOURS y el mercado
-            # sigue cerrado, marcarla como EXPIRED para limpiar la cola.
-            # Esto evita que señales del viernes bloqueen el bot todo el finde.
             created_at_raw = row.get("created_at") or ""
             if created_at_raw and self._signal_is_expired(sid, created_at_raw, symbol):
                 logger.warning(
@@ -386,19 +395,13 @@ class MobileStore:
 
             # ── Comprobar si el mercado está abierto ANTES de intentar ────────
             if not self._is_market_open(symbol):
-                import time
-                now = time.monotonic()
-                last = self._market_closed_last_log.get(sid, 0.0)
-                if now - last >= 600:  # loguear como máximo 1 vez cada 10 minutos
+                if _should_log_closed(sid):
                     logger.warning(
                         f"[MobileStore] Señal {sid} ({symbol}): mercado cerrado. "
-                        f"Se reintentará cuando abra."
+                        f"Próximo reintento automático cuando abra. "
+                        f"(Este mensaje se repetirá máx. 1 vez/hora)"
                     )
-                    self._market_closed_last_log[sid] = now
-                continue  # NO marcar como procesada — reintentar cuando abra
-
-            # Mercado abierto — limpiar throttle
-            self._market_closed_last_log.pop(sid, None)
+                continue
 
             signal = {
                 "symbol": symbol,
@@ -415,6 +418,7 @@ class MobileStore:
                 if result.success:
                     self.mark_mobile_processed(sid, executed=True)
                     self.update_signal_status(sid, "OPEN")
+                    self._market_closed_last_log.pop(sid, None)
                     logger.info(
                         f"[MobileStore] Señal {sid} ejecutada en MT5 "
                         f"(ticket {result.order_id})"
@@ -422,18 +426,16 @@ class MobileStore:
                 else:
                     msg = result.message or ""
                     if "10018" in msg or "market closed" in msg.lower():
-                        # Race condition entre check y send — silenciar y reintentar
-                        import time
-                        now = time.monotonic()
-                        last = self._market_closed_last_log.get(sid, 0.0)
-                        if now - last >= 600:
+                        # El broker reportó mercado abierto pero rechazó la orden.
+                        # Throttlear igual que el check previo.
+                        if _should_log_closed(sid):
                             logger.warning(
-                                f"[MobileStore] Señal {sid} ({symbol}): mercado cerrado "
-                                f"durante la ejecución. Esperando reapertura."
+                                f"[MobileStore] Señal {sid} ({symbol}): MT5 rechazó "
+                                f"la orden (mercado cerrado en el broker). "
+                                f"Reintentando cuando abra. "
+                                f"(Este mensaje se repetirá máx. 1 vez/hora)"
                             )
-                            self._market_closed_last_log[sid] = now
                     else:
-                        # Error genuino no recuperable — marcar para no reintentar
                         logger.warning(
                             f"[MobileStore] Fallo ejecutando señal {sid}: {result.message}"
                         )
