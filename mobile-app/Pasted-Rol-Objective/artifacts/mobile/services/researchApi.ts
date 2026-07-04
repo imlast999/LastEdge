@@ -125,3 +125,49 @@ export async function fetchExitResearchDetail(
     overrides
   );
 }
+
+// ── Equity Curve ──────────────────────────────────────────────────────────────
+
+/** Un punto de la equity curve acumulada. */
+export interface EquityCurvePoint {
+  trade_index:   number;  // número ordinal del trade (eje X)
+  bar_index:     number;  // índice de vela en el dataset
+  exit_bar:      number;
+  result:        "WIN" | "LOSS";
+  profit_pips:   number;  // P&L del trade individual
+  equity:        number;  // equity acumulada hasta este punto
+  drawdown:      number;  // drawdown en pips desde el último pico
+  mae_pips:      number;
+  mfe_pips:      number;
+  duration_bars: number;
+  is_new_high:   boolean;
+}
+
+export interface EquityCurveData {
+  variant:       string;
+  total_trades:  number;
+  final_equity:  number;
+  max_drawdown:  number;
+  new_highs:     number;
+  wins:          number;
+  losses:        number;
+  points:        EquityCurvePoint[];
+}
+
+/**
+ * Carga la equity curve de una variante.
+ * step > 1 para decimación (reduce el payload para variantes con muchos trades).
+ */
+export async function fetchEquityCurve(
+  runId: string,
+  variant: string,
+  step = 1,
+  overrides?: { url?: string; token?: string }
+): Promise<EquityCurveData> {
+  const params = new URLSearchParams({ variant });
+  if (step > 1) params.set("step", String(step));
+  return apiFetch<EquityCurveData>(
+    `/api/research/exit-research/${encodeURIComponent(runId)}/equity?${params}`,
+    overrides
+  );
+}

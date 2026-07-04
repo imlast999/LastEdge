@@ -29,12 +29,15 @@ import { useColors } from "@/hooks/useColors";
 import { useTranslation } from "@/hooks/useTranslation";
 import { useSettings } from "@/context/SettingsContext";
 import { ApiErrorBanner } from "@/components/ApiErrorBanner";
+import { InteractiveEquityChart, EquityCurveHeader } from "@/components/InteractiveEquityChart";
 import {
   listExitResearchRuns,
   fetchExitResearchDetail,
+  fetchEquityCurve,
   type ExitResearchRun,
   type ExitResearchDetail,
   type ExitVariant,
+  type EquityCurveData,
 } from "@/services/researchApi";
 
 // ── Tipos de ordenación ───────────────────────────────────────────────────────
@@ -91,6 +94,9 @@ export default function ResearchScreen() {
   const [runs, setRuns]           = useState<ExitResearchRun[]>([]);
   const [detail, setDetail]       = useState<ExitResearchDetail | null>(null);
   const [activeVariant, setActiveVariant] = useState<ExitVariant | null>(null);
+  const [activeRunId, setActiveRunId]     = useState<string | null>(null);
+  const [equityCurve, setEquityCurve]     = useState<EquityCurveData | null>(null);
+  const [loadingCurve, setLoadingCurve]   = useState(false);
 
   // ── Estado de UI ──────────────────────────────────────────────────────────
   const [loading, setLoading]     = useState(false);
@@ -120,14 +126,38 @@ export default function ResearchScreen() {
   const openRun = useCallback(async (run: ExitResearchRun) => {
     setLoading(true);
     setError(null);
+    setEquityCurve(null);
     try {
       const data = await fetchExitResearchDetail(run.run_id, apiOverrides);
       setDetail(data);
+      setActiveRunId(run.run_id);
       setView("detail");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+    }
+  }, [apiOverrides]);
+
+  // ── Carga de la equity curve para una variante ────────────────────────────
+  const loadEquityCurve = useCallback(async (runId: string, variantName: string) => {
+    setLoadingCurve(true);
+    setEquityCurve(null);
+    try {
+      // Decimación automática: si hay muchos trades, reducir a cada 3
+      const data = await fetchEquityCurve(runId, variantName, 1, apiOverrides);
+      // Si el payload supera 2000 puntos, decimar
+      if (data.points.length > 2000) {
+        const step = Math.ceil(data.points.length / 1000);
+        const decimated = await fetchEquityCurve(runId, variantName, step, apiOverrides);
+        setEquityCurve(decimated);
+      } else {
+        setEquityCurve(data);
+      }
+    } catch {
+      setEquityCurve(null); // silencioso — la sección simplemente no aparece
+    } finally {
+      setLoadingCurve(false);
     }
   }, [apiOverrides]);
 
@@ -200,7 +230,13 @@ export default function ResearchScreen() {
           bottomPad={bottomPad}
           onSortChange={setSortKey}
           onFilterChange={setFilter}
-          onSelectVariant={(v) => { setActiveVariant(v); setView("variant"); }}
+          onSelectVariant={(v) => {
+            setActiveVariant(v);
+            setEquityCurve(null);
+            setView("variant");
+            // Cargar la curva automáticamente al abrir la variante
+            if (activeRunId) loadEquityCurve(activeRunId, v.variant);
+          }}
         />
       )}
 
@@ -208,6 +244,10 @@ export default function ResearchScreen() {
         <VariantDetailView
           variant={activeVariant}
           symbol={detail.symbol}
+          runId={activeRunId ?? ""}
+          equityCurve={equityCurve}
+          loadingCurve={loadingCurve}
+          onLoadCurve={() => activeRunId && loadEquityCurve(activeRunId, activeVariant.variant)}
           colors={colors}
           t={t}
           bottomPad={bottomPad}
@@ -563,13 +603,17 @@ function VariantRow({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function VariantDetailView({
-  variant, symbol, colors, t, bottomPad,
+  variant, symbol, runId, equityCurve, loadingCurve, onLoadCurve, colors, t, bottomPad,
 }: {
-  variant: ExitVariant;
-  symbol: string;
-  colors: ReturnType<typeof useColors>;
-  t: (k: string) => string;
-  bottomPad: number;
+  variant:      ExitVariant;
+  symbol:       string;
+  runId:        string;
+  equityCurve:  EquityCurveData | null;
+  loadingCurve: boolean;
+  onLoadCurve:  () => void;
+  colors:       ReturnType<typeof useColors>;
+  t:            (k: string) => string;
+  bottomPad:    number;
 }) {
   const pf   = variant.profit_factor;
   const stab = variant.stability_score;
@@ -606,6 +650,51 @@ function VariantDetailView({
         <Text style={[styles.variantDetailName, { color: colors.foreground }]}>
           {variant.variant.replace(/_/g, " ")}
         </Text>
+      </View>
+
+      {/* ── Equity Curve ── */}
+      <SectionTitle title="Equity Curve" colors={colors} />
+      <View style={[styles.curveCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        {loadingCurve && (
+          <View style={[styles.center, { paddingVertical: 40 }]}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={[styles.emptyDesc, { color: colors.mutedForeground, marginTop: 8 }]}>
+              Cargando {variant.signals ?? "?"} trades…
+            </Text>
+          </View>
+        )}
+
+        {!loadingCurve && equityCurve && equityCurve.points.length > 0 && (
+          <>
+            <EquityCurveHeader data={equityCurve} colors={colors} />
+            <View style={[styles.curveDivider, { backgroundColor: colors.border }]} />
+            <View style={{ paddingHorizontal: 4, paddingBottom: 8 }}>
+              <InteractiveEquityChart data={equityCurve} height={200} />
+            </View>
+            <Text style={[styles.curveCaption, { color: colors.mutedForeground }]}>
+              {equityCurve.total_trades.toLocaleString()} trades · Toca para inspeccionar · ▲ = nuevo máximo
+            </Text>
+          </>
+        )}
+
+        {!loadingCurve && !equityCurve && (
+          <TouchableOpacity
+            onPress={onLoadCurve}
+            style={[styles.loadCurveBtn, { borderColor: colors.primary }]}
+            activeOpacity={0.75}
+          >
+            <Feather name="trending-up" size={18} color={colors.primary} />
+            <Text style={[styles.loadCurveBtnText, { color: colors.primary }]}>
+              Ver equity curve
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {!loadingCurve && equityCurve && equityCurve.points.length === 0 && (
+          <Text style={[styles.emptyDesc, { color: colors.mutedForeground, textAlign: "center", padding: 20 }]}>
+            Sin trades disponibles para esta variante
+          </Text>
+        )}
       </View>
 
       {/* ── Grid de métricas principales ── */}
@@ -878,4 +967,17 @@ const styles = StyleSheet.create({
   degradBarBg: { flex: 1, height: 6, borderRadius: 3, overflow: "hidden" },
   degradBarFill: { height: 6, borderRadius: 3 },
   degradValue: { fontSize: 13, fontFamily: "Inter_700Bold", fontVariant: ["tabular-nums"], width: 44, textAlign: "right" },
+
+  // Equity Curve block
+  curveCard: { borderRadius: 14, borderWidth: 1, overflow: "hidden" },
+  curveDivider: { height: 1 },
+  curveCaption: {
+    fontSize: 10, fontFamily: "Inter_400Regular",
+    textAlign: "center", paddingBottom: 10, paddingHorizontal: 12,
+  },
+  loadCurveBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, margin: 16, paddingVertical: 14, borderRadius: 12, borderWidth: 1.5,
+  },
+  loadCurveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });

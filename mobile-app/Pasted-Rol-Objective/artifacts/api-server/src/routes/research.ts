@@ -69,6 +69,36 @@ function parseCsv(filePath: string): Record<string, string>[] {
   }
 }
 
+/**
+ * Construye la equity curve acumulada desde un array de trades.
+ * Devuelve puntos {trade_id, equity, drawdown, result, profit_pips, mae, mfe, duration}.
+ */
+function buildEquityCurve(trades: Record<string, string>[]) {
+  let equity = 0;
+  let peak   = 0;
+  return trades.map((t) => {
+    const pips = parseFloat(t.profit_pips ?? "0") || 0;
+    equity += pips;
+    if (equity > peak) peak = equity;
+    const dd = peak > 0 ? peak - equity : 0;
+    const isNewHigh = equity >= peak && pips > 0;
+    return {
+      trade_id:     parseInt(t.trade_id ?? "0", 10),
+      trade_index:  parseInt(t.trade_id ?? "0", 10),  // eje X ordinal
+      bar_index:    parseInt(t.bar_index ?? "0", 10),
+      exit_bar:     parseInt(t.exit_bar  ?? "0", 10),
+      result:       t.result ?? "LOSS",
+      profit_pips:  parseFloat(pips.toFixed(4)),
+      equity:       parseFloat(equity.toFixed(4)),
+      drawdown:     parseFloat(dd.toFixed(4)),
+      mae_pips:     parseFloat(t.mae_pips ?? "0") || 0,
+      mfe_pips:     parseFloat(t.mfe_pips ?? "0") || 0,
+      duration_bars: parseInt(t.duration_bars ?? "0", 10),
+      is_new_high:  isNewHigh,
+    };
+  });
+}
+
 /** Convierte un run_id de formato YYYYMMDD_HHMMSS a ISO string legible. */
 function runIdToIso(runId: string): string {
   // "20260702_225143" → "2026-07-02T22:51:43Z"
@@ -226,3 +256,92 @@ researchRouter.get("/exit-research/:runId", (req: Request, res: Response) => {
     res.status(500).json({ ok: false, message: "Failed to read exit research run" });
   }
 });
+
+// ── GET /api/research/exit-research/:runId/equity ────────────────────────────
+// Devuelve la equity curve acumulada para una variante específica.
+// Query params:
+//   ?variant=partial_close   (requerido)
+//   ?step=1                  (opcional, decimar cada N trades para reducir payload)
+//
+// Cada punto incluye: trade_id, equity acumulada, drawdown en ese punto,
+// result (WIN/LOSS), profit_pips del trade, mae, mfe, duration_bars.
+// El eje X es ordinal (número de trade), no tiempo real, porque trades.csv
+// solo tiene bar_index (posición en la descarga de velas, no fecha ISO).
+
+researchRouter.get(
+  "/exit-research/:runId/equity",
+  (req: Request, res: Response) => {
+    const { runId } = req.params as { runId: string };
+
+    if (!runId || !/^[\w-]+$/.test(runId)) {
+      res.status(400).json({ ok: false, message: "Invalid run ID" });
+      return;
+    }
+
+    const variantParam = req.query["variant"];
+    const variant = typeof variantParam === "string" ? variantParam.trim() : "";
+
+    if (!variant) {
+      res.status(400).json({ ok: false, message: "?variant= is required" });
+      return;
+    }
+
+    // Validar variante para evitar path traversal
+    if (!/^[\w-]+$/.test(variant)) {
+      res.status(400).json({ ok: false, message: "Invalid variant name" });
+      return;
+    }
+
+    const stepRaw = req.query["step"];
+    const step = Math.max(1, parseInt(typeof stepRaw === "string" ? stepRaw : "1", 10) || 1);
+
+    const tradesPath = path.join(EXIT_RESEARCH_DIR, runId, "trades.csv");
+    if (!fs.existsSync(tradesPath)) {
+      res.status(404).json({ ok: false, message: "trades.csv not found for this run" });
+      return;
+    }
+
+    try {
+      // Leer y filtrar por variante
+      const allTrades = parseCsv(tradesPath);
+      const variantTrades = allTrades.filter(
+        (t) => t.variant === variant && t.result !== "PENDING"
+      );
+
+      if (variantTrades.length === 0) {
+        res.json({ ok: true, variant, total_trades: 0, points: [] });
+        return;
+      }
+
+      // Construir equity curve completa
+      const fullCurve = buildEquityCurve(variantTrades);
+
+      // Decimación opcional para reducir payload en variantes con miles de trades
+      const points = step <= 1
+        ? fullCurve
+        : fullCurve.filter((_, i) => i === 0 || i === fullCurve.length - 1 || i % step === 0);
+
+      // Estadísticas resumidas para el header del gráfico
+      const finalEquity = fullCurve[fullCurve.length - 1]?.equity ?? 0;
+      const maxDrawdown = Math.max(...fullCurve.map((p) => p.drawdown));
+      const newHighs    = fullCurve.filter((p) => p.is_new_high).length;
+      const wins        = variantTrades.filter((t) => t.result === "WIN").length;
+      const losses      = variantTrades.filter((t) => t.result === "LOSS").length;
+
+      res.json({
+        ok: true,
+        variant,
+        total_trades:  variantTrades.length,
+        final_equity:  parseFloat(finalEquity.toFixed(2)),
+        max_drawdown:  parseFloat(maxDrawdown.toFixed(2)),
+        new_highs:     newHighs,
+        wins,
+        losses,
+        points,
+      });
+    } catch (err) {
+      logger.error({ err, runId, variant }, "GET /equity error");
+      res.status(500).json({ ok: false, message: "Failed to build equity curve" });
+    }
+  }
+);
