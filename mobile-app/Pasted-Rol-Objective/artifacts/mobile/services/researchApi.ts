@@ -171,3 +171,62 @@ export async function fetchEquityCurve(
     overrides
   );
 }
+
+// ── Trade Timeline ────────────────────────────────────────────────────────────
+
+/** Un trade individual enriquecido con equity acumulada hasta ese punto. */
+export interface ResearchTrade {
+  trade_index:   number;
+  variant:       string;
+  result:        "WIN" | "LOSS";
+  profit_pips:   number;
+  equity:        number;   // equity acumulada en ese punto
+  drawdown:      number;   // drawdown en pips desde el pico anterior
+  mae_pips:      number;
+  mfe_pips:      number;
+  duration_bars: number;
+  bar_index:     number;
+  exit_bar:      number;
+  is_new_high:   boolean;
+}
+
+export interface TradePageStats {
+  wins:              number;
+  losses:            number;
+  avg_mae_pips:      number;
+  avg_mfe_pips:      number;
+  avg_duration_bars: number;
+}
+
+export interface TradesPage {
+  variant:  string;
+  total:    number;
+  page:     number;
+  limit:    number;
+  has_more: boolean;
+  stats:    TradePageStats;
+  trades:   ResearchTrade[];
+}
+
+/**
+ * Carga una página de trades de una variante.
+ * result: "WIN" | "LOSS" | undefined (todos)
+ */
+export async function fetchVariantTrades(
+  runId: string,
+  variant: string,
+  options?: {
+    page?:   number;
+    limit?:  number;
+    result?: "WIN" | "LOSS";
+    overrides?: { url?: string; token?: string };
+  }
+): Promise<TradesPage> {
+  const { page = 0, limit = 50, result, overrides } = options ?? {};
+  const params = new URLSearchParams({ variant, page: String(page), limit: String(limit) });
+  if (result) params.set("result", result);
+  return apiFetch<TradesPage>(
+    `/api/research/exit-research/${encodeURIComponent(runId)}/trades?${params}`,
+    overrides
+  );
+}

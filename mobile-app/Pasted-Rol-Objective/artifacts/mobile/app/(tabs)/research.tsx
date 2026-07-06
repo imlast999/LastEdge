@@ -30,14 +30,18 @@ import { useTranslation } from "@/hooks/useTranslation";
 import { useSettings } from "@/context/SettingsContext";
 import { ApiErrorBanner } from "@/components/ApiErrorBanner";
 import { InteractiveEquityChart, EquityCurveHeader } from "@/components/InteractiveEquityChart";
+import { ResearchTradeCard } from "@/components/ResearchTradeCard";
 import {
   listExitResearchRuns,
   fetchExitResearchDetail,
   fetchEquityCurve,
+  fetchVariantTrades,
   type ExitResearchRun,
   type ExitResearchDetail,
   type ExitVariant,
   type EquityCurveData,
+  type ResearchTrade,
+  type TradePageStats,
 } from "@/services/researchApi";
 
 // ── Tipos de ordenación ───────────────────────────────────────────────────────
@@ -97,6 +101,13 @@ export default function ResearchScreen() {
   const [activeRunId, setActiveRunId]     = useState<string | null>(null);
   const [equityCurve, setEquityCurve]     = useState<EquityCurveData | null>(null);
   const [loadingCurve, setLoadingCurve]   = useState(false);
+  const [trades, setTrades]               = useState<ResearchTrade[]>([]);
+  const [tradesStats, setTradesStats]     = useState<TradePageStats | null>(null);
+  const [tradesTotal, setTradesTotal]     = useState(0);
+  const [tradesPage, setTradesPage]       = useState(0);
+  const [tradesHasMore, setTradesHasMore] = useState(false);
+  const [loadingTrades, setLoadingTrades] = useState(false);
+  const [tradesFilter, setTradesFilter]   = useState<"ALL" | "WIN" | "LOSS">("ALL");
 
   // ── Estado de UI ──────────────────────────────────────────────────────────
   const [loading, setLoading]     = useState(false);
@@ -140,8 +151,7 @@ export default function ResearchScreen() {
   }, [apiOverrides]);
 
   // ── Carga de la equity curve para una variante ────────────────────────────
-  const loadEquityCurve = useCallback(async (runId: string, variantName: string) => {
-    setLoadingCurve(true);
+  const loadEquityCurve = useCallback(async (runId: string, variantName: string) => {    setLoadingCurve(true);
     setEquityCurve(null);
     try {
       // Decimación automática: si hay muchos trades, reducir a cada 3
@@ -158,6 +168,31 @@ export default function ResearchScreen() {
       setEquityCurve(null); // silencioso — la sección simplemente no aparece
     } finally {
       setLoadingCurve(false);
+    }
+  }, [apiOverrides]);
+
+  // ── Carga de trades paginada ──────────────────────────────────────────────
+  const loadTrades = useCallback(async (
+    runId: string,
+    variantName: string,
+    page: number,
+    filter: "ALL" | "WIN" | "LOSS",
+    reset = false,
+  ) => {
+    setLoadingTrades(true);
+    try {
+      const result = filter === "ALL"
+        ? await fetchVariantTrades(runId, variantName, { page, limit: 50, overrides: apiOverrides })
+        : await fetchVariantTrades(runId, variantName, { page, limit: 50, result: filter as "WIN" | "LOSS", overrides: apiOverrides });
+      setTrades(prev => reset ? result.trades : [...prev, ...result.trades]);
+      setTradesStats(result.stats);
+      setTradesTotal(result.total);
+      setTradesPage(result.page);
+      setTradesHasMore(result.has_more);
+    } catch {
+      // silencioso
+    } finally {
+      setLoadingTrades(false);
     }
   }, [apiOverrides]);
 
@@ -233,9 +268,17 @@ export default function ResearchScreen() {
           onSelectVariant={(v) => {
             setActiveVariant(v);
             setEquityCurve(null);
+            setTrades([]);
+            setTradesStats(null);
+            setTradesTotal(0);
+            setTradesPage(0);
+            setTradesHasMore(false);
+            setTradesFilter("ALL");
             setView("variant");
-            // Cargar la curva automáticamente al abrir la variante
-            if (activeRunId) loadEquityCurve(activeRunId, v.variant);
+            if (activeRunId) {
+              loadEquityCurve(activeRunId, v.variant);
+              loadTrades(activeRunId, v.variant, 0, "ALL", true);
+            }
           }}
         />
       )}
@@ -248,6 +291,21 @@ export default function ResearchScreen() {
           equityCurve={equityCurve}
           loadingCurve={loadingCurve}
           onLoadCurve={() => activeRunId && loadEquityCurve(activeRunId, activeVariant.variant)}
+          trades={trades}
+          tradesStats={tradesStats}
+          tradesTotal={tradesTotal}
+          tradesHasMore={tradesHasMore}
+          loadingTrades={loadingTrades}
+          tradesFilter={tradesFilter}
+          onFilterChange={(f) => {
+            setTradesFilter(f);
+            setTrades([]);
+            if (activeRunId) loadTrades(activeRunId, activeVariant.variant, 0, f, true);
+          }}
+          onLoadMoreTrades={() => {
+            if (activeRunId && tradesHasMore && !loadingTrades)
+              loadTrades(activeRunId, activeVariant.variant, tradesPage + 1, tradesFilter);
+          }}
           colors={colors}
           t={t}
           bottomPad={bottomPad}
@@ -603,17 +661,28 @@ function VariantRow({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function VariantDetailView({
-  variant, symbol, runId, equityCurve, loadingCurve, onLoadCurve, colors, t, bottomPad,
+  variant, symbol, runId, equityCurve, loadingCurve, onLoadCurve,
+  trades, tradesStats, tradesTotal, tradesHasMore, loadingTrades,
+  tradesFilter, onFilterChange, onLoadMoreTrades,
+  colors, t, bottomPad,
 }: {
-  variant:      ExitVariant;
-  symbol:       string;
-  runId:        string;
-  equityCurve:  EquityCurveData | null;
-  loadingCurve: boolean;
-  onLoadCurve:  () => void;
-  colors:       ReturnType<typeof useColors>;
-  t:            (k: string) => string;
-  bottomPad:    number;
+  variant:          ExitVariant;
+  symbol:           string;
+  runId:            string;
+  equityCurve:      EquityCurveData | null;
+  loadingCurve:     boolean;
+  onLoadCurve:      () => void;
+  trades:           ResearchTrade[];
+  tradesStats:      TradePageStats | null;
+  tradesTotal:      number;
+  tradesHasMore:    boolean;
+  loadingTrades:    boolean;
+  tradesFilter:     "ALL" | "WIN" | "LOSS";
+  onFilterChange:   (f: "ALL" | "WIN" | "LOSS") => void;
+  onLoadMoreTrades: () => void;
+  colors:           ReturnType<typeof useColors>;
+  t:                (k: string) => string;
+  bottomPad:        number;
 }) {
   const pf   = variant.profit_factor;
   const stab = variant.stability_score;
@@ -791,6 +860,92 @@ function VariantDetailView({
         </>
       )}
 
+      {/* ── Trade Timeline ── */}
+      <SectionTitle title="Trade Timeline" colors={colors} />
+
+      {/* Filtros WIN / LOSS / ALL */}
+      <View style={styles.tradeFilterRow}>
+        {(["ALL", "WIN", "LOSS"] as const).map((f) => (
+          <TouchableOpacity
+            key={f}
+            onPress={() => onFilterChange(f)}
+            activeOpacity={0.75}
+            style={[
+              styles.tradeFilterChip,
+              {
+                backgroundColor: tradesFilter === f ? colors.primary : colors.secondary,
+                borderColor: tradesFilter === f ? colors.primary : colors.border,
+              },
+            ]}
+          >
+            <Text style={[
+              styles.tradeFilterText,
+              { color: tradesFilter === f ? colors.primaryForeground : colors.mutedForeground },
+            ]}>
+              {f === "ALL"
+                ? `Todos (${tradesTotal})`
+                : f === "WIN"
+                ? `✓ Win (${tradesStats?.wins ?? "…"})`
+                : `✕ Loss (${tradesStats?.losses ?? "…"})`}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Stats resumen de trades */}
+      {tradesStats && trades.length > 0 && (
+        <View style={[styles.tradeStatsRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <TradeStatCell label="MAE medio" value={`${tradesStats.avg_mae_pips.toFixed(1)} p`} colors={colors} />
+          <TradeStatCell label="MFE medio" value={`${tradesStats.avg_mfe_pips.toFixed(1)} p`} colors={colors} />
+          <TradeStatCell label="Duración" value={`${tradesStats.avg_duration_bars.toFixed(0)} H1`} colors={colors} />
+        </View>
+      )}
+
+      {/* Lista de trades */}
+      {loadingTrades && trades.length === 0 ? (
+        <View style={[styles.center, { paddingVertical: 24 }]}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : trades.length === 0 ? (
+        <Text style={[styles.emptyDesc, { color: colors.mutedForeground, textAlign: "center", paddingVertical: 16 }]}>
+          Sin trades disponibles
+        </Text>
+      ) : (
+        <>
+          {(() => {
+            // Calcular maxMae/maxMfe del conjunto cargado para normalizar barras
+            const maxMae = Math.max(...trades.map(t => t.mae_pips), 1);
+            const maxMfe = Math.max(...trades.map(t => t.mfe_pips), 1);
+            return trades.map(trade => (
+              <ResearchTradeCard
+                key={`${trade.variant}-${trade.trade_index}`}
+                trade={trade}
+                maxMae={maxMae}
+                maxMfe={maxMfe}
+              />
+            ));
+          })()}
+
+          {/* Botón cargar más */}
+          {tradesHasMore && (
+            <TouchableOpacity
+              onPress={onLoadMoreTrades}
+              disabled={loadingTrades}
+              activeOpacity={0.75}
+              style={[styles.loadMoreBtn, { borderColor: colors.border, opacity: loadingTrades ? 0.5 : 1 }]}
+            >
+              {loadingTrades ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={[styles.loadMoreText, { color: colors.primary }]}>
+                  Cargar más trades
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+
       {/* ── Rachas y duración ── */}
       <SectionTitle title="Rachas y duración" colors={colors} />
       <View style={styles.metricsGrid}>
@@ -845,6 +1000,21 @@ function MetricPill({ label, value, color, colors }: {
     <View style={[styles.metricPill, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
       <Text style={[styles.metricPillValue, { color: color ?? colors.foreground }]}>{value}</Text>
       <Text style={[styles.metricPillLabel, { color: colors.mutedForeground }]}>{label}</Text>
+    </View>
+  );
+}
+
+function TradeStatCell({ label, value, colors }: {
+  label: string; value: string; colors: ReturnType<typeof useColors>;
+}) {
+  return (
+    <View style={{ flex: 1, alignItems: "center", paddingVertical: 10, gap: 2 }}>
+      <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: colors.foreground, fontVariant: ["tabular-nums"] }}>
+        {value}
+      </Text>
+      <Text style={{ fontSize: 9, fontFamily: "Inter_500Medium", color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.4 }}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -980,4 +1150,21 @@ const styles = StyleSheet.create({
     gap: 8, margin: 16, paddingVertical: 14, borderRadius: 12, borderWidth: 1.5,
   },
   loadCurveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+
+  // Trade Timeline
+  tradeFilterRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  tradeFilterChip: {
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 20, borderWidth: 1,
+  },
+  tradeFilterText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  tradeStatsRow: {
+    flexDirection: "row", borderRadius: 12, borderWidth: 1,
+    overflow: "hidden",
+  },
+  loadMoreBtn: {
+    borderWidth: 1, borderRadius: 12,
+    paddingVertical: 12, alignItems: "center", marginTop: 4,
+  },
+  loadMoreText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });

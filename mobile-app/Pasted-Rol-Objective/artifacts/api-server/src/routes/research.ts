@@ -345,3 +345,124 @@ researchRouter.get(
     }
   }
 );
+
+// ── GET /api/research/exit-research/:runId/trades ────────────────────────────
+// Devuelve los trades individuales de una variante, paginados.
+// Query params:
+//   ?variant=partial_close   (requerido)
+//   ?page=0                  (página, 0-based, default 0)
+//   ?limit=50                (trades por página, max 200, default 50)
+//   ?result=WIN|LOSS         (filtro opcional por resultado)
+//
+// Cada trade incluye todos los campos del CSV más el número ordinal (trade_index)
+// y el equity acumulada hasta ese punto para contexto.
+
+researchRouter.get(
+  "/exit-research/:runId/trades",
+  (req: Request, res: Response) => {
+    const { runId } = req.params as { runId: string };
+
+    if (!runId || !/^[\w-]+$/.test(runId)) {
+      res.status(400).json({ ok: false, message: "Invalid run ID" });
+      return;
+    }
+
+    const variantRaw = req.query["variant"];
+    const variant = typeof variantRaw === "string" ? variantRaw.trim() : "";
+    if (!variant || !/^[\w-]+$/.test(variant)) {
+      res.status(400).json({ ok: false, message: "?variant= is required" });
+      return;
+    }
+
+    const pageRaw  = req.query["page"];
+    const limitRaw = req.query["limit"];
+    const resultFilter = req.query["result"];
+
+    const page  = Math.max(0, parseInt(typeof pageRaw  === "string" ? pageRaw  : "0", 10) || 0);
+    const limit = Math.min(200, Math.max(1, parseInt(typeof limitRaw === "string" ? limitRaw : "50", 10) || 50));
+    const filterResult = typeof resultFilter === "string" ? resultFilter.toUpperCase() : null;
+
+    const tradesPath = path.join(EXIT_RESEARCH_DIR, runId, "trades.csv");
+    if (!fs.existsSync(tradesPath)) {
+      res.status(404).json({ ok: false, message: "trades.csv not found for this run" });
+      return;
+    }
+
+    try {
+      const allTrades = parseCsv(tradesPath);
+      const variantTrades = allTrades.filter(
+        (t) => t.variant === variant && t.result !== "PENDING"
+      );
+
+      // Aplicar filtro de resultado si se especifica
+      const filtered = filterResult
+        ? variantTrades.filter((t) => t.result.toUpperCase() === filterResult)
+        : variantTrades;
+
+      // Calcular equity acumulada para cada trade
+      let runningEquity = 0;
+      let peak = 0;
+      const enriched = variantTrades.map((t, globalIdx) => {
+        const pips = parseFloat(t.profit_pips ?? "0") || 0;
+        runningEquity += pips;
+        if (runningEquity > peak) peak = runningEquity;
+        const dd = peak > 0 ? peak - runningEquity : 0;
+        return {
+          trade_index:   globalIdx + 1,
+          variant:       t.variant,
+          result:        t.result as "WIN" | "LOSS",
+          profit_pips:   parseFloat(pips.toFixed(4)),
+          equity:        parseFloat(runningEquity.toFixed(4)),
+          drawdown:      parseFloat(dd.toFixed(4)),
+          mae_pips:      parseFloat(t.mae_pips ?? "0") || 0,
+          mfe_pips:      parseFloat(t.mfe_pips ?? "0") || 0,
+          duration_bars: parseInt(t.duration_bars ?? "0", 10),
+          bar_index:     parseInt(t.bar_index ?? "0", 10),
+          exit_bar:      parseInt(t.exit_bar  ?? "0", 10),
+          is_new_high:   runningEquity >= peak && pips > 0,
+        };
+      });
+
+      // Filtrar por resultado DESPUÉS de calcular equity (mantiene contexto)
+      const filteredEnriched = filterResult
+        ? enriched.filter(t => t.result === filterResult)
+        : enriched;
+
+      // Paginación
+      const total = filteredEnriched.length;
+      const start = page * limit;
+      const trades = filteredEnriched.slice(start, start + limit);
+      const hasMore = start + limit < total;
+
+      // Estadísticas del conjunto filtrado
+      const wins   = filteredEnriched.filter(t => t.result === "WIN").length;
+      const losses = filteredEnriched.filter(t => t.result === "LOSS").length;
+      const avgMae = total > 0
+        ? filteredEnriched.reduce((s, t) => s + t.mae_pips, 0) / total : 0;
+      const avgMfe = total > 0
+        ? filteredEnriched.reduce((s, t) => s + t.mfe_pips, 0) / total : 0;
+      const avgDuration = total > 0
+        ? filteredEnriched.reduce((s, t) => s + t.duration_bars, 0) / total : 0;
+
+      res.json({
+        ok: true,
+        variant,
+        total,
+        page,
+        limit,
+        has_more: hasMore,
+        stats: {
+          wins,
+          losses,
+          avg_mae_pips:      parseFloat(avgMae.toFixed(2)),
+          avg_mfe_pips:      parseFloat(avgMfe.toFixed(2)),
+          avg_duration_bars: parseFloat(avgDuration.toFixed(1)),
+        },
+        trades,
+      });
+    } catch (err) {
+      logger.error({ err, runId, variant }, "GET /trades error");
+      res.status(500).json({ ok: false, message: "Failed to read trades" });
+    }
+  }
+);
