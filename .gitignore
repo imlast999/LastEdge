@@ -61,7 +61,9 @@ chart_*.png
 *.png
 !mobile-app/**/*.png
 !mobile-app/**/*.webp
+!images/*.png
 *.jpg
+!images/*.jpg
 *.jpeg
 *.bak
 
