@@ -1,10 +1,4 @@
-/**
- * Settings Modal Screen
- * 
- * Accessible via modal/push navigation from main tabs
- * Not part of the tab navigator
- */
-import React, { useCallback, useState } from "react";
+﻿import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -17,7 +11,6 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
@@ -47,22 +40,32 @@ import {
   sendLocalNotification,
 } from "@/services/notifications";
 
-export default function SettingsModalScreen() {
+function formatLastSync(d: Date | null): string {
+  if (!d) return "Nunca";
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diff < 60) return `Hace ${diff}s`;
+  if (diff < 3600) return `Hace ${Math.floor(diff / 60)} min`;
+  return d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+}
+
+export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { t } = useTranslation();
-  const { settings, updateSetting, resetSettings } = useSettings();
-  const { refresh } = useTrading();
+  const { status, loading, refresh, lastSyncAt, usingMockData } = useTrading();
+  const { settings, updateSetting, resetSettings, apiOverrides } = useSettings();
 
-  const [urlDraft, setUrlDraft] = useState(settings.serverUrl);
-  const [tokenDraft, setTokenDraft] = useState(settings.serverToken);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [permStatus, setPermStatus] = useState<string | null>(null);
+  const [urlDraft, setUrlDraft] = useState(settings.serverUrl);
+  const [tokenDraft, setTokenDraft] = useState(settings.serverToken);
+
+  const effective = resolveApiConfig(apiOverrides);
+  const connected = status?.connected ?? false;
 
   const topPad = insets.top;
-  const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
+  const bottomPad = insets.bottom + 120;
 
   const handleTestConnection = useCallback(async () => {
     setTesting(true);
@@ -70,25 +73,22 @@ export default function SettingsModalScreen() {
     if (settings.hapticsEnabled) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
-    const result = await testServerConnection({
-      apiUrl: urlDraft.trim(),
-      apiSecret: tokenDraft.trim(),
-    });
-    if (result.success) {
-      const s = result.data!;
+    const result = await testServerConnection(apiOverrides);
+    setTesting(false);
+    if (result.ok && result.status) {
+      const s = result.status;
       setTestResult(
-        `OK · ${result.latencyMs} ms · MT5 ${s.connected ? "conectado" : "desconectado"} · ${s.equity.toFixed(2)} €`
+        `OK ┬À ${result.latencyMs} ms ┬À MT5 ${s.connected ? "conectado" : "desconectado"} ┬À ${s.equity.toFixed(2)} Ôé¼`
       );
     } else {
       setTestResult(result.error ?? "No se pudo conectar al servidor");
     }
-    setTesting(false);
-  }, [settings.hapticsEnabled, urlDraft, tokenDraft]);
+  }, [settings.hapticsEnabled, apiOverrides]);
 
   const saveConnection = useCallback(() => {
     updateSetting("serverUrl", urlDraft.trim());
     updateSetting("serverToken", tokenDraft.trim());
-    Alert.alert("Guardado", "Conexión actualizada. La app recargará datos automáticamente.");
+    Alert.alert("Guardado", "Conexi├│n actualizada. La app recargar├í datos autom├íticamente.");
   }, [urlDraft, tokenDraft, updateSetting]);
 
   const handleRequestPermissions = useCallback(async () => {
@@ -97,16 +97,16 @@ export default function SettingsModalScreen() {
     setPermStatus(
       perm === "granted"
         ? token
-          ? "Permisos concedidos · push activo"
-          : "Permisos concedidos · notificaciones locales"
-        : "Permisos denegados — actívalos en Ajustes del sistema"
+          ? "Permisos concedidos ┬À push activo"
+          : "Permisos concedidos ┬À notificaciones locales"
+        : "Permisos denegados ÔÇö act├¡valos en Ajustes del sistema"
     );
   }, []);
 
   const handleTestNotification = useCallback(async () => {
     await sendLocalNotification(
       "NEW_SIGNAL",
-      "🔔 Notificación de prueba",
+      "­ƒöö Notificaci├│n de prueba",
       "Si ves esto, las alertas locales funcionan correctamente."
     );
     if (settings.hapticsEnabled) {
@@ -122,7 +122,7 @@ export default function SettingsModalScreen() {
   const handleResetSettings = useCallback(() => {
     Alert.alert(
       "Restablecer ajustes",
-      "¿Volver a la configuración predeterminada?",
+      "┬┐Volver a la configuraci├│n predeterminada?",
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -137,213 +137,417 @@ export default function SettingsModalScreen() {
     );
   }, [resetSettings]);
 
-  const handleClose = () => {
-    router.back();
-  };
-
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: topPad + 16, paddingBottom: bottomPad + 24 },
+        { paddingTop: topPad + 16, paddingBottom: bottomPad + 16 },
       ]}
       showsVerticalScrollIndicator={false}
     >
       <ApiErrorBanner />
 
-      {/* Header with Close Button */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
+      {/* Modal Header with Close Button */}
+      <View style={[styles.modalHeader, { paddingTop: insets.top }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, { color: colors.foreground }]}>Ajustes</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            Connection, notifications, preferences
+            Configuración de LastEdge
           </Text>
         </View>
         <TouchableOpacity
-          onPress={handleClose}
+          onPress={() => router.back()}
           style={[styles.closeButton, { backgroundColor: colors.secondary }]}
         >
           <Feather name="x" size={24} color={colors.foreground} />
         </TouchableOpacity>
       </View>
 
-      {/* Connection Settings */}
-      <SettingsSection title="Server Connection" colors={colors}>
-        <SettingsRow label="API URL" colors={colors}>
+      {/* ÔöÇÔöÇ Servidor ÔöÇÔöÇ */}
+      <SettingsSection title="Servidor">
+        <View style={[styles.connEdit, { borderBottomColor: colors.border }]}>
+          <Text style={[styles.connLabel, { color: colors.mutedForeground }]}>
+            URL personalizada (vac├¡o = APK)
+          </Text>
           <TextInput
-            style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
-            placeholder="https://api.example.com"
-            placeholderTextColor={colors.mutedForeground}
             value={urlDraft}
             onChangeText={setUrlDraft}
-            editable={true}
-          />
-        </SettingsRow>
-        <SettingsRow label="API Secret" colors={colors}>
-          <TextInput
-            style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
-            placeholder="••••••••"
+            placeholder={getBuildApiUrl() || "http://192.168.1.X:5000"}
             placeholderTextColor={colors.mutedForeground}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[
+              styles.connInput,
+              { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.secondary },
+            ]}
+          />
+          <Text style={[styles.connLabel, { color: colors.mutedForeground }]}>
+            Token API personalizado
+          </Text>
+          <TextInput
             value={tokenDraft}
             onChangeText={setTokenDraft}
+            placeholder={maskSecret(getBuildApiSecret())}
+            placeholderTextColor={colors.mutedForeground}
             secureTextEntry
-            editable={true}
+            autoCapitalize="none"
+            style={[
+              styles.connInput,
+              { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.secondary },
+            ]}
           />
-        </SettingsRow>
-        <TouchableOpacity
-          onPress={saveConnection}
-          style={[styles.button, { backgroundColor: colors.primary }]}
-        >
-          <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>
-            Save Connection
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={handleTestConnection}
-          disabled={testing}
-          style={[styles.button, { backgroundColor: colors.secondary }]}
-        >
-          {testing ? (
-            <ActivityIndicator color={colors.foreground} />
-          ) : (
-            <Text style={[styles.buttonText, { color: colors.foreground }]}>
-              Test Connection
-            </Text>
-          )}
-        </TouchableOpacity>
-        {testResult && (
-          <Text style={[styles.resultText, { color: colors.foreground }]}>
-            {testResult}
-          </Text>
-        )}
+          <TouchableOpacity
+            onPress={saveConnection}
+            style={[styles.saveConnBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+          >
+            <Feather name="save" size={15} color={colors.primary} />
+            <Text style={[styles.saveConnText, { color: colors.primary }]}>Guardar conexi├│n</Text>
+          </TouchableOpacity>
+        </View>
+        <SettingsRow
+          icon="activity"
+          label="Estado MT5"
+          value={connected ? `Conectado ┬À uptime ${status?.uptime ?? "ÔÇö"}` : "Desconectado"}
+          valueColor={connected ? colors.connected : colors.disconnected}
+        />
+        <SettingsRow
+          icon="globe"
+          label="URL efectiva"
+          value={effective.url || "No configurada"}
+        />
+        <SettingsRow
+          icon="key"
+          label="Token API"
+          value={
+            effective.token
+              ? `Configurado ┬À ${maskSecret(effective.token)}`
+              : "No configurado"
+          }
+          valueColor={effective.token ? colors.connected : colors.pending}
+        />
+        <SettingsRow
+          icon="clock"
+          label="├Ültima sincronizaci├│n"
+          value={formatLastSync(lastSyncAt)}
+          isLast={!testResult}
+        />
+        {testResult ? (
+          <SettingsRow
+            icon={testResult.startsWith("OK") ? "check-circle" : "alert-circle"}
+            label="Resultado de prueba"
+            value={testResult}
+            valueColor={testResult.startsWith("OK") ? colors.connected : colors.destructive}
+            isLast
+          />
+        ) : null}
+        <View style={[styles.actions, { borderTopColor: colors.border }]}>
+          <ActionButton
+            label="Probar conexi├│n"
+            icon="wifi"
+            onPress={handleTestConnection}
+            loading={testing}
+            colors={colors}
+          />
+          <ActionButton
+            label="Sincronizar"
+            icon="refresh-cw"
+            onPress={refresh}
+            loading={loading}
+            colors={colors}
+            outline
+          />
+        </View>
       </SettingsSection>
 
-      {/* Notifications */}
-      <SettingsSection title="Notifications" colors={colors}>
-        <TouchableOpacity
-          onPress={handleRequestPermissions}
-          style={[styles.button, { backgroundColor: colors.secondary }]}
-        >
-          <Text style={[styles.buttonText, { color: colors.foreground }]}>
-            Request Permissions
-          </Text>
-        </TouchableOpacity>
-        {permStatus && (
-          <Text style={[styles.resultText, { color: colors.foreground }]}>
-            {permStatus}
-          </Text>
-        )}
+      {/* ÔöÇÔöÇ Actualizaci├│n ÔöÇÔöÇ */}
+      <SettingsSection title="Actualizaci├│n autom├ítica">
         <SettingsToggle
-          label="Sound Enabled"
-          value={settings.soundEnabled}
-          onToggle={(v) => updateSetting("soundEnabled", v)}
-          colors={colors}
+          icon="repeat"
+          label="Actualizaci├│n en segundo plano"
+          description="Consulta el servidor peri├│dicamente"
+          value={settings.autoRefresh}
+          onValueChange={(v) => updateSetting("autoRefresh", v)}
+        />
+        <View style={[styles.intervalBlock, { borderTopColor: colors.border }]}>
+          <Text style={[styles.intervalLabel, { color: colors.mutedForeground }]}>
+            Intervalo de consulta
+          </Text>
+          <View style={styles.intervalRow}>
+            {POLL_INTERVAL_OPTIONS.map((opt) => {
+              const active = settings.pollIntervalMs === opt.value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  disabled={!settings.autoRefresh}
+                  onPress={() => updateSetting("pollIntervalMs", opt.value)}
+                  style={[
+                    styles.intervalBtn,
+                    {
+                      backgroundColor: active ? colors.primary : colors.secondary,
+                      borderColor: active ? colors.primary : colors.border,
+                      opacity: settings.autoRefresh ? 1 : 0.45,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.intervalText,
+                      { color: active ? colors.primaryForeground : colors.foreground },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </SettingsSection>
+
+      {/* ÔöÇÔöÇ Notificaciones ÔöÇÔöÇ */}
+      <SettingsSection title="Notificaciones">
+        <SettingsToggle
+          icon="bell"
+          label="Notificaciones"
+          description="Alertas locales en el dispositivo"
+          value={settings.notificationsEnabled}
+          onValueChange={(v) => updateSetting("notificationsEnabled", v)}
         />
         <SettingsToggle
-          label="Haptics Enabled"
+          icon="target"
+          label="Nuevas se├▒ales"
+          value={settings.notifyNewSignals}
+          onValueChange={(v) => updateSetting("notifyNewSignals", v)}
+          disabled={!settings.notificationsEnabled}
+        />
+        <SettingsToggle
+          icon="check-circle"
+          label="Cierre de operaciones"
+          value={settings.notifyTradeClose}
+          onValueChange={(v) => updateSetting("notifyTradeClose", v)}
+          disabled={!settings.notificationsEnabled}
+        />
+        <SettingsToggle
+          icon="alert-triangle"
+          label="Desconexi├│n MT5"
+          description="Alerta cr├¡tica si el bot pierde conexi├│n"
+          value={settings.notifyDisconnect}
+          onValueChange={(v) => updateSetting("notifyDisconnect", v)}
+          disabled={!settings.notificationsEnabled}
+          isLast={!permStatus}
+        />
+        {permStatus ? (
+          <SettingsRow icon="info" label="Permisos" value={permStatus} isLast />
+        ) : null}
+        <View style={[styles.actions, { borderTopColor: colors.border }]}>
+          <ActionButton
+            label="Permisos"
+            icon="shield"
+            onPress={handleRequestPermissions}
+            colors={colors}
+            outline
+          />
+          <ActionButton
+            label="Probar alerta"
+            icon="bell"
+            onPress={handleTestNotification}
+            colors={colors}
+            outline
+            disabled={!settings.notificationsEnabled}
+          />
+        </View>
+      </SettingsSection>
+
+      {/* ÔöÇÔöÇ Interfaz ÔöÇÔöÇ */}
+      <SettingsSection title="Interfaz">
+        <SettingsToggle
+          icon="smartphone"
+          label="Vibraci├│n h├íptica"
+          description="Feedback al pulsar botones de prueba"
           value={settings.hapticsEnabled}
-          onToggle={(v) => updateSetting("hapticsEnabled", v)}
-          colors={colors}
+          onValueChange={(v) => updateSetting("hapticsEnabled", v)}
+          isLast
         />
-        <TouchableOpacity
-          onPress={handleTestNotification}
-          style={[styles.button, { backgroundColor: colors.secondary }]}
-        >
-          <Text style={[styles.buttonText, { color: colors.foreground }]}>
-            Test Notification
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+      </SettingsSection>
+
+      {/* ÔöÇÔöÇ Datos ÔöÇÔöÇ */}
+      <SettingsSection title="Datos">
+        <SettingsRow
+          icon="trash-2"
+          label="Limpiar badge de notificaciones"
           onPress={handleClearBadge}
-          style={[styles.button, { backgroundColor: colors.secondary }]}
-        >
-          <Text style={[styles.buttonText, { color: colors.foreground }]}>
-            Clear Badge
-          </Text>
-        </TouchableOpacity>
-      </SettingsSection>
-
-      {/* Reset */}
-      <SettingsSection title="Advanced" colors={colors}>
-        <TouchableOpacity
+        />
+        <SettingsRow
+          icon="rotate-ccw"
+          label="Restablecer ajustes"
           onPress={handleResetSettings}
-          style={[styles.button, { backgroundColor: colors.destructive }]}
-        >
-          <Text style={[styles.buttonText, { color: "white" }]}>
-            Reset All Settings
-          </Text>
-        </TouchableOpacity>
+          destructive
+          isLast
+        />
       </SettingsSection>
 
-      {/* Build Info */}
-      <View style={styles.footer}>
-        <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
-          LastEdge v{getAppVersion()}
-        </Text>
-        <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
-          Build {Constants.expoConfig?.version || "unknown"}
-        </Text>
-      </View>
+      {/* ÔöÇÔöÇ Acerca de ÔöÇÔöÇ */}
+      <SettingsSection title="Acerca de">
+        <SettingsRow icon="box" label="Versi├│n" value={getAppVersion()} />
+        <SettingsRow
+          icon="cpu"
+          label="Expo SDK"
+          value={Constants.expoConfig?.sdkVersion ?? "54"}
+        />
+        <SettingsRow
+          icon="smartphone"
+          label="Plataforma"
+          value={`${Platform.OS} ${Platform.Version}`}
+        />
+        <SettingsRow
+          icon="database"
+          label="Modo datos"
+          value={usingMockData ? "Datos de ejemplo (dev)" : "Servidor en vivo"}
+          valueColor={usingMockData ? colors.pending : colors.connected}
+          isLast
+        />
+      </SettingsSection>
+
+      <Text style={[styles.footer, { color: colors.mutedForeground }]}>
+        LastEdge ┬À cuenta demo MT5{"\n"}
+        Intervalo predeterminado: {DEFAULT_SETTINGS.pollIntervalMs / 1000}s
+      </Text>
     </ScrollView>
   );
 }
 
-// Import useTranslation here to avoid circular imports
-import { useTranslation } from "@/hooks/useTranslation";
+function ActionButton({
+  label,
+  icon,
+  onPress,
+  loading,
+  colors,
+  outline,
+  disabled,
+}: {
+  label: string;
+  icon: keyof typeof Feather.glyphMap;
+  onPress: () => void;
+  loading?: boolean;
+  colors: ReturnType<typeof useColors>;
+  outline?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={loading || disabled}
+      activeOpacity={0.75}
+      style={[
+        styles.actionBtn,
+        outline
+          ? { backgroundColor: "transparent", borderColor: colors.border, borderWidth: 1 }
+          : { backgroundColor: colors.primary },
+        (loading || disabled) && { opacity: 0.5 },
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator size="small" color={outline ? colors.primary : colors.primaryForeground} />
+      ) : (
+        <>
+          <Feather
+            name={icon}
+            size={15}
+            color={outline ? colors.primary : colors.primaryForeground}
+          />
+          <Text
+            style={[
+              styles.actionText,
+              { color: outline ? colors.primary : colors.primaryForeground },
+            ]}
+          >
+            {label}
+          </Text>
+        </>
+      )}
+    </TouchableOpacity>
+  );
+}
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingHorizontal: 16, gap: 24 },
-  header: {
+  content: { paddingHorizontal: 16, gap: 20 },
+  modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    marginBottom: 4,
     gap: 12,
   },
-  headerContent: { flex: 1 },
-  title: { fontSize: 28, fontFamily: "Inter_700Bold" },
-  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   closeButton: {
     width: 40,
     height: 40,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 2,
   },
-  input: {
-    borderWidth: 1,
+  header: { marginBottom: 4 },
+  title: { fontSize: 28, fontFamily: "Inter_700Bold" },
+  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
+  actions: {
+    flexDirection: "row",
+    gap: 10,
+    padding: 12,
+    borderTopWidth: 1,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  actionText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  intervalBlock: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    gap: 10,
+  },
+  intervalLabel: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  intervalRow: { flexDirection: "row", gap: 8 },
+  intervalBtn: {
+    flex: 1,
+    paddingVertical: 8,
     borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  intervalText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  footer: {
+    textAlign: "center",
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  connEdit: { padding: 14, gap: 8, borderBottomWidth: 1 },
+  connLabel: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  connInput: {
+    borderWidth: 1,
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
     fontFamily: "Inter_400Regular",
   },
-  button: {
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+  saveConnBtn: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 8,
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 4,
   },
-  buttonText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-  },
-  resultText: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    marginTop: 8,
-  },
-  footer: {
-    alignItems: "center",
-    gap: 4,
-    paddingTop: 16,
-  },
-  footerText: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-  },
+  saveConnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });

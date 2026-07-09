@@ -86,15 +86,27 @@ export default function TradesScreen() {
   const totalPnL = closedTrades.reduce((s, t) => s + t.profit, 0);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* ── Header with Settings ── */}
-      <View
-        style={[
-          styles.header,
-          { backgroundColor: colors.background, borderBottomColor: colors.border, paddingTop: insets.top },
-        ]}
-      >
-        <View style={styles.headerContent}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: 16, paddingBottom: bottomPad + 16 },
+      ]}
+      refreshControl={
+        <RefreshControl
+          refreshing={loading}
+          onRefresh={refresh}
+          tintColor={colors.primary}
+          colors={[colors.primary]}
+        />
+      }
+      showsVerticalScrollIndicator={false}
+    >
+      <ApiErrorBanner />
+
+      {/* Safe Area: Header respects top inset */}
+      <View style={[styles.header, { paddingTop: insets.top }]}>
+        <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: colors.foreground }]}>Trades</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
             Pending signals and closed trades
@@ -133,35 +145,8 @@ export default function TradesScreen() {
 
       {/* ── Contenido: Pendientes ── */}
       {activeTab === "pending" && (
-        <FlatList
-          data={pendingSignals}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <SignalCard
-              signal={item}
-              onAccept={item.status === "pending" ? acceptSignal : undefined}
-              onReject={item.status === "pending" ? rejectSignal : undefined}
-            />
-          )}
-          contentContainerStyle={[
-            styles.list,
-            { paddingBottom: bottomPad },
-          ]}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={loading}
-              onRefresh={refresh}
-              tintColor={colors.primary}
-              colors={[colors.primary]}
-            />
-          }
-          ListHeaderComponent={
-            <View style={styles.listHeader}>
-              <ApiErrorBanner />
-            </View>
-          }
-          ListEmptyComponent={
+        <View>
+          {pendingSignals.length === 0 ? (
             <View style={styles.empty}>
               <View
                 style={[styles.emptyIcon, { backgroundColor: colors.card }]}
@@ -177,37 +162,47 @@ export default function TradesScreen() {
                 {t("noOpenTrades")}
               </Text>
             </View>
-          }
-        />
+          ) : (
+            pendingSignals.map((item) => (
+              <SignalCard
+                key={item.id}
+                signal={item}
+                onAccept={item.status === "pending" ? acceptSignal : undefined}
+                onReject={item.status === "pending" ? rejectSignal : undefined}
+              />
+            ))
+          )}
+        </View>
       )}
 
       {/* ── Contenido: Cerradas ── */}
       {activeTab === "closed" && (
-        <FlatList
-          data={closedTrades}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <TradeCard trade={item} />}
-          contentContainerStyle={[
-            styles.list,
-            { paddingBottom: bottomPad },
-          ]}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={loading}
-              onRefresh={refresh}
-              tintColor={colors.primary}
-              colors={[colors.primary]}
-            />
-          }
-          ListHeaderComponent={
-            <View style={styles.listHeader}>
-              <ApiErrorBanner />
-              {/* Sumario de estadísticas */}
+        <View>
+          {closedTrades.length === 0 ? (
+            <View style={styles.empty}>
+              <View
+                style={[styles.emptyIcon, { backgroundColor: colors.card }]}
+              >
+                <Feather name="clock" size={28} color={colors.mutedForeground} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+                {t("noClosedTrades")}
+              </Text>
+              <Text
+                style={[styles.emptyText, { color: colors.mutedForeground }]}
+              >
+                {t("closedTradesSummary")}
+              </Text>
+            </View>
+          ) : (
+            <>
+              {closedTrades.map((item) => (
+                <TradeCard key={item.id} trade={item} colors={colors} />
+              ))}
               {closedTrades.length > 0 && (
                 <View
                   style={[
-                    styles.summaryCard,
+                    styles.summaryContainer,
                     {
                       backgroundColor: colors.card,
                       borderColor: colors.border,
@@ -215,17 +210,8 @@ export default function TradesScreen() {
                   ]}
                 >
                   <SummaryItem
-                    label={t("totalPnL")}
-                    value={`${totalPnL >= 0 ? "+" : ""}${totalPnL.toFixed(2)}€`}
-                    color={totalPnL >= 0 ? colors.profit : colors.loss}
-                    colors={colors}
-                  />
-                  <View
-                    style={[styles.sep, { backgroundColor: colors.border }]}
-                  />
-                  <SummaryItem
                     label={t("wins")}
-                    value={String(wins)}
+                    value={wins.toString()}
                     color={colors.profit}
                     colors={colors}
                   />
@@ -234,8 +220,17 @@ export default function TradesScreen() {
                   />
                   <SummaryItem
                     label={t("losses")}
-                    value={String(losses)}
-                    color={colors.loss}
+                    value={losses.toString()}
+                    color={colors.destructive}
+                    colors={colors}
+                  />
+                  <View
+                    style={[styles.sep, { backgroundColor: colors.border }]}
+                  />
+                  <SummaryItem
+                    label={t("pnl")}
+                    value={`€${totalPnL.toFixed(2)}`}
+                    color={totalPnL >= 0 ? colors.profit : colors.destructive}
                     colors={colors}
                   />
                   <View
@@ -253,28 +248,11 @@ export default function TradesScreen() {
                   />
                 </View>
               )}
-            </View>
-          }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <View
-                style={[styles.emptyIcon, { backgroundColor: colors.card }]}
-              >
-                <Feather name="clock" size={28} color={colors.mutedForeground} />
-              </View>
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                {t("noClosedTrades")}
-              </Text>
-              <Text
-                style={[styles.emptyText, { color: colors.mutedForeground }]}
-              >
-                {t("closedTradesSummary")}
-              </Text>
-            </View>
-          }
-        />
+            </>
+          )}
+        </View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -356,30 +334,23 @@ function SummaryItem({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
-  // Header
+  content: { paddingHorizontal: 16, gap: 16 },
   header: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    marginBottom: 4,
     gap: 12,
-    borderBottomWidth: 1,
   },
-  headerContent: {
-    flex: 1,
-  },
-  title: { fontSize: 24, fontFamily: "Inter_700Bold" },
-  subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  headerCopy: { flex: 1 },
+  title: { fontSize: 28, fontFamily: "Inter_700Bold" },
+  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   settingsButton: {
     width: 40,
     height: 40,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 2,
   },
 
   // Sub-tab bar
