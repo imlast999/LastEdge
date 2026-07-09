@@ -64,7 +64,7 @@ export default function SettingsScreen() {
   const connected = status?.connected ?? false;
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const bottomPad = Platform.OS === "web" ? 34 : 0;
+  const bottomPad = Platform.OS === "web" ? 34 : insets.bottom + 120;
 
   const handleTestConnection = useCallback(async () => {
     setTesting(true);
@@ -141,7 +141,7 @@ export default function SettingsScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: topPad + 16, paddingBottom: bottomPad + 100 },
+        { paddingTop: topPad + 16, paddingBottom: bottomPad + 16 },
       ]}
       showsVerticalScrollIndicator={false}
     >

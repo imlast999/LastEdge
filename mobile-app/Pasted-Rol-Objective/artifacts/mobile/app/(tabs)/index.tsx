@@ -32,14 +32,14 @@ export default function DashboardScreen() {
   const isProfit = dailyPnL >= 0;
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const bottomPad = Platform.OS === "web" ? 34 : 0;
+  const bottomPad = Platform.OS === "web" ? 34 : insets.bottom + 120;
 
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: topPad + 16, paddingBottom: bottomPad + 100 },
+        { paddingTop: topPad + 16, paddingBottom: bottomPad + 16 },
       ]}
       refreshControl={
         <RefreshControl

@@ -1,7 +1,5 @@
 import { BlurView } from "expo-blur";
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
-import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather } from "@expo/vector-icons";
 import React from "react";
@@ -9,26 +7,7 @@ import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 
-function NativeTabLayout() {
-  return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
-        <Label>Dashboard</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="research">
-        <Icon sf={{ default: "flask", selected: "flask.fill" }} />
-        <Label>Research</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="settings">
-        <Icon sf={{ default: "gearshape", selected: "gearshape.fill" }} />
-        <Label>Ajustes</Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
-  );
-}
-
-function ClassicTabLayout() {
+export default function TabLayout() {
   const colors = useColors();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -47,6 +26,7 @@ function ClassicTabLayout() {
           borderTopWidth: 1,
           borderTopColor: colors.border,
           elevation: 0,
+          height: 60,
           ...(isWeb ? { height: 84 } : {}),
         },
         tabBarBackground: () =>
@@ -76,6 +56,30 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="trades"
+        options={{
+          title: "Trades",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="chart.line.uptrend.xyaxis" tintColor={color} size={22} />
+            ) : (
+              <Feather name="trending-up" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="backtests"
+        options={{
+          title: "Backtests",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="inbox.fill" tintColor={color} size={22} />
+            ) : (
+              <Feather name="inbox" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
         name="research"
         options={{
           title: "Research",
@@ -83,7 +87,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="flask.fill" tintColor={color} size={22} />
             ) : (
-              <Feather name="activity" size={22} color={color} />
+              <Feather name="flask" size={22} color={color} />
             ),
         }}
       />
@@ -101,11 +105,4 @@ function ClassicTabLayout() {
       />
     </Tabs>
   );
-}
-
-export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
-  return <ClassicTabLayout />;
 }

@@ -41,7 +41,7 @@ export default function TradesScreen() {
 
   const [activeTab, setActiveTab] = useState<SubTab>("pending");
 
-  const bottomPad = Platform.OS === "web" ? 34 : 0;
+  const bottomPad = Platform.OS === "web" ? 34 : insets.bottom + 120;
 
   // Pendientes = señales que necesitan acción o ya están abiertas en MT5
   const pendingSignals = useMemo(
@@ -118,7 +118,7 @@ export default function TradesScreen() {
           )}
           contentContainerStyle={[
             styles.list,
-            { paddingBottom: bottomPad + 100 },
+            { paddingBottom: bottomPad },
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -162,7 +162,7 @@ export default function TradesScreen() {
           renderItem={({ item }) => <TradeCard trade={item} />}
           contentContainerStyle={[
             styles.list,
-            { paddingBottom: bottomPad + 100 },
+            { paddingBottom: bottomPad },
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
