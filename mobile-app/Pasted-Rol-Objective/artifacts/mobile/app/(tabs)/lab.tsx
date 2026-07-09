@@ -47,8 +47,8 @@ export default function LabScreen() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const bottomPad = Platform.OS === "web" ? 34 : insets.bottom + 120;
+  const topPad = insets.top;
+  const bottomPad = insets.bottom + 120;
 
   const selectedSummary = runs.find((run) => run.run_id === selectedRunId);
 
@@ -101,7 +101,7 @@ export default function LabScreen() {
   };
 
   const handleOpenSettings = () => {
-    router.push("/(tabs)/settings");
+    router.push("/settings-modal");
   };
 
   return (
@@ -109,14 +109,14 @@ export default function LabScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: topPad + 16, paddingBottom: bottomPad + 16 },
+        { paddingTop: 16, paddingBottom: bottomPad + 16 },
       ]}
       showsVerticalScrollIndicator={false}
     >
       <ApiErrorBanner />
 
-      {/* Header with Settings Button */}
-      <View style={styles.headerContainer}>
+      {/* Header with Settings Button - respects safe area */}
+      <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
         <View style={styles.headerContent}>
           <Text style={[styles.title, { color: colors.foreground }]}>LastEdge Research Lab</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
@@ -376,6 +376,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 4,
     gap: 12,
+    paddingHorizontal: 0,
   },
   headerContent: { flex: 1 },
   title: { fontSize: 28, fontFamily: "Inter_700Bold" },

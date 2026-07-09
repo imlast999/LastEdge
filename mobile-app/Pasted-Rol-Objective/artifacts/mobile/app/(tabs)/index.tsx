@@ -35,11 +35,10 @@ export default function DashboardScreen() {
 
   const isProfit = dailyPnL >= 0;
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const bottomPad = Platform.OS === "web" ? 34 : insets.bottom + 120;
+  const bottomPad = insets.bottom + 120;
 
   const handleOpenSettings = () => {
-    router.push("/(tabs)/settings");
+    router.push("/settings-modal");
   };
 
   return (
@@ -47,7 +46,7 @@ export default function DashboardScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: topPad + 16, paddingBottom: bottomPad + 16 },
+        { paddingTop: 16, paddingBottom: bottomPad + 16 },
       ]}
       refreshControl={
         <RefreshControl
@@ -60,7 +59,8 @@ export default function DashboardScreen() {
       showsVerticalScrollIndicator={false}
     >
       <ApiErrorBanner />
-      <View style={styles.header}>
+      {/* Safe Area: Header respects top inset */}
+      <View style={[styles.header, { paddingTop: insets.top }]}>
         <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: colors.foreground }]}>LastEdge</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>

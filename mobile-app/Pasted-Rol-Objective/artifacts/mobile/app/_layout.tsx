@@ -26,7 +26,24 @@ const queryClient = new QueryClient();
 function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      {/* Main tab-based navigation */}
+      <Stack.Screen 
+        name="(tabs)" 
+        options={{ 
+          headerShown: false,
+          animationEnabled: false,
+        }} 
+      />
+      
+      {/* Settings as modal/separate screen (not part of tabs) */}
+      <Stack.Screen 
+        name="settings-modal" 
+        options={{ 
+          headerShown: false,
+          presentation: "modal",
+          animationEnabled: true,
+        }} 
+      />
     </Stack>
   );
 }

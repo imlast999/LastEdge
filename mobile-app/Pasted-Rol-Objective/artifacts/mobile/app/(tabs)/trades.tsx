@@ -43,10 +43,10 @@ export default function TradesScreen() {
 
   const [activeTab, setActiveTab] = useState<SubTab>("pending");
 
-  const bottomPad = Platform.OS === "web" ? 34 : insets.bottom + 120;
+  const bottomPad = insets.bottom + 120;
 
   const handleOpenSettings = () => {
-    router.push("/(tabs)/settings");
+    router.push("/settings-modal");
   };
 
   // Pendientes = señales que necesitan acción o ya están abiertas en MT5
@@ -91,7 +91,7 @@ export default function TradesScreen() {
       <View
         style={[
           styles.header,
-          { backgroundColor: colors.background, borderBottomColor: colors.border },
+          { backgroundColor: colors.background, borderBottomColor: colors.border, paddingTop: insets.top },
         ]}
       >
         <View style={styles.headerContent}>
