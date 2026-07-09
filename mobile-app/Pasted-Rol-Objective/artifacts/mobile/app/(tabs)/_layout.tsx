@@ -68,38 +68,14 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="backtests"
+        name="lab"
         options={{
-          title: "Backtests",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="inbox.fill" tintColor={color} size={22} />
-            ) : (
-              <Feather name="inbox" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="research"
-        options={{
-          title: "Research",
+          title: "Lab",
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="flask.fill" tintColor={color} size={22} />
             ) : (
               <Feather name="flask" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: "Ajustes",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="gearshape.fill" tintColor={color} size={22} />
-            ) : (
-              <Feather name="settings" size={22} color={color} />
             ),
         }}
       />

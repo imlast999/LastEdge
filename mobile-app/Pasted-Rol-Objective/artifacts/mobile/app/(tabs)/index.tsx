@@ -6,8 +6,11 @@ import {
   StyleSheet,
   RefreshControl,
   Platform,
+  TouchableOpacity,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useTrading } from "@/context/TradingContext";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -20,6 +23,7 @@ import RiskWidget from "@/components/RiskWidget";
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { t } = useTranslation();
   const { status, equityHistory, dailyPnL, winrate, openPositions, pendingSignals, loading, refresh } =
     useTrading();
@@ -33,6 +37,10 @@ export default function DashboardScreen() {
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom + 120;
+
+  const handleOpenSettings = () => {
+    router.push("/(tabs)/settings");
+  };
 
   return (
     <ScrollView
@@ -59,7 +67,15 @@ export default function DashboardScreen() {
             Monitorización del sistema y laboratorio de estrategias
           </Text>
         </View>
-        <ConnectionBadge connected={safeStatus.connected} uptime={safeStatus.uptime} />
+        <View style={styles.headerActions}>
+          <ConnectionBadge connected={safeStatus.connected} uptime={safeStatus.uptime} />
+          <TouchableOpacity
+            onPress={handleOpenSettings}
+            style={[styles.settingsButton, { backgroundColor: colors.secondary }]}
+          >
+            <Feather name="settings" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={[styles.equityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -184,8 +200,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 4,
+    gap: 12,
   },
-  headerCopy: { flex: 1, paddingRight: 12 },
+  headerCopy: { flex: 1 },
+  headerActions: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+  },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   title: { fontSize: 28, fontFamily: "Inter_700Bold" },
   subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   equityCard: {

@@ -15,6 +15,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 
 import { useColors } from "@/hooks/useColors";
@@ -29,6 +30,7 @@ type SubTab = "pending" | "closed";
 export default function TradesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { t } = useTranslation();
   const {
     signals,
@@ -42,6 +44,10 @@ export default function TradesScreen() {
   const [activeTab, setActiveTab] = useState<SubTab>("pending");
 
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom + 120;
+
+  const handleOpenSettings = () => {
+    router.push("/(tabs)/settings");
+  };
 
   // Pendientes = señales que necesitan acción o ya están abiertas en MT5
   const pendingSignals = useMemo(
@@ -81,6 +87,27 @@ export default function TradesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* ── Header with Settings ── */}
+      <View
+        style={[
+          styles.header,
+          { backgroundColor: colors.background, borderBottomColor: colors.border },
+        ]}
+      >
+        <View style={styles.headerContent}>
+          <Text style={[styles.title, { color: colors.foreground }]}>Trades</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+            Pending signals and closed trades
+          </Text>
+        </View>
+        <TouchableOpacity
+          onPress={handleOpenSettings}
+          style={[styles.settingsButton, { backgroundColor: colors.secondary }]}
+        >
+          <Feather name="settings" size={20} color={colors.foreground} />
+        </TouchableOpacity>
+      </View>
+
       {/* ── Sub-tabs selector ── */}
       <View
         style={[
@@ -329,6 +356,31 @@ function SummaryItem({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
+  // Header
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+    borderBottomWidth: 1,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  title: { fontSize: 24, fontFamily: "Inter_700Bold" },
+  subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 2,
+  },
 
   // Sub-tab bar
   subTabBar: {
