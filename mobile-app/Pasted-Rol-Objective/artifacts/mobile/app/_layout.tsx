@@ -40,15 +40,9 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    // Setup notification listeners after router is ready. Keep it guarded so
-    // a missing native notification setup does not crash the app shell.
-    try {
-      const cleanup = setupNotificationListeners();
-      return cleanup;
-    } catch (error) {
-      console.warn("Notification setup failed at startup:", error);
-      return undefined;
-    }
+    // Setup notification listeners after router is ready
+    const cleanup = setupNotificationListeners();
+    return cleanup;
   }, []);
 
   useEffect(() => {
@@ -65,7 +59,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <SettingsProvider>
             <TradingProvider>
-              <GestureHandlerRootView style={{ flex: 1 }}>
+              <GestureHandlerRootView>
                 <KeyboardProvider>
                   <RootLayoutNav />
                 </KeyboardProvider>

@@ -10,14 +10,17 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useTrading } from "@/context/TradingContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { ConnectionBadge } from "@/components/ConnectionBadge";
 import { StatsCard } from "@/components/StatsCard";
 import { EquityChart } from "@/components/EquityChart";
 import { ApiErrorBanner } from "@/components/ApiErrorBanner";
+import RiskWidget from "@/components/RiskWidget";
 
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const { status, equityHistory, dailyPnL, winrate, openPositions, pendingSignals, loading, refresh } =
     useTrading();
 
@@ -50,10 +53,10 @@ export default function DashboardScreen() {
     >
       <ApiErrorBanner />
       <View style={styles.header}>
-        <View>
-          <Text style={[styles.title, { color: colors.foreground }]}>Dashboard</Text>
+        <View style={styles.headerCopy}>
+          <Text style={[styles.title, { color: colors.foreground }]}>LastEdge</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            Trading Bot Monitor
+            Monitorización del sistema y laboratorio de estrategias
           </Text>
         </View>
         <ConnectionBadge connected={safeStatus.connected} uptime={safeStatus.uptime} />
@@ -62,7 +65,7 @@ export default function DashboardScreen() {
       <View style={[styles.equityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.equityHeader}>
           <View>
-            <Text style={[styles.equityLabel, { color: colors.mutedForeground }]}>EQUIDAD</Text>
+            <Text style={[styles.equityLabel, { color: colors.mutedForeground }]}>{t("equity")}</Text>
             <Text style={[styles.equityValue, { color: colors.foreground }]}>
               {safeStatus.equity.toLocaleString("en", {
                 minimumFractionDigits: 2,
@@ -72,7 +75,7 @@ export default function DashboardScreen() {
             </Text>
           </View>
           <View style={styles.equityRight}>
-            <Text style={[styles.balanceLabel, { color: colors.mutedForeground }]}>Balance</Text>
+            <Text style={[styles.balanceLabel, { color: colors.mutedForeground }]}>{t("balance")}</Text>
             <Text style={[styles.balanceValue, { color: colors.foreground }]}>
               {safeStatus.balance.toLocaleString("en", {
                 minimumFractionDigits: 2,
@@ -88,7 +91,7 @@ export default function DashboardScreen() {
 
         <View style={[styles.chartFooter, { borderTopColor: colors.border }]}>
           <Text style={[styles.footerLabel, { color: colors.mutedForeground }]}>
-            Últimas 24h · Actualización cada 5s
+            {t("last24h")} · {t("updateEvery5s")}
           </Text>
           <View style={[styles.liveDot, { backgroundColor: colors.profit }]} />
         </View>
@@ -96,15 +99,15 @@ export default function DashboardScreen() {
 
       <View style={styles.statsGrid}>
         <StatsCard
-          label="P&L Día"
+          label={t("profitDay")}
           value={`${isProfit ? "+" : ""}${dailyPnL.toFixed(2)}€`}
           icon="trending-up"
           trend={isProfit ? "up" : "down"}
           accent={isProfit ? colors.profit : colors.loss}
-          subValue={isProfit ? "En beneficio" : "En pérdida"}
+          subValue={isProfit ? t("inProfit") : t("inLoss")}
         />
         <StatsCard
-          label="Winrate"
+          label={t("winrate")}
           value={`${winrate}%`}
           icon="percent"
           trend={winrate >= 50 ? "up" : "down"}
@@ -114,28 +117,30 @@ export default function DashboardScreen() {
 
       <View style={styles.statsGrid}>
         <StatsCard
-          label="Abiertas"
+          label={t("open")}
           value={String(openPositions)}
           icon="activity"
           trend="neutral"
           accent="#60a5fa"
         />
         <StatsCard
-          label="Pendientes"
+          label={t("pending")}
           value={String(pendingSignals)}
           icon="bell"
           trend={pendingSignals > 0 ? "up" : "neutral"}
           accent={pendingSignals > 0 ? colors.pending : colors.mutedForeground}
-          subValue={pendingSignals > 0 ? "Requieren acción" : undefined}
+          subValue={pendingSignals > 0 ? t("requiresAction") : undefined}
         />
       </View>
 
+      <RiskWidget />
+
       <View style={[styles.accountCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.accountTitle, { color: colors.foreground }]}>Cuenta MT5</Text>
-        <AccountRow label="Margen usado" value={`${safeStatus.margin.toFixed(2)}€`} colors={colors} />
-        <AccountRow label="Margen libre" value={`${safeStatus.freeMargin.toFixed(2)}€`} colors={colors} />
+        <Text style={[styles.accountTitle, { color: colors.foreground }]}>{t("mt5Account")}</Text>
+        <AccountRow label={t("marginUsed")} value={`${safeStatus.margin.toFixed(2)}€`} colors={colors} />
+        <AccountRow label={t("freeMargin")} value={`${safeStatus.freeMargin.toFixed(2)}€`} colors={colors} />
         <AccountRow
-          label="Nivel de margen"
+          label={t("marginLevel")}
           value={safeStatus.margin > 0 ? `${((safeStatus.equity / safeStatus.margin) * 100).toFixed(0)}%` : "–"}
           colors={colors}
           highlight={safeStatus.margin > 0 && safeStatus.equity / safeStatus.margin > 10}
@@ -180,6 +185,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 4,
   },
+  headerCopy: { flex: 1, paddingRight: 12 },
   title: { fontSize: 28, fontFamily: "Inter_700Bold" },
   subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   equityCard: {

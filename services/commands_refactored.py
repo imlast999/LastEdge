@@ -818,7 +818,12 @@ class PairToggleView(discord.ui.View):
 # ── Funciones auxiliares ───────────────────────────────────────────────────────
 
 def _compute_suggested_lot(service, signal, risk_pct: float = None):
-    """Compute a suggested lot size given a signal dict."""
+    """
+    Calcula el lote sugerido para una señal.
+
+    Wrapper del Risk Engine centralizado — el cálculo real ocurre en:
+    core/risk/engine.py → PositionSizer → MarginChecker → PortfolioRisk
+    """
     try:
         service.connect_mt5()
     except Exception as e:
@@ -826,55 +831,36 @@ def _compute_suggested_lot(service, signal, risk_pct: float = None):
         return None, None, None
 
     try:
-        import MetaTrader5 as mt5
-        acc = mt5.account_info()
-        if acc is None:
-            logger.error("No account info available in compute_suggested_lot")
-            return None, None, None
-        
-        balance = float(acc.balance)
+        from core.risk import get_risk_engine
+        engine = get_risk_engine()
+
         symbol = signal.get('symbol')
         if hasattr(symbol, 'iloc'):
             symbol = str(symbol.iloc[0]) if len(symbol) > 0 else 'EURUSD'
         elif not isinstance(symbol, str):
             symbol = str(symbol)
-        
-        logger.debug(f"Computing lot for symbol: {symbol}")
-        si = mt5.symbol_info(symbol)
-        if si is None:
-            logger.error(f"No symbol info for {symbol} in compute_suggested_lot")
+
+        normalized = dict(signal)
+        normalized['symbol'] = symbol
+
+        decision = engine.evaluate(normalized)
+
+        if not decision.approved:
+            logger.warning(f"compute_suggested_lot: Risk Engine rechazó {symbol} — {decision.reason}")
             return None, None, None
 
-        if risk_pct is None:
-            try:
-                risk_pct = float(os.getenv('MT5_RISK_PCT', '0.5'))
-            except Exception:
-                risk_pct = 0.5
+        # Calcular R:R para compatibilidad
+        try:
+            entry = float(signal.get('entry', 0))
+            sl    = float(signal.get('sl', 0))
+            tp    = float(signal.get('tp', entry))
+            rr    = abs((tp - entry) / (entry - sl)) if (entry - sl) != 0 else None
+        except Exception:
+            rr = None
 
-        risk_amount = balance * (risk_pct / 100.0)
-        entry = float(signal['entry'])
-        sl = float(signal['sl'])
-        point = si.point
-        contract = getattr(si, 'trade_contract_size', getattr(si, 'lot_size', 100000))
-        sl_points = abs(entry - sl) / point if point and point != 0 else None
-        if not sl_points or sl_points <= 0:
-            logger.error(f"Invalid SL points calculation: {sl_points}")
-            return None, None, None
-        pip_value_per_lot = contract * point
-        risk_per_lot = sl_points * pip_value_per_lot
-        if risk_per_lot <= 0:
-            logger.error(f"Invalid risk per lot calculation: {risk_per_lot}")
-            return None, None, None
-        raw_lot = risk_amount / risk_per_lot
-        vol_min = getattr(si, 'volume_min', 0.01)
-        vol_max = getattr(si, 'volume_max', 100.0)
-        vol_step = getattr(si, 'volume_step', 0.01)
-        steps = int(raw_lot / vol_step)
-        lot = max(vol_min, min(vol_max, steps * vol_step)) if steps > 0 else vol_min
-        tp = float(signal.get('tp', entry))
-        rr = abs((tp - entry) / (entry - sl)) if (entry - sl) != 0 else None
-        logger.debug(f"Computed lot: {lot}, risk_amount: {risk_amount}, rr: {rr}")
-        return lot, risk_amount, rr
+        logger.debug(f"compute_suggested_lot: {symbol} lot={decision.lot:.4f} risk={decision.risk_amount:.2f}")
+        return decision.lot, decision.risk_amount, rr
+
     except Exception as e:
         logger.error(f"Error in compute_suggested_lot: {e}")
         return None, None, None

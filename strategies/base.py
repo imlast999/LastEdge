@@ -14,6 +14,87 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+class StrategyMetadata:
+    """
+    Metadatos que cada estrategia publica sobre sí misma.
+
+    Todos los runners (Exit Research, Walk-Forward, Backtest, Replay)
+    deben consultar estos valores en lugar de usar constantes hardcodeadas.
+
+    Campos
+    ------
+    required_history : int
+        Número mínimo de velas que la estrategia necesita para calcular
+        todos sus indicadores correctamente (warmup + lookback combinados).
+        Este es el único valor que los runners deben usar como ventana.
+    symbol : str
+        Par de trading principal de la estrategia.
+    timeframe : str
+        Timeframe de operación ('H1', 'H4', 'D1', ...).
+    strategy_name : str
+        Nombre legible de la estrategia.
+    version : str
+        Versión de la estrategia (para trazabilidad en resultados).
+    """
+
+    def __init__(
+        self,
+        required_history: int,
+        symbol: str = "UNKNOWN",
+        timeframe: str = "H1",
+        strategy_name: str = "unnamed",
+        version: str = "1.0",
+    ) -> None:
+        if required_history < 50:
+            raise ValueError(
+                f"required_history={required_history} es demasiado bajo. "
+                "Mínimo 50 velas para indicadores básicos."
+            )
+        self.required_history = required_history
+        self.symbol           = symbol
+        self.timeframe        = timeframe
+        self.strategy_name    = strategy_name
+        self.version          = version
+
+    def __repr__(self) -> str:
+        return (
+            f"StrategyMetadata(strategy={self.strategy_name!r}, "
+            f"symbol={self.symbol!r}, tf={self.timeframe!r}, "
+            f"required_history={self.required_history}, version={self.version!r})"
+        )
+
+
+def resolve_strategy_metadata(strategy: Optional[object] = None, fallback_required_history: int = 200) -> StrategyMetadata:
+    """Resolve strategy metadata from a strategy instance or fallback defaults."""
+    if strategy is None:
+        return StrategyMetadata(required_history=fallback_required_history, strategy_name="unknown")
+
+    metadata = getattr(strategy, "metadata", None)
+    if isinstance(metadata, StrategyMetadata):
+        return metadata
+
+    required_history = getattr(strategy, "required_history", None)
+    if required_history is None:
+        required_history = fallback_required_history
+
+    try:
+        required_history = int(required_history)
+    except (TypeError, ValueError):
+        required_history = fallback_required_history
+
+    return StrategyMetadata(
+        required_history=max(required_history, fallback_required_history if fallback_required_history is not None else 50),
+        symbol=getattr(strategy, "symbol", "UNKNOWN"),
+        timeframe=getattr(strategy, "required_timeframe", None) or "H1",
+        strategy_name=getattr(strategy, "name", getattr(strategy, "__class__", type(strategy)).__name__),
+    )
+
+
+def resolve_required_history(strategy: Optional[object] = None, fallback_required_history: int = 200) -> int:
+    """Convenience helper returning the required history for a strategy or fallback."""
+    return resolve_strategy_metadata(strategy, fallback_required_history=fallback_required_history).required_history
+
+
 class BaseStrategy(ABC):
     """
     Clase base para estrategias de trading.
@@ -22,6 +103,7 @@ class BaseStrategy(ABC):
     - Detectar setups de mercado
     - Calcular niveles (entry, SL, TP)
     - Retornar contexto para scoring
+    - Publicar metadatos (required_history, symbol, timeframe)
     
     NO responsabilidades:
     - Gestión de confianza
@@ -39,6 +121,32 @@ class BaseStrategy(ABC):
     def __init__(self, name: str):
         self.name = name
         self.default_config = self._get_default_config()
+
+    # ── Metadatos públicos ────────────────────────────────────────────────────
+
+    @property
+    def metadata(self) -> "StrategyMetadata":
+        """
+        Metadatos de la estrategia.
+
+        Cada subclase DEBE sobreescribir este método para declarar sus
+        requisitos reales. El valor por defecto (200) es un fallback seguro
+        para estrategias heredadas que aún no han migrado.
+
+        Los runners deben usar strategy.metadata.required_history en lugar
+        de cualquier constante hardcodeada.
+        """
+        return StrategyMetadata(
+            required_history=200,
+            symbol="UNKNOWN",
+            timeframe=self.required_timeframe or "H1",
+            strategy_name=self.name,
+        )
+
+    @property
+    def required_history(self) -> int:
+        """Atajo directo a metadata.required_history para uso en runners."""
+        return self.metadata.required_history
 
     def reset_state(self) -> None:
         """Reinicia estado interno entre replays (opcional en subclases)."""
@@ -112,39 +220,53 @@ class BaseStrategy(ABC):
     def calculate_position_size(self, signal: Dict, balance: float, risk_pct: float = 1.0) -> Dict:
         """
         Calcula tamaño de posición basado en riesgo.
-        Método común para todas las estrategias.
+
+        ⚠️  DEPRECADO — Solo para uso en backtesting/simulación sin conexión MT5.
+            En producción, el tamaño de posición siempre lo decide el Risk Engine
+            (core/risk/engine.py). Las estrategias NO deben llamar a este método
+            para órdenes reales.
+
+        Este método usa una fórmula simplificada (pip_value ≈ 10 USD, válida
+        aproximadamente solo para EURUSD). Para cálculos precisos multi-activo
+        usa: get_risk_engine().evaluate(signal)
         """
+        logger.warning(
+            "[%s] calculate_position_size() está DEPRECADO. "
+            "En producción usa get_risk_engine().evaluate(signal). "
+            "Este método es solo para simulación/backtest sin conexión MT5.",
+            self.name
+        )
         try:
             entry = float(signal['entry'])
             sl = float(signal['sl'])
-            
+
             # Distancia de SL en puntos
             sl_distance = abs(entry - sl)
-            
+
             # Cantidad a arriesgar
             risk_amount = balance * (risk_pct / 100.0)
-            
-            # Cálculo básico de lote (simplificado)
-            # En producción debería usar información del símbolo de MT5
+
+            # Cálculo básico de lote (simplificado, aprox. válido para EURUSD)
             pip_value = 10.0  # Valor aproximado por pip para EURUSD
             sl_pips = sl_distance * 10000  # Convertir a pips
-            
+
             if sl_pips > 0:
                 lot_size = risk_amount / (sl_pips * pip_value)
                 lot_size = max(0.01, min(1.0, lot_size))  # Límites básicos
             else:
                 lot_size = 0.01
-            
+
             return {
                 'lot_size': lot_size,
                 'risk_amount': risk_amount,
                 'sl_pips': sl_pips,
                 'pip_value': pip_value
             }
-            
+
         except Exception as e:
             logger.warning(f"Error calculando tamaño de posición: {e}")
             return {'lot_size': 0.01, 'risk_amount': 0, 'sl_pips': 0, 'pip_value': 0}
+
     
     def evaluate_signal(self, df: pd.DataFrame, config: Dict = None) -> Optional[Dict]:
         """

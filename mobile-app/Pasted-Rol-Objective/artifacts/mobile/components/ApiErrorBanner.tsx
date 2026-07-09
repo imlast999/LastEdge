@@ -1,19 +1,16 @@
 /**
  * Sticky banner shown at the top of every screen when the app cannot
  * reach the API server or is displaying mock data.
- *
- * Usage:
- *   import { ApiErrorBanner } from "@/components/ApiErrorBanner";
- *   // Inside any screen, before the first visible element:
- *   <ApiErrorBanner />
  */
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useTrading } from "@/context/TradingContext";
+import { useTranslation } from "@/hooks/useTranslation";
 
 export function ApiErrorBanner() {
   const { apiError, usingMockData } = useTrading();
+  const { t } = useTranslation();
 
   if (!apiError && !usingMockData) return null;
 
@@ -29,8 +26,8 @@ export function ApiErrorBanner() {
       />
       <Text style={styles.text} numberOfLines={1}>
         {isMock
-          ? "⚠️ Datos de ejemplo — sin conexión real"
-          : `Sin servidor: ${apiError}`}
+          ? t("mockDataBanner")
+          : `${t("noServerBanner")}: ${apiError}`}
       </Text>
     </View>
   );

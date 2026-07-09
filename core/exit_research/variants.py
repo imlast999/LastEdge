@@ -1,19 +1,22 @@
 """
-Exit Research — Variantes de salida para eurusd_simple.
+Exit Research — Variantes de salida (símbolo-agnósticas).
 
-La ENTRADA es idéntica para todas: EURUSDStrategy.detect_setup() con los
-mismos filtros (EMA20/50/200, RSI, ATR). Solo cambia cómo se calculan
-SL, TP y la simulación de cierre.
+La ENTRADA es idéntica para todas: la estrategia base detecta el setup.
+Solo cambia cómo se calculan SL, TP y la simulación de cierre.
 
 Cada variante implementa:
     compute_levels(entry, direction, atr, df_window) -> (sl, tp)
     simulate_exit(signal, df_full, start_index) -> (result, exit_price, profit_pips)
+
+Pip size:
+    Por defecto EURUSD (0.0001). El runner inyecta el pip_size correcto
+    para cada símbolo llamando a set_pip_size() antes de ejecutar.
 """
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 import pandas as pd
 import numpy as np
 import logging
@@ -24,6 +27,27 @@ PIP_SIZE_EURUSD  = 0.0001
 SPREAD_PIPS      = 1.2   # spread promedio EURUSD (de trade_costs.py)
 COMMISSION_PIPS  = 0.3   # comisión round-trip a 0.1 lotes
 ROUND_TRIP_COST  = 1.5   # spread 1.2 + commission 0.3 pips
+
+# ── Tabla de pip size por símbolo ─────────────────────────────────────────────
+# EURUSD/GBPUSD: 0.0001  (5-decimal brokers: 0.00001 — aquí usamos 0.0001)
+# XAUUSD: 0.01  (1 pip = $0.01; ATR en H1 ≈ 2–5 USD ≈ 200–500 pips)
+# BTCEUR: 1.0   (1 pip = 1 EUR)
+_PIP_SIZE_BY_SYMBOL: Dict[str, float] = {
+    "EURUSD": 0.0001,
+    "GBPUSD": 0.0001,
+    "USDJPY": 0.01,
+    "XAUUSD": 0.01,
+    "BTCEUR": 1.0,
+    "BTCUSD": 1.0,
+}
+
+
+def get_pip_size(symbol: str) -> float:
+    """
+    Devuelve el tamaño de pip para el símbolo dado.
+    Fallback: 0.0001 (estándar forex de 4 decimales).
+    """
+    return _PIP_SIZE_BY_SYMBOL.get(symbol.upper(), PIP_SIZE_EURUSD)
 
 
 @dataclass
@@ -47,6 +71,7 @@ def _calc_mae_mfe(
     df_full: pd.DataFrame,
     start_index: int,
     end_index: int,
+    pip_size: float = PIP_SIZE_EURUSD,
 ) -> tuple[float, float]:
     """
     Calcula MAE (Maximum Adverse Excursion) y MFE (Maximum Favorable Excursion)
@@ -56,6 +81,7 @@ def _calc_mae_mfe(
     MFE: mayor movimiento a favor visto antes del cierre.
 
     Ambos se devuelven como valores positivos.
+    pip_size: tamaño del pip del símbolo (default EURUSD=0.0001).
     """
     mae = 0.0
     mfe = 0.0
@@ -63,11 +89,11 @@ def _calc_mae_mfe(
         high  = float(df_full.iloc[k]["high"])
         low   = float(df_full.iloc[k]["low"])
         if direction == "BUY":
-            adverse   = (entry - low)  / PIP_SIZE_EURUSD
-            favorable = (high - entry) / PIP_SIZE_EURUSD
+            adverse   = (entry - low)  / pip_size
+            favorable = (high - entry) / pip_size
         else:
-            adverse   = (high - entry) / PIP_SIZE_EURUSD
-            favorable = (entry - low)  / PIP_SIZE_EURUSD
+            adverse   = (high - entry) / pip_size
+            favorable = (entry - low)  / pip_size
         if adverse  > mae: mae = adverse
         if favorable > mfe: mfe = favorable
     return max(0.0, mae), max(0.0, mfe)
@@ -81,6 +107,13 @@ class ExitVariant(ABC):
     name: str        # identificador único
     label: str       # nombre legible para informes
     max_forward: int = 250  # máximo de velas a mirar hacia adelante
+
+    # Pip size inyectado por el runner según el símbolo. Default: EURUSD.
+    pip_size: float = PIP_SIZE_EURUSD
+
+    def set_pip_size(self, size: float) -> None:
+        """Inyecta el pip size correcto para el símbolo en análisis."""
+        self.pip_size = size
 
     @abstractmethod
     def compute_levels(
@@ -111,6 +144,7 @@ class ExitVariant(ABC):
         La implementación por defecto usa TP/SL fijos.
         Las variantes con trailing sobreescriben este método.
         """
+        ps = self.pip_size
         exit_bar = None
         for i in range(start_index + 1, min(start_index + self.max_forward, len(df_full))):
             high = float(df_full.iloc[i]["high"])
@@ -118,25 +152,25 @@ class ExitVariant(ABC):
 
             if direction == "BUY":
                 if tp is not None and high >= tp:
-                    raw = (tp - entry) / PIP_SIZE_EURUSD
+                    raw = (tp - entry) / ps
                     exit_bar = i
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("WIN", tp, i, _net_pips(raw), mae, mfe)
                 if low <= sl:
-                    raw = (sl - entry) / PIP_SIZE_EURUSD
+                    raw = (sl - entry) / ps
                     exit_bar = i
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("LOSS", sl, i, _net_pips(raw), mae, mfe)
             else:  # SELL
                 if tp is not None and low <= tp:
-                    raw = (entry - tp) / PIP_SIZE_EURUSD
+                    raw = (entry - tp) / ps
                     exit_bar = i
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("WIN", tp, i, _net_pips(raw), mae, mfe)
                 if high >= sl:
-                    raw = (entry - sl) / PIP_SIZE_EURUSD
+                    raw = (entry - sl) / ps
                     exit_bar = i
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("LOSS", sl, i, _net_pips(raw), mae, mfe)
 
         return ExitResult("PENDING", None, None, 0.0, 0.0, 0.0)
@@ -197,6 +231,7 @@ class Variant_TrailingATR(ExitVariant):
         return sl, None   # sin TP fijo
 
     def simulate_exit(self, entry, sl, tp, direction, df_full, start_index, atr_at_entry):
+        ps = self.pip_size
         trail_dist = atr_at_entry * self.ATR_TRAIL_MULT
         current_sl = sl
 
@@ -211,8 +246,8 @@ class Variant_TrailingATR(ExitVariant):
                 if new_sl > current_sl:
                     current_sl = new_sl
                 if low <= current_sl:
-                    raw = (current_sl - entry) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (current_sl - entry) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("WIN" if current_sl > entry else "LOSS",
                                       current_sl, i, _net_pips(raw), mae, mfe)
             else:
@@ -221,8 +256,8 @@ class Variant_TrailingATR(ExitVariant):
                 if new_sl < current_sl:
                     current_sl = new_sl
                 if high >= current_sl:
-                    raw = (entry - current_sl) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (entry - current_sl) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("WIN" if current_sl < entry else "LOSS",
                                       current_sl, i, _net_pips(raw), mae, mfe)
 
@@ -251,6 +286,7 @@ class Variant_TrailingEMA(ExitVariant):
         return sl, None
 
     def simulate_exit(self, entry, sl, tp, direction, df_full, start_index, atr_at_entry):
+        ps = self.pip_size
         current_sl = sl
         buffer = atr_at_entry * self.EMA_BUFFER_MULT
 
@@ -272,14 +308,14 @@ class Variant_TrailingEMA(ExitVariant):
 
             if direction == "BUY":
                 if low <= current_sl:
-                    raw = (current_sl - entry) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (current_sl - entry) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("WIN" if current_sl > entry else "LOSS",
                                       current_sl, i, _net_pips(raw), mae, mfe)
             else:
                 if high >= current_sl:
-                    raw = (entry - current_sl) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (entry - current_sl) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("WIN" if current_sl < entry else "LOSS",
                                       current_sl, i, _net_pips(raw), mae, mfe)
 
@@ -308,6 +344,7 @@ class Variant_DynamicATR(ExitVariant):
         return sl, None
 
     def simulate_exit(self, entry, sl, tp, direction, df_full, start_index, atr_at_entry):
+        ps = self.pip_size
         current_sl = sl
         current_atr = atr_at_entry
 
@@ -330,8 +367,8 @@ class Variant_DynamicATR(ExitVariant):
                 if new_sl > current_sl:
                     current_sl = new_sl
                 if low <= current_sl:
-                    raw = (current_sl - entry) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (current_sl - entry) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("WIN" if current_sl > entry else "LOSS",
                                       current_sl, i, _net_pips(raw), mae, mfe)
             else:
@@ -339,8 +376,8 @@ class Variant_DynamicATR(ExitVariant):
                 if new_sl < current_sl:
                     current_sl = new_sl
                 if high >= current_sl:
-                    raw = (entry - current_sl) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (entry - current_sl) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("WIN" if current_sl < entry else "LOSS",
                                       current_sl, i, _net_pips(raw), mae, mfe)
 
@@ -371,6 +408,7 @@ class Variant_BreakEven(ExitVariant):
         return sl, tp
 
     def simulate_exit(self, entry, sl, tp, direction, df_full, start_index, atr_at_entry):
+        ps = self.pip_size
         current_sl = sl
         be_triggered = False
         be_level = (entry + atr_at_entry * self.ATR_BE_BUFFER) if direction == "BUY" \
@@ -387,26 +425,26 @@ class Variant_BreakEven(ExitVariant):
                     current_sl = max(current_sl, be_level)
                     be_triggered = True
                 if tp is not None and high >= tp:
-                    raw = (tp - entry) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (tp - entry) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("WIN", tp, i, _net_pips(raw), mae, mfe)
                 if low <= current_sl:
-                    raw = (current_sl - entry) / PIP_SIZE_EURUSD
+                    raw = (current_sl - entry) / ps
                     res = "WIN" if current_sl >= be_level else "LOSS"
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult(res, current_sl, i, _net_pips(raw), mae, mfe)
             else:
                 if not be_triggered and low <= be_trigger_price:
                     current_sl = min(current_sl, be_level)
                     be_triggered = True
                 if tp is not None and low <= tp:
-                    raw = (entry - tp) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (entry - tp) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult("WIN", tp, i, _net_pips(raw), mae, mfe)
                 if high >= current_sl:
-                    raw = (entry - current_sl) / PIP_SIZE_EURUSD
+                    raw = (entry - current_sl) / ps
                     res = "WIN" if current_sl <= be_level else "LOSS"
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult(res, current_sl, i, _net_pips(raw), mae, mfe)
 
         return ExitResult("PENDING", None, None, 0.0, 0.0, 0.0)
@@ -457,6 +495,7 @@ class Variant_PartialClose(ExitVariant):
         - One ExitResult when partial never triggers (full position result).
         MAE/MFE are measured from entry to the respective exit bar.
         """
+        ps = self.pip_size
         current_sl  = sl
         trail_dist  = atr_at_entry * self.ATR_TRAIL_MULT
         partial_trigger_price = (
@@ -480,14 +519,14 @@ class Variant_PartialClose(ExitVariant):
 
             if direction == "BUY":
                 if low <= current_sl:
-                    raw = (current_sl - entry) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (current_sl - entry) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return [ExitResult("LOSS", current_sl, i, _net_pips(raw), mae, mfe)]
 
                 if close >= partial_trigger_price:
                     partial_close_price = close
-                    raw_partial = (partial_close_price - entry) / PIP_SIZE_EURUSD
-                    mae1, mfe1 = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw_partial = (partial_close_price - entry) / ps
+                    mae1, mfe1 = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     first_result = ExitResult(
                         "WIN", partial_close_price, i, _net_pips(raw_partial), mae1, mfe1,
                     )
@@ -497,14 +536,14 @@ class Variant_PartialClose(ExitVariant):
 
             else:  # SELL
                 if high >= current_sl:
-                    raw = (entry - current_sl) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (entry - current_sl) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return [ExitResult("LOSS", current_sl, i, _net_pips(raw), mae, mfe)]
 
                 if close <= partial_trigger_price:
                     partial_close_price = close
-                    raw_partial = (entry - partial_close_price) / PIP_SIZE_EURUSD
-                    mae1, mfe1 = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw_partial = (entry - partial_close_price) / ps
+                    mae1, mfe1 = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     first_result = ExitResult(
                         "WIN", partial_close_price, i, _net_pips(raw_partial), mae1, mfe1,
                     )
@@ -527,15 +566,15 @@ class Variant_PartialClose(ExitVariant):
                     current_sl = new_sl
 
                 if high >= max_tp:
-                    raw_rest = (max_tp - entry) / PIP_SIZE_EURUSD
-                    mae2, mfe2 = _calc_mae_mfe(direction, entry, df_full, start_index, j)
+                    raw_rest = (max_tp - entry) / ps
+                    mae2, mfe2 = _calc_mae_mfe(direction, entry, df_full, start_index, j, ps)
                     second_result = ExitResult("WIN", max_tp, j, _net_pips(raw_rest), mae2, mfe2)
                     return [first_result, second_result]
 
                 if low <= current_sl:
-                    raw_rest = (current_sl - entry) / PIP_SIZE_EURUSD
+                    raw_rest = (current_sl - entry) / ps
                     result = "WIN" if current_sl > entry else "LOSS"
-                    mae2, mfe2 = _calc_mae_mfe(direction, entry, df_full, start_index, j)
+                    mae2, mfe2 = _calc_mae_mfe(direction, entry, df_full, start_index, j, ps)
                     second_result = ExitResult(result, current_sl, j, _net_pips(raw_rest), mae2, mfe2)
                     return [first_result, second_result]
 
@@ -545,15 +584,15 @@ class Variant_PartialClose(ExitVariant):
                     current_sl = new_sl
 
                 if low <= max_tp:
-                    raw_rest = (entry - max_tp) / PIP_SIZE_EURUSD
-                    mae2, mfe2 = _calc_mae_mfe(direction, entry, df_full, start_index, j)
+                    raw_rest = (entry - max_tp) / ps
+                    mae2, mfe2 = _calc_mae_mfe(direction, entry, df_full, start_index, j, ps)
                     second_result = ExitResult("WIN", max_tp, j, _net_pips(raw_rest), mae2, mfe2)
                     return [first_result, second_result]
 
                 if high >= current_sl:
-                    raw_rest = (entry - current_sl) / PIP_SIZE_EURUSD
+                    raw_rest = (entry - current_sl) / ps
                     result = "WIN" if current_sl < entry else "LOSS"
-                    mae2, mfe2 = _calc_mae_mfe(direction, entry, df_full, start_index, j)
+                    mae2, mfe2 = _calc_mae_mfe(direction, entry, df_full, start_index, j, ps)
                     second_result = ExitResult(result, current_sl, j, _net_pips(raw_rest), mae2, mfe2)
                     return [first_result, second_result]
 
@@ -587,6 +626,7 @@ class Variant_TrailingDonchian(ExitVariant):
         return sl, None
 
     def simulate_exit(self, entry, sl, tp, direction, df_full, start_index, atr_at_entry):
+        ps = self.pip_size
         current_sl = sl
 
         for i in range(start_index + 1, min(start_index + self.max_forward, len(df_full))):
@@ -601,8 +641,8 @@ class Variant_TrailingDonchian(ExitVariant):
                 if donchian_sl > current_sl:          # solo sube
                     current_sl = donchian_sl
                 if low <= current_sl:
-                    raw = (current_sl - entry) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (current_sl - entry) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult(
                         "WIN" if current_sl > entry else "LOSS",
                         current_sl, i, _net_pips(raw), mae, mfe,
@@ -613,8 +653,8 @@ class Variant_TrailingDonchian(ExitVariant):
                 if donchian_sl < current_sl:          # solo baja
                     current_sl = donchian_sl
                 if high >= current_sl:
-                    raw = (entry - current_sl) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (entry - current_sl) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult(
                         "WIN" if current_sl < entry else "LOSS",
                         current_sl, i, _net_pips(raw), mae, mfe,
@@ -651,6 +691,7 @@ class Variant_TimeExit(ExitVariant):
         return sl, None
 
     def simulate_exit(self, entry, sl, tp, direction, df_full, start_index, atr_at_entry):
+        ps = self.pip_size
         current_sl = sl
         end_index  = min(start_index + self.MAX_BARS + 1, len(df_full))
 
@@ -662,16 +703,16 @@ class Variant_TimeExit(ExitVariant):
             # Comprobar SL (tiene prioridad sobre el cierre temporal)
             if direction == "BUY":
                 if low <= current_sl:
-                    raw = (current_sl - entry) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (current_sl - entry) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult(
                         "WIN" if current_sl > entry else "LOSS",
                         current_sl, i, _net_pips(raw), mae, mfe,
                     )
             else:
                 if high >= current_sl:
-                    raw = (entry - current_sl) / PIP_SIZE_EURUSD
-                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                    raw = (entry - current_sl) / ps
+                    mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                     return ExitResult(
                         "WIN" if current_sl < entry else "LOSS",
                         current_sl, i, _net_pips(raw), mae, mfe,
@@ -680,11 +721,11 @@ class Variant_TimeExit(ExitVariant):
             # Cierre temporal al llegar al límite de velas
             if bars_held >= self.MAX_BARS:
                 if direction == "BUY":
-                    raw = (close - entry) / PIP_SIZE_EURUSD
+                    raw = (close - entry) / ps
                 else:
-                    raw = (entry - close) / PIP_SIZE_EURUSD
+                    raw = (entry - close) / ps
                 result = "WIN" if raw >= 0 else "LOSS"
-                mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i)
+                mae, mfe = _calc_mae_mfe(direction, entry, df_full, start_index, i, ps)
                 return ExitResult(result, close, i, _net_pips(raw), mae, mfe)
 
         # Si se agotó max_forward sin cerrar (no debería ocurrir con MAX_BARS ≤ max_forward)

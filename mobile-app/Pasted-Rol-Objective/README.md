@@ -1,4 +1,4 @@
-# BOT-MT5 Mobile App
+# LastEdge Mobile
 
 App móvil nativa (Android/iOS) para monitorizar y controlar remotamente el bot de trading algorítmico MT5 en Python, sustituyendo la necesidad de usar Discord.
 

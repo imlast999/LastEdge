@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict
 import pandas as pd
 
+from strategies.base import resolve_required_history
+
 logger = logging.getLogger(__name__)
 
 # ── Constantes por defecto ────────────────────────────────────────────────────
@@ -167,7 +169,7 @@ class WalkForwardTester:
         step_bars:  int = DEFAULT_STEP_BARS,
         cb_losses:  int = 4,
         cb_pause:   int = 168,
-        lookback:   int = 210,
+        lookback:   Optional[int] = None,
     ):
         self.train_bars = train_bars
         self.test_bars  = test_bars
@@ -202,6 +204,18 @@ class WalkForwardTester:
         from core.replay_engine import ReplayEngine
         from mt5_client import get_candles, initialize as mt5_initialize
         import MetaTrader5 as mt5
+
+        strategy_instance = None
+        try:
+            from signals import STRATEGY_REGISTRY
+            factory = STRATEGY_REGISTRY.get(strategy)
+            if factory is not None:
+                strategy_instance = factory()
+        except Exception:
+            strategy_instance = None
+
+        resolved_lookback = self.lookback if self.lookback is not None else resolve_required_history(strategy_instance, fallback_required_history=200)
+        self.lookback = resolved_lookback
 
         report = WalkForwardReport(
             symbol=symbol, strategy=strategy,

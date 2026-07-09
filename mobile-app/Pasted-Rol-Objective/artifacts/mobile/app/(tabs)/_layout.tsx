@@ -1,40 +1,37 @@
 import { BlurView } from "expo-blur";
-import { Tabs, router } from "expo-router";
+import { isLiquidGlassAvailable } from "expo-glass-effect";
+import { Tabs } from "expo-router";
+import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
+import { SymbolView } from "expo-symbols";
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import {
-  Platform,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-  useColorScheme,
-} from "react-native";
+import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
-import { useTranslation } from "@/hooks/useTranslation";
 
-// ── Botón de ajustes que aparece en el header de todas las pantallas ──────────
-function SettingsButton() {
-  const colors = useColors();
-  const { t } = useTranslation();
+function NativeTabLayout() {
   return (
-    <TouchableOpacity
-      onPress={() => router.push("/(tabs)/settings" as any)}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      style={styles.settingsBtn}
-      accessibilityLabel={t("settingsTitle")}
-      accessibilityRole="button"
-    >
-      <Feather name="settings" size={22} color={colors.foreground} />
-    </TouchableOpacity>
+    <NativeTabs>
+      <NativeTabs.Trigger name="index">
+        <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
+        <Label>Dashboard</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="research">
+        <Icon sf={{ default: "flask", selected: "flask.fill" }} />
+        <Label>Research</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="settings">
+        <Icon sf={{ default: "gearshape", selected: "gearshape.fill" }} />
+        <Label>Ajustes</Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }
 
-// ── Layout estándar Android / Web ─────────────────────────────────────────────
 function ClassicTabLayout() {
   const colors = useColors();
-  const { t } = useTranslation();
   const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
@@ -43,11 +40,7 @@ function ClassicTabLayout() {
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
-        headerShown: true,
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.foreground,
-        headerShadowVisible: false,
-        headerRight: () => <SettingsButton />,
+        headerShown: false,
         tabBarStyle: {
           position: "absolute",
           backgroundColor: isIOS ? "transparent" : colors.background,
@@ -58,9 +51,15 @@ function ClassicTabLayout() {
         },
         tabBarBackground: () =>
           isIOS ? (
-            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView
+              intensity={80}
+              tint="dark"
+              style={StyleSheet.absoluteFill}
+            />
           ) : isWeb ? (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
+            <View
+              style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]}
+            />
           ) : null,
       }}
     >
@@ -68,36 +67,36 @@ function ClassicTabLayout() {
         name="index"
         options={{
           title: "Dashboard",
-          tabBarIcon: ({ color }) => <Feather name="bar-chart-2" size={22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="trades"
-        options={{
-          title: "Trades",
-          tabBarIcon: ({ color }) => <Feather name="repeat" size={22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="backtests"
-        options={{
-          title: "Backtests",
-          tabBarIcon: ({ color }) => <Feather name="activity" size={22} color={color} />,
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="chart.bar.fill" tintColor={color} size={22} />
+            ) : (
+              <Feather name="bar-chart-2" size={22} color={color} />
+            ),
         }}
       />
       <Tabs.Screen
         name="research"
         options={{
           title: "Research",
-          tabBarIcon: ({ color }) => <Feather name="layers" size={22} color={color} />,
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="flask.fill" tintColor={color} size={22} />
+            ) : (
+              <Feather name="activity" size={22} color={color} />
+            ),
         }}
       />
-      {/* Settings: oculta de la tab bar, título traducido */}
       <Tabs.Screen
         name="settings"
         options={{
-          title: t("settingsTitle"),
-          href: null,
+          title: "Ajustes",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="gearshape.fill" tintColor={color} size={22} />
+            ) : (
+              <Feather name="settings" size={22} color={color} />
+            ),
         }}
       />
     </Tabs>
@@ -105,12 +104,8 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
+  if (isLiquidGlassAvailable()) {
+    return <NativeTabLayout />;
+  }
   return <ClassicTabLayout />;
 }
-
-const styles = StyleSheet.create({
-  settingsBtn: {
-    marginRight: 16,
-    padding: 2,
-  },
-});

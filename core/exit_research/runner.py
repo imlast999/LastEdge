@@ -27,6 +27,7 @@ from typing import List, Optional, Dict, Any
 
 import pandas as pd
 
+from strategies.base import resolve_required_history
 from .variants          import ALL_VARIANTS, ExitVariant, VARIANT_BY_NAME
 from .metrics           import ExtendedMetrics, compute_metrics, monthly_consistency
 from .strategy_adapter  import StrategyAdapter, adapter_for_symbol
@@ -231,16 +232,22 @@ class ExitResearchRunner:
         self,
         symbol:   str  = "EURUSD",
         strategy: Optional[StrategyAdapter] = None,
-        lookback: int  = 200,
+        lookback: Optional[int] = None,
         max_fwd:  int  = 300,
         variants: Optional[List[ExitVariant]] = None,
         levels:   Optional[List[int]] = None,
     ):
         self.symbol   = symbol
-        self.lookback = lookback
         self.max_fwd  = max_fwd
         self.variants = variants or ALL_VARIANTS
         self.levels   = levels   or BACKTEST_LEVELS
+
+        # Inyectar pip_size correcto en cada variante según el símbolo
+        from .variants import get_pip_size
+        _pip_size = get_pip_size(symbol)
+        for v in self.variants:
+            if hasattr(v, "set_pip_size"):
+                v.set_pip_size(_pip_size)
 
         # Resolver el adapter de estrategia
         if strategy is not None:
@@ -250,7 +257,35 @@ class ExitResearchRunner:
             # se propague durante el backtest (no en __init__)
             self._strategy_adapter = None
 
+        # lookback: si se pasa explícitamente se respeta (retrocompatibilidad).
+        # Si es None, se resuelve desde strategy.required_history en el primer uso.
+        self._lookback_override: Optional[int] = lookback
+
         self._df_cache: Dict[int, pd.DataFrame] = {}
+
+    @property
+    def lookback(self) -> int:
+        """
+        Ventana de historia requerida por la estrategia activa.
+
+        Prioridad:
+          1. Valor explícito pasado en __init__ (retrocompatibilidad / tests).
+          2. strategy.required_history — la estrategia es la única fuente de verdad.
+          3. Fallback 200 si el adapter aún no está disponible.
+        """
+        if self._lookback_override is not None:
+            return self._lookback_override
+        if self._strategy_adapter is not None:
+            try:
+                return self._strategy_adapter.strategy.required_history
+            except Exception:
+                pass
+        # Adapter lazy aún no creado: intentar crearlo para leer el valor
+        try:
+            adapter = adapter_for_symbol(self.symbol)
+            return adapter.strategy.required_history
+        except Exception:
+            return 200  # fallback seguro
 
     # ── API pública ───────────────────────────────────────────────────────────
 
@@ -283,11 +318,13 @@ class ExitResearchRunner:
                     f"{datetime.now(timezone.utc).isoformat()}Z — no data returned."
                 )
 
-            # Req 3.3: verify minimum 20,200 bars before executing any level
-            if len(df_full) < 20_200:
+            required_history = self.lookback
+            min_required_bars = max(self.levels) + required_history
+            # Req 3.3: verify the dataset contains enough bars for the strategy
+            if len(df_full) < min_required_bars:
                 msg = (
                     f"[ExitResearch] Insufficient data: {len(df_full)} bars "
-                    f"(need >= 20,200). Aborting."
+                    f"(need >= {min_required_bars}, strategy required_history={required_history}). Aborting."
                 )
                 logger.error(msg)
                 raise RuntimeError(msg)
@@ -457,6 +494,11 @@ class ExitResearchRunner:
 
             # partial_close returns list[ExitResult] (two records per signal);
             # all other variants return a single ExitResult.
+            # Get timestamp for the trade entry
+            ts_val = None
+            if "time" in df_full.columns:
+                ts_val = str(df_full.iloc[i]["time"])
+
             if isinstance(exit_res, list):
                 for res in exit_res:
                     trades.append(_Trade(
@@ -466,6 +508,7 @@ class ExitResearchRunner:
                         exit_bar=res.exit_bar,
                         mae_pips=res.mae_pips,
                         mfe_pips=res.mfe_pips,
+                        timestamp=ts_val,
                     ))
             else:
                 trades.append(_Trade(
@@ -475,6 +518,7 @@ class ExitResearchRunner:
                     exit_bar=exit_res.exit_bar,
                     mae_pips=exit_res.mae_pips,
                     mfe_pips=exit_res.mfe_pips,
+                    timestamp=ts_val,
                 ))
 
         elapsed = time.time() - t0
@@ -1085,7 +1129,7 @@ class ExitResearchRunner:
         path = os.path.join(session_dir, "trades.csv")
         fieldnames = [
             "variant", "trade_id", "bar_index", "exit_bar",
-            "result", "profit_pips", "mae_pips", "mfe_pips", "duration_bars",
+            "result", "profit_pips", "mae_pips", "mfe_pips", "duration_bars", "timestamp"
         ]
         with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -1107,6 +1151,7 @@ class ExitResearchRunner:
                         "mae_pips":     round(getattr(t, "mae_pips", 0.0), 4),
                         "mfe_pips":     round(getattr(t, "mfe_pips", 0.0), 4),
                         "duration_bars": duration,
+                        "timestamp":    getattr(t, "timestamp", None),
                     })
         logger.info(f"[ExitResearch] trades.csv → {path}")
 
@@ -1302,16 +1347,17 @@ class ExitResearchRunner:
 
 class _Trade:
     """Objeto mínimo compatible con compute_metrics."""
-    __slots__ = ("result", "profit_pips", "bar_index", "exit_bar", "mae_pips", "mfe_pips")
+    __slots__ = ("result", "profit_pips", "bar_index", "exit_bar", "mae_pips", "mfe_pips", "timestamp")
 
     def __init__(self, result, profit_pips, bar_index, exit_bar,
-                 mae_pips: float = 0.0, mfe_pips: float = 0.0):
+                 mae_pips: float = 0.0, mfe_pips: float = 0.0, timestamp: str = None):
         self.result      = result
         self.profit_pips = profit_pips
         self.bar_index   = bar_index
         self.exit_bar    = exit_bar
         self.mae_pips    = mae_pips
         self.mfe_pips    = mfe_pips
+        self.timestamp   = timestamp
 
 
 # ── Nota: run_exit_research() se define en core/exit_research/__init__.py ──────

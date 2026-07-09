@@ -59,7 +59,6 @@ class MobileStore:
                         symbol          TEXT    NOT NULL,
                         strategy        TEXT    NOT NULL,
                         bars            INTEGER NOT NULL,
-                        timeframe       TEXT    DEFAULT 'H1',
                         cb_losses       INTEGER DEFAULT 4,
                         cb_pause        INTEGER DEFAULT 168,
                         status          TEXT    NOT NULL DEFAULT 'PENDING',
@@ -69,12 +68,6 @@ class MobileStore:
                         updated_at      TEXT    DEFAULT (datetime('now'))
                     )
                 """)
-                cols_bt = {r[1] for r in conn.execute("PRAGMA table_info(backtest_tasks)")}
-                if cols_bt and "timeframe" not in cols_bt:
-                    conn.execute(
-                        "ALTER TABLE backtest_tasks "
-                        "ADD COLUMN timeframe TEXT DEFAULT 'H1'"
-                    )
             # Garantizar trade_journal
             try:
                 from core.journal import get_journal
@@ -326,7 +319,7 @@ class MobileStore:
             with self._conn() as conn:
                 rows = conn.execute(
                     """SELECT id, symbol, direction, price, tp_price, sl_price,
-                              lot_size, status, confidence_score, strategy, created_at
+                              lot_size, status, confidence_score, strategy
                        FROM enhanced_signals
                        WHERE COALESCE(mobile_processed, 0) = 0
                          AND status IN ('ACCEPTED', 'REJECTED')
@@ -351,22 +344,6 @@ class MobileStore:
 
     def process_mobile_actions(self) -> None:
         """Ejecuta señales ACCEPTED desde la app en MT5 demo."""
-        import time as _time
-
-        if not hasattr(self, "_market_closed_last_log"):
-            # Dict[signal_id -> last_log_timestamp]
-            # Throttle: loguear market-closed como máximo 1 vez por hora por señal.
-            self._market_closed_last_log: dict[int, float] = {}
-
-        # ── Helper de throttle ────────────────────────────────────────────────
-        def _should_log_closed(sid: int) -> bool:
-            now = _time.monotonic()
-            last = self._market_closed_last_log.get(sid, 0.0)
-            if now - last >= 3600:          # 1 hora
-                self._market_closed_last_log[sid] = now
-                return True
-            return False
-
         for row in self.get_unprocessed_mobile_actions():
             sid = row["id"]
             status = (row["status"] or "").upper()
@@ -379,32 +356,8 @@ class MobileStore:
             if status != "ACCEPTED":
                 continue
 
-            symbol = row.get("symbol", "UNKNOWN")
-
-            # ── Expiración de señales antiguas ────────────────────────────────
-            created_at_raw = row.get("created_at") or ""
-            if created_at_raw and self._signal_is_expired(sid, created_at_raw, symbol):
-                logger.warning(
-                    f"[MobileStore] Señal {sid} ({symbol}) expirada sin ejecutar "
-                    f"(creada: {created_at_raw}). Marcando como EXPIRED."
-                )
-                self.mark_mobile_processed(sid, executed=False)
-                self.update_signal_status(sid, "EXPIRED")
-                self._market_closed_last_log.pop(sid, None)
-                continue
-
-            # ── Comprobar si el mercado está abierto ANTES de intentar ────────
-            if not self._is_market_open(symbol):
-                if _should_log_closed(sid):
-                    logger.warning(
-                        f"[MobileStore] Señal {sid} ({symbol}): mercado cerrado. "
-                        f"Próximo reintento automático cuando abra. "
-                        f"(Este mensaje se repetirá máx. 1 vez/hora)"
-                    )
-                continue
-
             signal = {
-                "symbol": symbol,
+                "symbol": row["symbol"],
                 "type": row["direction"],
                 "entry": row["price"],
                 "sl": row["sl_price"],
@@ -418,29 +371,14 @@ class MobileStore:
                 if result.success:
                     self.mark_mobile_processed(sid, executed=True)
                     self.update_signal_status(sid, "OPEN")
-                    self._market_closed_last_log.pop(sid, None)
                     logger.info(
                         f"[MobileStore] Señal {sid} ejecutada en MT5 "
                         f"(ticket {result.order_id})"
                     )
                 else:
-                    msg = result.message or ""
-                    if "10018" in msg or "market closed" in msg.lower():
-                        # El broker reportó mercado abierto pero rechazó la orden.
-                        # Throttlear igual que el check previo.
-                        if _should_log_closed(sid):
-                            logger.warning(
-                                f"[MobileStore] Señal {sid} ({symbol}): MT5 rechazó "
-                                f"la orden (mercado cerrado en el broker). "
-                                f"Reintentando cuando abra. "
-                                f"(Este mensaje se repetirá máx. 1 vez/hora)"
-                            )
-                    else:
-                        logger.warning(
-                            f"[MobileStore] Fallo ejecutando señal {sid}: {result.message}"
-                        )
-                        self.mark_mobile_processed(sid, executed=False)
-                        self.update_signal_status(sid, "FAILED")
+                    logger.warning(
+                        f"[MobileStore] Fallo ejecutando señal {sid}: {result.message}"
+                    )
             except Exception as e:
                 logger.error(f"[MobileStore] Error ejecutando señal {sid}: {e}")
 
@@ -452,66 +390,6 @@ class MobileStore:
             return len(positions) if positions else 0
         except Exception:
             return 0
-
-    def _is_market_open(self, symbol: str) -> bool:
-        """
-        Comprueba si el mercado de un símbolo está abierto en MT5.
-
-        Usa mt5.symbol_info() para leer el campo `trade_mode`:
-          - SYMBOL_TRADE_MODE_FULL (4)  → mercado abierto
-          - cualquier otro valor        → cerrado, solo lectura, etc.
-
-        Si MT5 no está disponible o hay error, devuelve True para no
-        bloquear señales en caso de fallo de conexión temporal.
-        """
-        try:
-            import MetaTrader5 as mt5
-
-            info = mt5.symbol_info(symbol)
-            if info is None:
-                # MT5 no reconoce el símbolo — dejar pasar para que
-                # el error se maneje en execute_signal con más contexto
-                return True
-            # trade_mode == 4 (SYMBOL_TRADE_MODE_FULL) = mercado abierto
-            return info.trade_mode == mt5.SYMBOL_TRADE_MODE_FULL
-        except Exception:
-            return True  # fail-open: si no podemos comprobar, intentamos
-
-    def _signal_is_expired(self, sid: int, created_at: str, symbol: str) -> bool:
-        """
-        Determina si una señal pendiente ha expirado y ya no debe ejecutarse.
-
-        Lógica:
-          - BTCEUR / crypto: 72h (mercado 24/7, si lleva 3 días sin ejecutarse
-            el precio ha cambiado demasiado)
-          - EURUSD / XAUUSD / Forex: 4h (solo tiene sentido en la sesión en que
-            se generó; más allá el contexto de la señal ya no es válido)
-
-        Si el mercado está actualmente ABIERTO no se expira (puede que la señal
-        esté esperando a que el precio vuelva a ser válido).
-        """
-        # Solo expirar señales cuyo mercado está cerrado en este momento
-        if self._is_market_open(symbol):
-            return False
-
-        MAX_PENDING_HOURS: dict[str, float] = {
-            "BTCEUR":  72.0,
-            "BTCUSDT": 72.0,
-            "EURUSD":   4.0,
-            "XAUUSD":   4.0,
-        }
-        max_hours = MAX_PENDING_HOURS.get(symbol.upper(), 4.0)
-
-        try:
-            from datetime import datetime
-            created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-            # Si created_at no tiene timezone, asumimos local
-            if created.tzinfo is None:
-                created = created.replace(tzinfo=datetime.now().astimezone().tzinfo)
-            age_hours = (datetime.now(created.tzinfo) - created).total_seconds() / 3600
-            return age_hours > max_hours
-        except Exception:
-            return False  # si no podemos parsear la fecha, no expiramos
 
     def sync_dashboard(self, dashboard) -> None:
         """Sincroniza equity MT5, acciones móviles y trades cerrados."""

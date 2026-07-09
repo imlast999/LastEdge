@@ -18,6 +18,8 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 import pandas as pd
 
+from strategies.base import resolve_required_history
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -70,7 +72,7 @@ class ReplayEngine:
     - Modo diagnóstico (sin filtro de duplicados)
     """
     
-    def __init__(self, lookback_window: int = 100, max_forward_bars: int = 120,
+    def __init__(self, lookback_window: Optional[int] = None, max_forward_bars: int = 120,
                  cb_consecutive_losses: int = 4, cb_pause_bars: int = 168):
         """
         Args:
@@ -135,6 +137,20 @@ class ReplayEngine:
                 logger.debug(f"No se pudo resolver required_timeframe para '{strategy}': {e}")
             
             logger.info(f"Usando estrategia: {strategy} | timeframe efectivo: {effective_timeframe}")
+
+            strategy_instance_for_history = None
+            try:
+                from signals import STRATEGY_REGISTRY
+                factory = STRATEGY_REGISTRY.get(strategy)
+                if factory is not None:
+                    strategy_instance_for_history = factory()
+            except Exception as e:
+                logger.debug(f"No se pudo instanciar estrategia para history check: {e}")
+
+            required_history = resolve_required_history(strategy_instance_for_history, fallback_required_history=200)
+            effective_lookback = self.lookback_window if self.lookback_window is not None else required_history
+            self.lookback_window = effective_lookback
+            logger.info(f"Lookback efectivo para {strategy}: {self.lookback_window} (requerida por metadata={required_history})")
             
             # ── Obtener datos históricos ──────────────────────────────────────
             if df_override is not None:
@@ -315,11 +331,11 @@ class ReplayEngine:
         symbol_upper = symbol.upper()
         
         if symbol_upper == 'EURUSD':
-            return 'eurusd_simple'
+            return 'eurusd_partial'
         elif symbol_upper == 'XAUUSD':
-            return 'xauusd_simple'
+            return 'xauusd_partial'
         elif symbol_upper in ['BTCEUR', 'BTCUSDT']:
-            return 'btceur_simple'
+            return 'btceur_partial'
         else:
             return 'ema50_200'
     
@@ -446,7 +462,7 @@ class ReplayEngine:
 # Instancia global del replay engine
 _replay_engine = None
 
-def get_replay_engine(lookback_window: int = 100) -> ReplayEngine:
+def get_replay_engine(lookback_window: Optional[int] = None) -> ReplayEngine:
     """Obtiene instancia del replay engine"""
     global _replay_engine
     if _replay_engine is None:

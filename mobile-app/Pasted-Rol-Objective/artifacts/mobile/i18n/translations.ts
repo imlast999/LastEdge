@@ -12,7 +12,7 @@ export const translations: Record<string, TranslationDict> = {
     
     // Dashboard
     dashboardTitle: "Dashboard",
-    dashboardSubtitle: "Trading Bot Monitor",
+    dashboardSubtitle: "LastEdge",
     equity: "Equity",
     balance: "Balance",
     last24h: "Last 24h",
@@ -128,7 +128,7 @@ export const translations: Record<string, TranslationDict> = {
     reset: "Reset",
     settingsReset: "Settings reset",
     about: "About",
-    tradingBotMonitor: "Trading Bot Monitor",
+    tradingBotMonitor: "LastEdge",
     defaultInterval: "Default interval",
     version: "Version",
     server: "Server",
@@ -243,7 +243,7 @@ export const translations: Record<string, TranslationDict> = {
     
     // Dashboard
     dashboardTitle: "Dashboard",
-    dashboardSubtitle: "Trading Bot Monitor",
+    dashboardSubtitle: "LastEdge",
     equity: "Equidad",
     balance: "Balance",
     last24h: "Últimas 24h",
@@ -354,7 +354,7 @@ export const translations: Record<string, TranslationDict> = {
     reset: "Restablecer",
     settingsReset: "Ajustes restablecidos",
     about: "Acerca de",
-    tradingBotMonitor: "Trading Bot Monitor",
+    tradingBotMonitor: "LastEdge",
     defaultInterval: "Intervalo predeterminado",
     version: "Versión",
     server: "Servidor",

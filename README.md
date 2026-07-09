@@ -1,5 +1,7 @@
 <div align="center">
 
+![LastEdge banner](images/LastEdge%20banner.png)
+
 # LastEdge
 
 **Quantitative Trading Research Framework**
@@ -23,7 +25,7 @@ LastEdge is a personal quantitative research framework built around MetaTrader 5
 
 The goal is not to chase high backtest numbers. It is to find strategies that survive when market conditions change — then validate them rigorously before committing real capital.
 
-> **Current phase:** Demo MT5 validation — `eurusd_partial` (partial close, validated via Exit Research Jul 2026).  
+> **Current phase:** Demo MT5 validation — promoted partial-close variants for `eurusd_partial`, `xauusd_partial`, and `btceur_partial` (validated via Exit Research Jul 2026).  
 > No live capital is at risk. All validation runs on a MetaTrader 5 Demo account.
 
 ---
@@ -57,8 +59,8 @@ flowchart TD
     A[MT5 Market Data] --> B[Replay Engine / Live Candles]
     B --> C{Strategy Layer}
     C --> D[eurusd_partial ✅ v1.1]
-    C --> E[xauusd_simple]
-    C --> F[btceur_simple]
+    C --> E[xauusd_partial ✅ v1.1]
+    C --> F[btceur_partial ✅ v1.1]
     D & E & F --> G[Scoring System]
     G --> H[Risk Filters]
     H --> I{Signal Quality}
@@ -87,6 +89,8 @@ flowchart TD
 - **Exit Research framework** — compares 13 exit variants per strategy with MAE/MFE/WF/MC
 - **Validation pipeline** — phases 3–8 with stability, WF, MC, and recommendation engine
 - **eurusd_partial** — first strategy promoted via Exit Research (PF=1.85, WR=54%, MC Ruin=0%)
+- **xauusd_partial** — promoted to production after LastEdge Exit Research validation with the same entry logic as xauusd_simple
+- **btceur_partial** — promoted to production after LastEdge Exit Research validation with the same entry logic as btceur_simple
 - Circuit breaker with dynamic risk scaling and disk persistence
 - News event filter (exact 2025–2026 dates: NFP, CPI, FOMC, ECB)
 - Real-time web dashboard with equity simulation and Chart.js curve
@@ -121,8 +125,8 @@ flowchart TD
 | Symbol | Strategy | Exit | SL | TP | WR (20k) | PF (20k) | MC Ruin | Notes |
 |---|---|---|---|---|---|---|---|---|
 | EURUSD | `eurusd_partial` | 50% Partial + Trailing | 1.5× ATR | 2×ATR + trail | 54.1% | **1.85** | **0.0%** | ✅ Validated via Exit Research Jul 2026 |
-| XAUUSD | `xauusd_simple` | Fixed RR | 2.0× ATR | 5.0× ATR | 35.5% | **1.17** | — | ✅ ROBUST |
-| BTCEUR | `btceur_simple` | Fixed RR | 2.0× ATR | 3.0× ATR | 46.4% | **1.23** (10k) | — | ⚠️ INCONCLUSIVE |
+| XAUUSD | `xauusd_partial` | 50% Partial + Trailing | 2.0× ATR | 2×ATR + trail | — | — | — | ✅ Promoted to production after Exit Research |
+| BTCEUR | `btceur_partial` | 50% Partial + Trailing | 2.0× ATR | 2×ATR + trail | — | — | — | ✅ Promoted to production after Exit Research |
 
 All results include real spread + commission costs for a Professional account.
 
@@ -205,7 +209,7 @@ A strategy must satisfy **all** of the following:
 LastEdge/  (c:\BOT-MT5)
 ├── bot.py                      # Entry point — Discord bot + MT5
 ├── signals.py                  # Strategy dispatcher
-├── rules_config.json           # Per-symbol configuration (active: eurusd_partial)
+├── rules_config.json           # Per-symbol configuration (active: eurusd_partial, xauusd_partial, btceur_partial)
 │
 ├── core/
 │   ├── engine.py               # Main signal engine + BotState

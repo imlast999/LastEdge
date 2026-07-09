@@ -33,7 +33,6 @@ class DatabaseService:
                 symbol          TEXT    NOT NULL,
                 strategy        TEXT    NOT NULL,
                 bars            INTEGER NOT NULL,
-                timeframe       TEXT    DEFAULT 'H1',
                 cb_losses       INTEGER DEFAULT 4,
                 cb_pause        INTEGER DEFAULT 168,
                 status          TEXT    NOT NULL DEFAULT 'PENDING',
@@ -43,14 +42,6 @@ class DatabaseService:
                 updated_at      TEXT    DEFAULT (datetime('now'))
             )
         """)
-        # Migración para agregar la columna timeframe si no existe
-        try:
-            c.execute("PRAGMA table_info(backtest_tasks)")
-            columns = [info[1] for info in c.fetchall()]
-            if 'timeframe' not in columns:
-                c.execute("ALTER TABLE backtest_tasks ADD COLUMN timeframe TEXT DEFAULT 'H1'")
-        except Exception as e:
-            logger.error(f"Error migrando tabla backtest_tasks en init_db: {e}")
         conn.commit()
         conn.close()
         # Tablas para la app móvil

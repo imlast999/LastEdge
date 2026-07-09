@@ -47,7 +47,6 @@ export function ensureSchema(db: DatabaseSync = getDb()): void {
       symbol          TEXT    NOT NULL,
       strategy        TEXT    NOT NULL,
       bars            INTEGER NOT NULL,
-      timeframe       TEXT    DEFAULT 'H1',
       cb_losses       INTEGER DEFAULT 4,
       cb_pause        INTEGER DEFAULT 168,
       status          TEXT    NOT NULL DEFAULT 'PENDING',
@@ -57,16 +56,6 @@ export function ensureSchema(db: DatabaseSync = getDb()): void {
       updated_at      TEXT    DEFAULT (datetime('now'))
     );
   `);
-
-  try {
-    const columns = db.prepare("PRAGMA table_info(backtest_tasks)").all() as any[];
-    const hasTimeframe = columns.some((col) => col.name === "timeframe");
-    if (!hasTimeframe) {
-      db.exec("ALTER TABLE backtest_tasks ADD COLUMN timeframe TEXT DEFAULT 'H1'");
-    }
-  } catch (err) {
-    // Ignore error if column already exists
-  }
 }
 
 /** Run a SELECT and return all rows as plain objects. */

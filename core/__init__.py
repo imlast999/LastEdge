@@ -38,11 +38,22 @@ from .filters import (
 )
 
 from .risk import (
+    # New Risk Engine
+    RiskEngine,
+    RiskDecision,
+    get_risk_engine,
+    create_risk_engine,
+    RiskConfig,
+    load_risk_config,
+    PositionSizer,
+    MarginChecker,
+    PortfolioRisk,
+    # Legacy backward compat
     RiskManager,
     RiskParameters,
     RiskAssessment,
     get_risk_manager,
-    create_risk_manager
+    create_risk_manager,
 )
 
 from .replay_engine import (
@@ -81,6 +92,7 @@ trading_engine = get_trading_engine()
 scoring_system = get_scoring_system()
 filters_system = get_filters_system()
 risk_manager = get_risk_manager()
+risk_engine = get_risk_engine()
 
 __all__ = [
     # Engine
@@ -105,7 +117,18 @@ __all__ = [
     'get_filters_system',
     'filters_system',
     
-    # Risk
+    # Risk Engine (new)
+    'RiskEngine',
+    'RiskDecision',
+    'get_risk_engine',
+    'create_risk_engine',
+    'RiskConfig',
+    'load_risk_config',
+    'PositionSizer',
+    'MarginChecker',
+    'PortfolioRisk',
+    'risk_engine',
+    # Risk Manager (legacy compat)
     'RiskManager',
     'RiskParameters',
     'RiskAssessment',

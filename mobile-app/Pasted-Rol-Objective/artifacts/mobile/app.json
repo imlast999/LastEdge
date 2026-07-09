@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Trading Bot Monitor",
-    "slug": "mobile",
+    "name": "LastEdge",
+    "slug": "lastedge",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mobile",
+    "scheme": "lastedge",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
@@ -18,7 +18,7 @@
     },
     "android": {
       "backgroundColor": "#09090b",
-      "package": "com.tradingbot.monitor",
+      "package": "com.lastedge.app",
       "usesCleartextTraffic": true
     },
     "web": {

@@ -397,14 +397,13 @@ botRouter.get("/backtests", (_req: Request, res: Response) => {
       symbol: string;
       strategy: string;
       bars: number;
-      timeframe: string;
       status: string;
       created_at: string | null;
       updated_at: string | null;
       error_message: string | null;
     };
     const rows = query<TaskRow>(
-      `SELECT id, symbol, strategy, bars, timeframe, status, created_at, updated_at, error_message
+      `SELECT id, symbol, strategy, bars, status, created_at, updated_at, error_message
        FROM backtest_tasks
        ORDER BY id DESC
        LIMIT 30`
@@ -419,7 +418,7 @@ botRouter.get("/backtests", (_req: Request, res: Response) => {
 // ── POST /api/backtests ───────────────────────────────────────────────────────
 
 botRouter.post("/backtests", (req: Request, res: Response) => {
-  const { symbol, strategy, bars, timeframe = "H1", cb_losses = 4, cb_pause = 168 } = req.body;
+  const { symbol, strategy, bars, cb_losses = 4, cb_pause = 168 } = req.body;
   if (!symbol || !strategy || !bars || isNaN(parseInt(bars, 10))) {
     res.status(400).json({ ok: false, message: "Missing or invalid parameters" });
     return;
@@ -427,53 +426,15 @@ botRouter.post("/backtests", (req: Request, res: Response) => {
 
   try {
     const result = run(
-      `INSERT INTO backtest_tasks (symbol, strategy, bars, timeframe, cb_losses, cb_pause, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'PENDING')`,
-      [symbol.toUpperCase(), strategy, parseInt(bars, 10), String(timeframe).toUpperCase(), parseInt(cb_losses, 10), parseInt(cb_pause, 10)]
+      `INSERT INTO backtest_tasks (symbol, strategy, bars, cb_losses, cb_pause, status)
+       VALUES (?, ?, ?, ?, ?, 'PENDING')`,
+      [symbol.toUpperCase(), strategy, parseInt(bars, 10), parseInt(cb_losses, 10), parseInt(cb_pause, 10)]
     );
 
     res.json({ ok: true, taskId: result.lastInsertRowid });
   } catch (err) {
     logger.error({ err }, "POST /api/backtests error");
     res.status(500).json({ ok: false, message: "Failed to queue backtest task" });
-  }
-});
-
-// ── GET /api/strategies ────────────────────────────────────────────────────────
-// Devuelve la lista de estrategias disponibles.
-// Nota: el API server es TypeScript/Node y no puede importar Python directamente,
-// así que devolvemos una lista basada en el registry conocido. Si se añaden
-// estrategias nuevas en signals.py, actualizar también este array.
-
-botRouter.get("/strategies", (_req: Request, res: Response) => {
-  try {
-    const strategies = [
-      { id: "eurusd_partial",        name: "EURUSD PARTIAL (v1.1 activa)", symbol: "EURUSD" },
-      { id: "eurusd_simple",         name: "EURUSD SIMPLE (legacy)",       symbol: "EURUSD" },
-      { id: "eurusd_advanced",       name: "EURUSD ADVANCED",              symbol: "EURUSD" },
-      { id: "eurusd_asian_breakout", name: "EURUSD ASIAN BREAKOUT",        symbol: "EURUSD" },
-      { id: "eurusd_mtf",            name: "EURUSD MTF",                   symbol: "EURUSD" },
-      { id: "xauusd_simple",         name: "XAUUSD SIMPLE",         symbol: "XAUUSD" },
-      { id: "xauusd_advanced",       name: "XAUUSD ADVANCED",       symbol: "XAUUSD" },
-      { id: "xauusd_reversal",       name: "XAUUSD REVERSAL",       symbol: "XAUUSD" },
-      { id: "xauusd_momentum",       name: "XAUUSD MOMENTUM",       symbol: "XAUUSD" },
-      { id: "xauusd_psychological",  name: "XAUUSD PSYCHOLOGICAL",  symbol: "XAUUSD" },
-      { id: "btceur_simple",         name: "BTCEUR SIMPLE",         symbol: "BTCEUR" },
-      { id: "btceur_advanced",       name: "BTCEUR ADVANCED",       symbol: "BTCEUR" },
-      { id: "btc_trend_pullback_v1", name: "BTC TREND PULLBACK",    symbol: "BTCEUR" },
-      { id: "btceur_weekly_breakout",name: "BTCEUR WEEKLY BREAKOUT",symbol: "BTCEUR" },
-      { id: "btceur_regime_momentum",name: "BTCEUR REGIME MOMENTUM",symbol: "BTCEUR" },
-      { id: "btcusdt",               name: "BTCUSDT",               symbol: "BTCEUR" },
-      { id: "btc",                   name: "BTC",                   symbol: "BTCEUR" },
-      { id: "ema50_200",             name: "EMA 50/200",            symbol: "EURUSD" },
-      { id: "rsi",                   name: "RSI REVERSAL",          symbol: "EURUSD" },
-      { id: "macd",                  name: "MACD CROSSOVER",        symbol: "EURUSD" },
-    ];
-
-    res.json({ ok: true, strategies });
-  } catch (err) {
-    logger.error({ err }, "GET /api/strategies error");
-    res.status(500).json({ ok: false, message: "Failed to list strategies" });
   }
 });
 
@@ -493,14 +454,13 @@ botRouter.get("/backtests/:id", (req: Request, res: Response) => {
       symbol: string;
       strategy: string;
       bars: number;
-      timeframe: string;
       status: string;
       results_json: string | null;
       error_message: string | null;
     };
 
     const task = queryOne<TaskRow>(
-      `SELECT id, symbol, strategy, bars, timeframe, status, results_json, error_message
+      `SELECT id, symbol, strategy, bars, status, results_json, error_message
        FROM backtest_tasks
        WHERE id = ?`,
       [id]
@@ -526,7 +486,6 @@ botRouter.get("/backtests/:id", (req: Request, res: Response) => {
       symbol: task.symbol,
       strategy: task.strategy,
       bars: task.bars,
-      timeframe: task.timeframe ?? "H1",
       status: task.status,
       results,
       errorMessage: task.error_message,

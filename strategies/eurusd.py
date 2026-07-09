@@ -30,6 +30,17 @@ class EURUSDStrategy(BaseStrategy):
     
     def __init__(self):
         super().__init__("EURUSD_Simple")
+
+    @property
+    def metadata(self):
+        from strategies.base import StrategyMetadata
+        return StrategyMetadata(
+            required_history=200,   # EMA200 es el indicador más lento
+            symbol="EURUSD",
+            timeframe="H1",
+            strategy_name="eurusd_simple",
+            version="2.0",
+        )
     
     def _get_default_config(self) -> Dict:
         return {

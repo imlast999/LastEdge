@@ -32,6 +32,17 @@ class XAUUSDStrategy(BaseStrategy):
     def __init__(self):
         super().__init__("XAUUSD_Simple")
 
+    @property
+    def metadata(self):
+        from strategies.base import StrategyMetadata
+        return StrategyMetadata(
+            required_history=200,   # EMA200 es el indicador más lento
+            symbol="XAUUSD",
+            timeframe="H1",
+            strategy_name="xauusd_simple",
+            version="1.0",
+        )
+
     def _get_default_config(self) -> Dict:
         return {
             'ema_fast':   20,

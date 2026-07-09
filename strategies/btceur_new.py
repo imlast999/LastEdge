@@ -26,6 +26,17 @@ class BTCEURStrategy(BaseStrategy):
     
     def __init__(self):
         super().__init__("BTCEUR_Simple")
+
+    @property
+    def metadata(self):
+        from strategies.base import StrategyMetadata
+        return StrategyMetadata(
+            required_history=210,   # EMA200 (200) + buffer de 10 velas para MACD estable
+            symbol="BTCEUR",
+            timeframe="H1",
+            strategy_name="btceur_simple",
+            version="1.0",
+        )
     
     def _get_default_config(self) -> Dict:
         return {

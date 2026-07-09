@@ -168,7 +168,6 @@ def run_phase3(variants, prod_config: Dict) -> Dict:
     runner = ExitResearchRunner(
         symbol="EURUSD",
         strategy=adapter,
-        lookback=200,
         max_fwd=300,
         variants=variants,
         levels=VALIDATION_LEVELS,

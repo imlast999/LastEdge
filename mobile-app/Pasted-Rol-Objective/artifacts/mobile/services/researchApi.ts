@@ -188,6 +188,7 @@ export interface ResearchTrade {
   bar_index:     number;
   exit_bar:      number;
   is_new_high:   boolean;
+  timestamp?:    string;
 }
 
 export interface TradePageStats {
@@ -208,8 +209,7 @@ export interface TradesPage {
   trades:   ResearchTrade[];
 }
 
-/**
- * Carga una página de trades de una variante.
+/** Carga una página de trades de una variante.
  * result: "WIN" | "LOSS" | undefined (todos)
  */
 export async function fetchVariantTrades(
@@ -227,6 +227,31 @@ export async function fetchVariantTrades(
   if (result) params.set("result", result);
   return apiFetch<TradesPage>(
     `/api/research/exit-research/${encodeURIComponent(runId)}/trades?${params}`,
+    overrides
+  );
+}
+
+// ── Monte Carlo Fan Chart ──────────────────────────────────────────────────────
+
+export interface MonteCarloFanData {
+  variant:  string;
+  p5:       number[];
+  p25:      number[];
+  p50:      number[];
+  p75:      number[];
+  p95:      number[];
+  original: number[];
+}
+
+/** Carga los datos de percentiles de Monte Carlo para una variante. */
+export async function fetchMonteCarloFan(
+  runId: string,
+  variant: string,
+  overrides?: { url?: string; token?: string }
+): Promise<MonteCarloFanData> {
+  const params = new URLSearchParams({ variant });
+  return apiFetch<MonteCarloFanData>(
+    `/api/research/exit-research/${encodeURIComponent(runId)}/montecarlo?${params}`,
     overrides
   );
 }

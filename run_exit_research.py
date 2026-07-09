@@ -174,7 +174,6 @@ def run_research_for_strategy(
         symbol="EURUSD",
         strategy=adapter,
         variants=all_variants,
-        lookback=200,
     )
 
     logger.info(

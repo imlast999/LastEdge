@@ -17,6 +17,8 @@ from core.exit_research.runner import (
     _Trade,
 )
 from core.exit_research.metrics import ExtendedMetrics
+from core.exit_research.strategy_adapter import StrategyAdapter
+from strategies.base import BaseStrategy, StrategyMetadata
 from tests.exit_research.conftest import make_ohlcv
 
 
@@ -43,6 +45,38 @@ def test_insufficient_data_guard():
     with patch.object(runner, "_download_data", return_value=df):
         with pytest.raises(RuntimeError, match="Insufficient data"):
             runner.run_all(bars=20000, save=False, verbose=False)
+
+
+def test_metadata_required_history_sets_minimum_bars():
+    """Runner should require max(levels) + strategy.required_history bars."""
+
+    class DummyStrategy(BaseStrategy):
+        def __init__(self):
+            super().__init__(name="dummy")
+
+        @property
+        def metadata(self) -> StrategyMetadata:
+            return StrategyMetadata(required_history=210, symbol="EURUSD", strategy_name="dummy")
+
+        def _get_default_config(self):
+            return {}
+
+        def detect_setup(self, df, config=None):
+            return None
+
+        def _add_specific_indicators(self, df, config):
+            return df
+
+    df = make_ohlcv(20_200, seed=11)
+    runner = ExitResearchRunner(
+        symbol="EURUSD",
+        strategy=StrategyAdapter(DummyStrategy()),
+        levels=[20_000],
+    )
+
+    with patch.object(runner, "_download_data", return_value=df):
+        with pytest.raises(RuntimeError, match="Insufficient data"):
+            runner.run_all(bars=20_000, save=False, verbose=False)
 
 
 # ---------------------------------------------------------------------------

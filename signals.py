@@ -48,6 +48,7 @@ STRATEGY_REGISTRY = {
     'eurusd_mtf':       lambda: _get_eurusd_mtf(),   # mantenida para compatibilidad backtest
     'xauusd':           lambda: get_strategy('XAUUSD'),
     'xauusd_simple':    lambda: get_strategy('XAUUSD'),
+    'xauusd_partial':   lambda: get_strategy('XAUUSD'),
     'xauusd_advanced':  lambda: _get_xauusd_advanced(),
     'xauusd_reversal':  lambda: _get_xauusd_reversal(),    # descartada (1 señal/5000v)
     'xauusd_momentum':  lambda: _get_xauusd_momentum(),
@@ -56,6 +57,7 @@ STRATEGY_REGISTRY = {
     # BTCEUR: todos los alias apuntan a la misma estrategia específica
     'btceur':                lambda: get_strategy('BTCEUR'),
     'btceur_simple':         lambda: get_strategy('BTCEUR'),
+    'btceur_partial':        lambda: get_strategy('BTCEUR'),
     'btceur_advanced':       lambda: get_strategy('BTCEUR'),
     'btc_trend_pullback_v1': lambda: _get_btc_trend_pullback(),
     'btceur_weekly_breakout': lambda: _get_btceur_weekly_breakout(),

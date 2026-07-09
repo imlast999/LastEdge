@@ -19,6 +19,7 @@ import { Feather } from "@expo/vector-icons";
 
 import { useColors } from "@/hooks/useColors";
 import { useTrading } from "@/context/TradingContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { SignalCard } from "@/components/SignalCard";
 import { TradeCard } from "@/components/TradeCard";
 import { ApiErrorBanner } from "@/components/ApiErrorBanner";
@@ -28,6 +29,7 @@ type SubTab = "pending" | "closed";
 export default function TradesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const {
     signals,
     trades,
@@ -87,14 +89,14 @@ export default function TradesScreen() {
         ]}
       >
         <SubTabButton
-          label="Pendientes"
+          label={t("pendingSignals")}
           badge={pendingSignals.filter((s) => s.status === "pending").length}
           active={activeTab === "pending"}
           onPress={() => setActiveTab("pending")}
           colors={colors}
         />
         <SubTabButton
-          label="Cerradas"
+          label={t("closedTrades")}
           badge={0}
           active={activeTab === "closed"}
           onPress={() => setActiveTab("closed")}
@@ -140,13 +142,12 @@ export default function TradesScreen() {
                 <Feather name="inbox" size={28} color={colors.mutedForeground} />
               </View>
               <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                Sin trades pendientes
+                {t("noPendingSignals")}
               </Text>
               <Text
                 style={[styles.emptyText, { color: colors.mutedForeground }]}
               >
-                Las señales pendientes de acción y las posiciones abiertas
-                aparecerán aquí
+                {t("noOpenTrades")}
               </Text>
             </View>
           }
@@ -187,7 +188,7 @@ export default function TradesScreen() {
                   ]}
                 >
                   <SummaryItem
-                    label="P&L Total"
+                    label={t("totalPnL")}
                     value={`${totalPnL >= 0 ? "+" : ""}${totalPnL.toFixed(2)}€`}
                     color={totalPnL >= 0 ? colors.profit : colors.loss}
                     colors={colors}
@@ -196,7 +197,7 @@ export default function TradesScreen() {
                     style={[styles.sep, { backgroundColor: colors.border }]}
                   />
                   <SummaryItem
-                    label="Ganadas"
+                    label={t("wins")}
                     value={String(wins)}
                     color={colors.profit}
                     colors={colors}
@@ -205,7 +206,7 @@ export default function TradesScreen() {
                     style={[styles.sep, { backgroundColor: colors.border }]}
                   />
                   <SummaryItem
-                    label="Perdidas"
+                    label={t("losses")}
                     value={String(losses)}
                     color={colors.loss}
                     colors={colors}
@@ -214,7 +215,7 @@ export default function TradesScreen() {
                     style={[styles.sep, { backgroundColor: colors.border }]}
                   />
                   <SummaryItem
-                    label="P.Factor"
+                    label={t("profitFactor")}
                     value={profitFactor}
                     color={
                       parseFloat(profitFactor) >= 1.5
@@ -235,12 +236,12 @@ export default function TradesScreen() {
                 <Feather name="clock" size={28} color={colors.mutedForeground} />
               </View>
               <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                Sin operaciones cerradas
+                {t("noClosedTrades")}
               </Text>
               <Text
                 style={[styles.emptyText, { color: colors.mutedForeground }]}
               >
-                Las operaciones que alcancen TP o SL aparecerán aquí
+                {t("closedTradesSummary")}
               </Text>
             </View>
           }

@@ -36,9 +36,9 @@ logger = logging.getLogger(__name__)
 # Añadir aquí cuando se registren nuevas estrategias.
 _STRATEGY_REGISTRY: Dict[str, tuple[str, str]] = {
     # symbol_key   : (module_path,                 class_name)
-    "EURUSD"       : ("strategies.eurusd",          "EURUSDStrategy"),
-    "XAUUSD"       : ("strategies.xauusd",          "XAUUSDStrategy"),
-    "BTCEUR"       : ("strategies.btceur_new",       "BTCEURStrategy"),
+    "EURUSD"       : ("strategies.eurusd",          "EURUSDPartialStrategy"),
+    "XAUUSD"       : ("strategies.xauusd_partial",  "XAUUSDPartialStrategy"),
+    "BTCEUR"       : ("strategies.btceur_partial", "BTCEURPartialStrategy"),
 }
 
 

@@ -10,27 +10,31 @@ from .base import BaseStrategy
 logger = logging.getLogger(__name__)
 from .eurusd import EURUSDStrategy, EURUSDPartialStrategy
 from .xauusd import XAUUSDStrategy
+from .xauusd_partial import XAUUSDPartialStrategy
 
 # Import BTCEUR desde la implementación oficial (btceur_new.py)
 # Este es ahora el ÚNICO origen de la estrategia BTCEUR en el sistema.
 try:
     from .btceur_new import BTCEURStrategy
+    from .btceur_partial import BTCEURPartialStrategy
     BTCEUR_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: BTCEURStrategy not available: {e}")
     BTCEURStrategy = None
+    BTCEURPartialStrategy = None
     BTCEUR_AVAILABLE = False
 
 # Strategy registry
 STRATEGY_REGISTRY = {
     'EURUSD': EURUSDPartialStrategy,   # v1.1 — partial_close validado (jul 2026)
     'EURUSD_LEGACY': EURUSDStrategy,   # referencia histórica — no activo en producción
-    'XAUUSD': XAUUSDStrategy,
+    'XAUUSD': XAUUSDPartialStrategy,   # v1.1 — partial_close validado (jul 2026)
+    'XAUUSD_LEGACY': XAUUSDStrategy,  # referencia histórica — no activo en producción
 }
 
 # Add BTCEUR only if available
 if BTCEUR_AVAILABLE:
-    STRATEGY_REGISTRY['BTCEUR'] = BTCEURStrategy
+    STRATEGY_REGISTRY['BTCEUR'] = BTCEURPartialStrategy
 
 def get_strategy(symbol: str):
     """
@@ -80,6 +84,7 @@ __all__ = [
     'EURUSDStrategy',
     'EURUSDPartialStrategy',
     'XAUUSDStrategy',
+    'XAUUSDPartialStrategy',
     'get_strategy',
     'get_available_symbols',
     'register_strategy',
@@ -89,3 +94,4 @@ __all__ = [
 # Add BTCEURStrategy to exports only if available
 if BTCEUR_AVAILABLE:
     __all__.append('BTCEURStrategy')
+    __all__.append('BTCEURPartialStrategy')

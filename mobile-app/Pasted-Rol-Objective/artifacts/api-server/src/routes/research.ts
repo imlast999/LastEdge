@@ -400,6 +400,9 @@ researchRouter.get(
         : variantTrades;
 
       // Calcular equity acumulada para cada trade
+      const runDir = path.join(EXIT_RESEARCH_DIR, runId);
+      const summary = readJsonSafe<any>(path.join(runDir, "summary.json"));
+
       let runningEquity = 0;
       let peak = 0;
       const enriched = variantTrades.map((t, globalIdx) => {
@@ -407,6 +410,14 @@ researchRouter.get(
         runningEquity += pips;
         if (runningEquity > peak) peak = runningEquity;
         const dd = peak > 0 ? peak - runningEquity : 0;
+
+        let timestamp = t.timestamp;
+        if (!timestamp) {
+          const date = new Date(summary?.generated_at || Date.now());
+          date.setHours(date.getHours() - (20000 - (parseInt(t.bar_index ?? "0", 10))));
+          timestamp = date.toISOString();
+        }
+
         return {
           trade_index:   globalIdx + 1,
           variant:       t.variant,
@@ -420,6 +431,7 @@ researchRouter.get(
           bar_index:     parseInt(t.bar_index ?? "0", 10),
           exit_bar:      parseInt(t.exit_bar  ?? "0", 10),
           is_new_high:   runningEquity >= peak && pips > 0,
+          timestamp,
         };
       });
 
@@ -463,6 +475,109 @@ researchRouter.get(
     } catch (err) {
       logger.error({ err, runId, variant }, "GET /trades error");
       res.status(500).json({ ok: false, message: "Failed to read trades" });
+    }
+  }
+);
+
+// ── GET /api/research/exit-research/:runId/montecarlo ─────────────────────────
+// Devuelve las curvas de percentiles de Monte Carlo para una variante específica.
+// Query params:
+//   ?variant=partial_close   (requerido)
+//   ?simulations=1000        (opcional, default 1000)
+
+researchRouter.get(
+  "/exit-research/:runId/montecarlo",
+  (req: Request, res: Response) => {
+    const { runId } = req.params as { runId: string };
+
+    if (!runId || !/^[\w-]+$/.test(runId)) {
+      res.status(400).json({ ok: false, message: "Invalid run ID" });
+      return;
+    }
+
+    const variantParam = req.query["variant"];
+    const variant = typeof variantParam === "string" ? variantParam.trim() : "";
+
+    if (!variant || !/^[\w-]+$/.test(variant)) {
+      res.status(400).json({ ok: false, message: "?variant= is required" });
+      return;
+    }
+
+    const simsRaw = req.query["simulations"];
+    const M = Math.min(2000, Math.max(100, parseInt(typeof simsRaw === "string" ? simsRaw : "1000", 10) || 1000));
+
+    const tradesPath = path.join(EXIT_RESEARCH_DIR, runId, "trades.csv");
+    if (!fs.existsSync(tradesPath)) {
+      res.status(404).json({ ok: false, message: "trades.csv not found for this run" });
+      return;
+    }
+
+    try {
+      const allTrades = parseCsv(tradesPath);
+      const variantTrades = allTrades.filter(
+        (t) => t.variant === variant && t.result !== "PENDING"
+      );
+
+      if (variantTrades.length === 0) {
+        res.json({ ok: true, variant, p5: [], p25: [], p50: [], p75: [], p95: [], original: [] });
+        return;
+      }
+
+      const pips = variantTrades.map((t) => parseFloat(t.profit_pips ?? "0") || 0);
+      const N = pips.length;
+
+      // original equity curve
+      let runningEquity = 0;
+      const original = [0];
+      for (const p of pips) {
+        runningEquity += p;
+        original.push(parseFloat(runningEquity.toFixed(4)));
+      }
+
+      // Monte Carlo bootstrap simulations (with replacement)
+      // Store simulated equity values at each step.
+      // Array size: (N + 1) * M
+      const valuesAtStep = new Float32Array((N + 1) * M);
+
+      for (let s = 0; s < M; s++) {
+        let currentEquity = 0;
+        for (let i = 1; i <= N; i++) {
+          const randIdx = Math.floor(Math.random() * N);
+          currentEquity += pips[randIdx];
+          valuesAtStep[i * M + s] = currentEquity;
+        }
+      }
+
+      const p5: number[] = [0];
+      const p25: number[] = [0];
+      const p50: number[] = [0];
+      const p75: number[] = [0];
+      const p95: number[] = [0];
+
+      for (let i = 1; i <= N; i++) {
+        const stepValues = valuesAtStep.subarray(i * M, (i + 1) * M);
+        stepValues.sort();
+
+        p5.push(parseFloat(stepValues[Math.floor(0.05 * M)].toFixed(4)));
+        p25.push(parseFloat(stepValues[Math.floor(0.25 * M)].toFixed(4)));
+        p50.push(parseFloat(stepValues[Math.floor(0.50 * M)].toFixed(4)));
+        p75.push(parseFloat(stepValues[Math.floor(0.75 * M)].toFixed(4)));
+        p95.push(parseFloat(stepValues[Math.floor(0.95 * M)].toFixed(4)));
+      }
+
+      res.json({
+        ok: true,
+        variant,
+        p5,
+        p25,
+        p50,
+        p75,
+        p95,
+        original,
+      });
+    } catch (err) {
+      logger.error({ err, runId, variant }, "GET /montecarlo error");
+      res.status(500).json({ ok: false, message: "Failed to perform Monte Carlo simulation" });
     }
   }
 );

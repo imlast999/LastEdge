@@ -7,7 +7,6 @@ export interface BacktestTaskSummary {
   symbol: string;
   strategy: string;
   bars: number;
-  timeframe?: string;
   status: BacktestTaskStatus;
   created_at?: string | null;
   updated_at?: string | null;
@@ -18,9 +17,7 @@ export interface MonteCarloResults {
   status: string;
   prob_profitable?: number;
   prob_ruin?: number;
-  ruin_threshold?: number;
   p50_drawdown?: number;
-  p75_drawdown?: number;
   p95_drawdown?: number;
   p5_equity?: number;
   p50_equity?: number;
@@ -56,7 +53,6 @@ export async function queueBacktest(
     symbol: string;
     strategy: string;
     bars: number;
-    timeframe?: string;
     cb_losses?: number;
     cb_pause?: number;
   },
@@ -92,7 +88,6 @@ export async function fetchBacktestTask(
     symbol: data.symbol,
     strategy: data.strategy,
     bars: data.bars,
-    timeframe: data.timeframe ?? "H1",
     status: data.status,
     results: data.results,
     errorMessage: data.errorMessage,
@@ -109,23 +104,4 @@ export async function listBacktestTasks(
     throw new Error(data.message ?? `HTTP ${res.status}`);
   }
   return data.tasks as BacktestTaskSummary[];
-}
-
-export interface StrategyOption {
-  id: string;
-  name: string;
-  symbol: string;
-  description?: string;
-}
-
-export async function fetchAvailableStrategies(
-  overrides?: { url?: string; token?: string }
-): Promise<StrategyOption[]> {
-  const { url, token } = resolveApiConfig(overrides);
-  const res = await fetch(`${url}/api/strategies`, { headers: authHeaders(token) });
-  const data = await res.json();
-  if (!res.ok || !data.ok) {
-    throw new Error(data.message ?? `HTTP ${res.status}`);
-  }
-  return (data.strategies ?? []) as StrategyOption[];
 }
