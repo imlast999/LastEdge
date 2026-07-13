@@ -11,9 +11,13 @@ import threading
 import time
 
 try:
-    from core import active_symbols
+    from core import active_symbols, set_language, get_language, get_language_name, get_supported_languages_display
 except Exception:
     active_symbols = {}
+    def set_language(lang): pass
+    def get_language(): return 'en'
+    def get_language_name(): return 'English'
+    def get_supported_languages_display(): return []
 
 try:
     from core.engine import symbol_health
@@ -63,6 +67,10 @@ class SignalEvent:
     current_price: Optional[float] = None
     unrealized_pnl: Optional[float] = None   # en % del riesgo
     mobile_signal_id: Optional[int] = None     # id en enhanced_signals (app móvil)
+    
+    # Execution Quality
+    latency_ms: Optional[int] = None
+    slippage_pips: Optional[float] = None
 
 
 class DashboardService:
@@ -124,10 +132,40 @@ class DashboardService:
             dashboard_service = self
 
             class Handler(BaseHTTPRequestHandler):
+                def _get_lang_from_cookie(self) -> str:
+                    """Parse 'lang' cookie from request headers. Default: 'en'."""
+                    cookie_header = self.headers.get('Cookie', '')
+                    for part in cookie_header.split(';'):
+                        part = part.strip()
+                        if part.startswith('lang='):
+                            val = part.split('=', 1)[1].strip()
+                            return val if val in ('en', 'es') else 'en'
+                    return 'en'
+
                 def do_GET(self):
                     try:
+                        # ── Language-switch endpoint ─────────────────────────────────────
+                        if self.path.startswith('/api/set-language'):
+                            from urllib.parse import urlparse, parse_qs
+                            qs = parse_qs(urlparse(self.path).query)
+                            lang = qs.get('lang', ['en'])[0]
+                            if lang in ('en', 'es'):
+                                set_language(lang)
+                            from http.cookies import SimpleCookie
+                            c = SimpleCookie()
+                            c['lang'] = lang
+                            c['lang']['path'] = '/'
+                            c['lang']['max-age'] = 31536000  # 1 year
+                            redirect = qs.get('redirect', ['/'])[0]
+                            self.send_response(302)
+                            self.send_header('Location', redirect)
+                            self.send_header('Set-Cookie', c['lang'].OutputString())
+                            self.end_headers()
+                            return
+
                         if self.path in ('/', '/dashboard'):
-                            body = dashboard_service.get_dashboard_html().encode('utf-8')
+                            lang = self._get_lang_from_cookie()
+                            body = dashboard_service.get_dashboard_html(lang=lang).encode('utf-8')
                             self.send_response(200)
                             self.send_header('Content-type', 'text/html; charset=utf-8')
                             self.end_headers()
@@ -242,12 +280,28 @@ class DashboardService:
                          mobile_status: str = None):
         try:
             with self.lock:
+                # Obtener latency y slippage desde el journal si es posible
+                lat = None
+                slip = None
+                try:
+                    from core.journal import get_journal
+                    with get_journal()._conn() as conn:
+                        row = conn.execute(
+                            "SELECT latency_ms, slippage_pips FROM trade_journal ORDER BY id DESC LIMIT 1"
+                        ).fetchone()
+                        if row and row['latency_ms'] is not None:
+                            lat = row['latency_ms']
+                            slip = row['slippage_pips']
+                except Exception:
+                    pass
+
                 event = SignalEvent(
                     timestamp=datetime.now(timezone.utc),
                     symbol=symbol, strategy=strategy, signal_type=signal_type,
                     confidence=confidence, score=score, shown=shown,
                     executed=executed, rejection_reason=rejection_reason,
                     entry=entry, sl=sl, tp=tp,
+                    latency_ms=lat, slippage_pips=slip
                 )
                 self.signal_history.append(event)
                 self._update_signal_metrics(event)
@@ -426,8 +480,86 @@ class DashboardService:
             logger.debug(f"Error getting real positions: {e}")
             return []
 
-    def get_dashboard_html(self) -> str:
+    def get_dashboard_html(self, lang: str = 'en') -> str:
         try:
+            # Apply language setting for this request
+            set_language(lang)
+
+            # ── Inline translation helper ────────────────────────────────────────
+            _ui: dict = {
+                "Live · updates every 30s":  {"en": "Live · updates every 30s",    "es": "En vivo · actualiza cada 30s"},
+                "Connected":                  {"en": "🟢 Connected",               "es": "🟢 Conectado"},
+                "No data":                    {"en": "— No data",                  "es": "— Sin datos"},
+                "Status":                     {"en": "Status",                     "es": "Estado"},
+                "Signals (session)":          {"en": "Signals (session)",          "es": "Señales (sesión)"},
+                "Open positions":             {"en": "Open positions",             "es": "Posiciones abiertas"},
+                "Total profit":               {"en": "Total profit",               "es": "Profit total"},
+                "MT5 account":                {"en": "MT5 account",                "es": "Cuenta MT5"},
+                "Equity MT5 (real-time)":     {"en": "Equity MT5 (real-time)",     "es": "Equity MT5 (tiempo real)"},
+                "Base":                       {"en": "Base",                       "es": "Base"},
+                "Closed":                     {"en": "Closed",                     "es": "Cerradas"},
+                "Floating":                   {"en": "Floating",                   "es": "Flotante"},
+                "open":                       {"en": "open",                       "es": "abiertas"},
+                "Session winrate":            {"en": "Session winrate",            "es": "Winrate sesión"},
+                "wins":                       {"en": "wins",                       "es": "wins"},
+                "losses":                     {"en": "losses",                     "es": "losses"},
+                "open pos":                   {"en": "open",                       "es": "abiertas"},
+                "Export signals (7 days)":    {"en": "Export signals (7 days)",    "es": "Exportar señales (7 días)"},
+                "Download CSV":               {"en": "⬇ Download CSV",             "es": "⬇ Descargar CSV"},
+                "signals in history":         {"en": "signals in history",         "es": "señales en historial"},
+                "Equity Curve — closed + current floating": {
+                    "en": "Equity Curve — Closed + Current Floating",
+                    "es": "Curva de Equity — Cerradas + Flotante Actual",
+                },
+                "Open Positions in MT5":      {"en": "Open Positions in MT5",      "es": "Posiciones Abiertas en MT5"},
+                "Pair":                       {"en": "Pair",                       "es": "Par"},
+                "Dir":                        {"en": "Dir",                        "es": "Dir"},
+                "Volume":                     {"en": "Volume",                     "es": "Volumen"},
+                "Open price":                 {"en": "Open price",                 "es": "Precio apertura"},
+                "Current price":              {"en": "Current price",              "es": "Precio actual"},
+                "Circuit Breaker":            {"en": "Circuit Breaker",            "es": "Circuit Breaker"},
+                "ACTIVE":                     {"en": "ACTIVE",                     "es": "ACTIVO"},
+                "PAUSED":                     {"en": "PAUSED",                     "es": "PAUSADO"},
+                "Losses":                     {"en": "Losses",                     "es": "Pérdidas"},
+                "Wins":                       {"en": "Wins",                       "es": "Wins"},
+                "Risk":                       {"en": "Risk",                       "es": "Riesgo"},
+                "Monitored Pairs":            {"en": "Monitored Pairs",            "es": "Pares Monitoreados"},
+                "Total":                      {"en": "Total",                      "es": "Total"},
+                "Shown":                      {"en": "Shown",                      "es": "Mostradas"},
+                "Score avg":                  {"en": "Score avg",                  "es": "Score avg"},
+                "Last":                       {"en": "Last",                       "es": "Última"},
+                "Execution Quality":          {"en": "Execution Quality",          "es": "Calidad de Ejecución"},
+                "Success Rate":               {"en": "Success Rate",               "es": "Tasa de éxito"},
+                "Executed":                   {"en": "Executed",                   "es": "Ejecutadas"},
+                "Rejected":                   {"en": "Rejected",                   "es": "Rechazadas"},
+                "Avg Latency":                {"en": "Avg Latency",                "es": "Latencia media"},
+                "Max Latency":                {"en": "Max Latency",                "es": "Latencia máx"},
+                "Avg Slippage":               {"en": "Avg Slippage",               "es": "Slippage medio"},
+                "Max Slippage":               {"en": "Max Slippage",               "es": "Slippage máx"},
+                "Session signals (real-time P&L)": {
+                    "en": "Session signals (real-time P&L)",
+                    "es": "Señales de esta sesión (P&L en tiempo real)",
+                },
+                "Time":                       {"en": "Time",                       "es": "Hora"},
+                "Confidence":                 {"en": "Confidence",                 "es": "Confianza"},
+                "Latency":                    {"en": "Latency",                    "es": "Latencia"},
+                "Slippage":                   {"en": "Slippage",                   "es": "Slippage"},
+                "Status_col":                 {"en": "Status",                     "es": "Estado"},
+                "Sent":                       {"en": "Sent",                       "es": "Enviada"},
+                "No signals in this session": {"en": "No signals in this session yet", "es": "Sin señales en esta sesión aún"},
+                "Auto-execution active":      {"en": "✅ Auto-execution MT5 active",  "es": "✅ Auto-ejecución MT5 activa"},
+                "Auto-execution disabled":    {"en": "⏸ Auto-execution disabled (AUTO_EXECUTE_SIGNALS=0)", "es": "⏸ Auto-ejecución desactivada (AUTO_EXECUTE_SIGNALS=0)"},
+                "min without data":           {"en": "min without data",           "es": "min sin datos"},
+                "Uptime":                     {"en": "Uptime",                     "es": "Uptime"},
+                "Last signal":                {"en": "Last signal",                "es": "Última señal"},
+                "Shown_count":                {"en": "Shown",                      "es": "Mostradas"},
+                "Start":                      {"en": "Start",                      "es": "Inicio"},
+            }
+
+            def t(key: str) -> str:
+                entry = _ui.get(key, {})
+                return entry.get(lang, entry.get("en", key))
+
             metrics   = self.get_current_metrics()
             history   = self.get_signal_history(hours=168)          # para CSV/export
             session_history = self.get_signal_history(hours=24, session_only=True)  # solo sesión actual para tabla
@@ -503,10 +635,10 @@ class DashboardService:
 
             if self.last_mt5_update:
                 d = (datetime.now(timezone.utc) - self.last_mt5_update).total_seconds()
-                mt5_ind = '🟢 Conectado' if d < 120 else f'🟡 {int(d//60)}m sin datos' if d < 300 else f'🔴 {int(d//60)}m sin datos'
+                mt5_ind = t("Connected") if d < 120 else (f'🟡 {int(d//60)}m {t("min without data")}' if d < 300 else f'🔴 {int(d//60)}m {t("min without data")}')
                 mt5_col = '#3fb950' if d < 120 else '#d29922' if d < 300 else '#f85149'
             else:
-                mt5_ind = '— Sin datos'; mt5_col = '#8b949e'
+                mt5_ind = t("No data"); mt5_col = '#8b949e'
 
             status_map = {
                 'win':     '<span style="color:#3fb950;font-weight:600">WIN ✅</span>',
@@ -552,9 +684,12 @@ class DashboardService:
                                  f'<td class="{dc}">{stype}</td><td class="{cc}">{conf}</td>'
                                  f'<td>{fmt(entry)}</td><td style="color:var(--red)">{fmt(sl)}</td>'
                                  f'<td style="color:var(--green)">{fmt(tp)}</td>'
-                                 f'<td>{rr_str}</td><td>{st_html}</td><td>{shown}</td></tr>\n')
+                                 f'<td>{rr_str}</td>'
+                                 f'<td>{ev.get("latency_ms") or "—"} ms</td>'
+                                 f'<td>{f"{ev.get("slippage_pips"):.1f}" if ev.get("slippage_pips") is not None else "—"} pips</td>'
+                                 f'<td>{st_html}</td><td>{shown}</td></tr>\n')
             if not recent_rows:
-                recent_rows = '<tr><td colspan="10" class="empty">Sin señales en esta sesión aún</td></tr>'
+                recent_rows = '<tr><td colspan="12" class="empty">Sin señales en esta sesión aún</td></tr>'
 
             sig = metrics.get('signals', {}); trd = metrics.get('trading', {})
             sp  = metrics.get('symbols', {}).get('performance', {})
@@ -566,7 +701,7 @@ class DashboardService:
             ls = sig.get('last_signal_time', ''); ls_fmt = ls[:16].replace('T',' ') if ls else '—'
             cb_ok = cb_status.get('can_trade', True); cb_l = cb_status.get('consecutive_losses', 0)
             cb_w  = cb_status.get('consecutive_wins', 0); cb_m = cb_status.get('risk_multiplier', 1.0)
-            cb_lbl = 'ACTIVO' if cb_ok else 'PAUSADO'; cb_rsn = cb_status.get('reason', '')
+            cb_lbl = t("ACTIVE") if cb_ok else t("PAUSED"); cb_rsn = cb_status.get('reason', '')
 
             # Real MT5 positions
             real_positions = self._get_real_positions()
@@ -591,13 +726,12 @@ class DashboardService:
             if real_positions:
                 real_positions_section = f"""
 <div class="card" id="real-positions-section" style="margin-bottom:20px">
-  <div class="section-title">Posiciones Abiertas en MT5</div>
+  <div class="section-title">{t("Open Positions in MT5")}</div>
   <table>
-    <thead><tr><th>Par</th><th>Dir</th><th>Volumen</th><th>Precio apertura</th><th>Precio actual</th><th>P&amp;L</th><th style="color:var(--red)">SL</th><th style="color:var(--green)">TP</th></tr></thead>
-    <tbody>{real_pos_rows}</tbody>
+    <thead><tr><th>{t("Pair")}</th><th>{t("Dir")}</th><th>{t("Volume")}</th><th>{t("Open price")}</th><th>{t("Current price")}</th><th>P&amp;L</th><th style="color:var(--red)">SL</th><th style="color:var(--green)">TP</th></tr></thead>
+    <tbody>{{real_pos_rows}}</tbody>
   </table>
 </div>"""
-
             def sym_row(sym):
                 perf = sp.get(sym, {}); tot = perf.get('total_signals',0); shw = perf.get('shown_signals',0)
                 avg  = perf.get('avg_confidence_score', 0.0)
@@ -618,10 +752,53 @@ class DashboardService:
             port = os.getenv('DASHBOARD_PORT', '8080')
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+            # Execution Quality Stats
+            eq_stats_html = ""
+            try:
+                from services.execution import get_execution_service
+                exec_stats = get_execution_service().get_execution_statistics()
+                
+                # Fetch latency and slippage from DB
+                from core.journal import get_journal
+                with get_journal()._conn() as conn:
+                    rows = conn.execute("SELECT latency_ms, slippage_pips FROM trade_journal WHERE latency_ms IS NOT NULL").fetchall()
+                    lats = [r['latency_ms'] for r in rows]
+                    slips = [r['slippage_pips'] for r in rows]
+                    
+                    avg_lat = sum(lats)/len(lats) if lats else 0
+                    max_lat = max(lats) if lats else 0
+                    avg_slip = sum(slips)/len(slips) if slips else 0
+                    max_slip = max(slips) if slips else 0
+                    
+                suc_rate = exec_stats['success_rate']
+                exec_suc = exec_stats['orders_successful']
+                exec_fail = exec_stats['orders_failed']
+                
+                eq_stats_html = f"""
+                <div class="card">
+                  <div class="section-title">{t("Execution Quality")}</div>
+                  <div class="cb-bar" style="margin-bottom:12px; gap: 10px;">
+                    <div class="cb-stat">{t("Success Rate")}: <span style="color:var(--green)">{suc_rate:.1f}%</span></div>
+                    <div class="cb-stat">{t("Executed")}: <span>{exec_suc}</span></div>
+                    <div class="cb-stat">{t("Rejected")}: <span style="color:var(--red)">{exec_fail}</span></div>
+                  </div>
+                  <div class="cb-bar" style="gap: 10px;">
+                    <div class="cb-stat">{t("Avg Latency")}: <span style="color:var(--blue)">{avg_lat:.0f} ms</span></div>
+                    <div class="cb-stat">{t("Max Latency")}: <span>{max_lat:.0f} ms</span></div>
+                  </div>
+                  <div class="cb-bar" style="margin-top:4px; gap: 10px;">
+                    <div class="cb-stat">{t("Avg Slippage")}: <span style="color:var(--yellow)">{avg_slip:.1f} p</span></div>
+                    <div class="cb-stat">{t("Max Slippage")}: <span>{max_slip:.1f} p</span></div>
+                  </div>
+                </div>
+                """
+            except Exception as e:
+                logger.error(f"Error generating Execution Quality html: {{e}}")
+            
             return f"""<!DOCTYPE html>
-<html lang="es"><head>
+<html lang="{lang}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Trading Bot — Dashboard</title>
+<title>LastEdge — Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--blue:#58a6ff;--green:#3fb950;--yellow:#d29922;--red:#f85149;--purple:#a371f7}}
@@ -658,81 +835,90 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
 .filter-bar{{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}}
 .filter-btn{{background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:20px;font-size:12px;cursor:pointer;transition:all .15s}}
 .filter-btn.active{{background:var(--blue);color:#0d1117;border-color:var(--blue);font-weight:600}}
+.lang-bar{{display:flex;gap:4px;margin-bottom:4px;justify-content:flex-end}}
+.lang-btn{{display:inline-block;padding:2px 6px;border-radius:4px;font-size:16px;text-decoration:none;opacity:0.4;transition:opacity .15s}}
+.lang-btn:hover{{opacity:0.8}}
+.lang-btn.lang-active{{opacity:1.0;background:rgba(88,166,255,.15)}}
 </style></head>
 <body><div class="page">
 <div class="topbar">
-  <h1>🤖 Trading Bot <span style="color:var(--muted);font-weight:400">/ Dashboard</span></h1>
+  <h1>⚡ LastEdge <span style="color:var(--muted);font-weight:400">/ Dashboard</span></h1>
   <div class="meta">
-    <div><span class="dot-live"></span>En vivo · actualiza cada 30s</div>
+    <div class="lang-bar">
+      <a href="/api/set-language?lang=en&redirect=/" title="English" class="lang-btn {'lang-active' if lang == 'en' else ''}">🇬🇧</a>
+      <a href="/api/set-language?lang=es&redirect=/" title="Español" class="lang-btn {'lang-active' if lang == 'es' else ''}">🇪🇸</a>
+    </div>
+    <div><span class="dot-live"></span>{'Live · updates every 30s' if lang == 'en' else 'En vivo · actualiza cada 30s'}</div>
     <div>{now_str}</div>
     <div style="color:{mt5_col}">{mt5_ind}</div>
   </div>
 </div>
 
 <div class="grid-4">
-  <div class="card"><div class="card-title">Estado</div><div class="card-value" style="font-size:18px;color:var(--green)">{sys_st}</div><div class="card-sub">Uptime: {uptime}</div></div>
-  <div class="card"><div class="card-title">Señales (sesión)</div><div class="card-value" style="color:var(--blue)">{s_today}</div><div class="card-sub">Mostradas: {s_shown} ({s_rate})</div></div>
-  <div class="card"><div class="card-title">Posiciones abiertas</div><div class="card-value" style="color:var(--purple)">{pos_open}</div><div class="card-sub">Última señal: {ls_fmt}</div></div>
-  <div class="card"><div class="card-title">Profit total</div><div class="card-value" style="color:{p_color}">{t_profit:+.2f} €</div><div class="card-sub">Cuenta MT5</div></div>
+  <div class="card"><div class="card-title">{t("Status")}</div><div class="card-value" style="font-size:18px;color:var(--green)">{sys_st}</div><div class="card-sub">{t("Uptime")}: {uptime}</div></div>
+  <div class="card"><div class="card-title">{t("Signals (session)")}</div><div class="card-value" style="color:var(--blue)">{s_today}</div><div class="card-sub">{t("Shown_count")}: {s_shown} ({s_rate})</div></div>
+  <div class="card"><div class="card-title">{t("Open positions")}</div><div class="card-value" style="color:var(--purple)">{pos_open}</div><div class="card-sub">{t("Last signal")}: {ls_fmt}</div></div>
+  <div class="card"><div class="card-title">{t("Total profit")}</div><div class="card-value" style="color:{p_color}">{t_profit:+.2f} €</div><div class="card-sub">{t("MT5 account")}</div></div>
 </div>
 
 <div class="grid-3">
   <div class="card" id="equity-card">
-    <div class="card-title">Equity MT5 (tiempo real)</div>
+    <div class="card-title">{t("Equity MT5 (real-time)")}</div>
     <div style="display:flex;align-items:baseline;gap:10px">
       <span class="card-value" id="eq-total" style="color:{eq_color}">{eq_total:,.2f} €</span>
       <span style="font-size:13px;color:{eq_color}" id="eq-pct">{change_sign}{eq_pct:.2f}%</span>
     </div>
     <div class="card-sub" style="margin-top:6px">
-      Base: {eq_base:,.2f} € &nbsp;·&nbsp;
-      Cerradas: <span style="color:{eq_color}">{change_sign}{eq_change:+.2f} €</span>
+      {t("Base")}: {eq_base:,.2f} € &nbsp;·&nbsp;
+      {t("Closed")}: <span style="color:{eq_color}">{change_sign}{eq_change:+.2f} €</span>
     </div>
     <div class="card-sub" style="margin-top:2px">
-      Flotante: <span id="eq-float" style="color:{float_color}">{float_sign}{eq_floating:+.2f} €</span>
-      &nbsp;<span style="color:var(--muted);font-size:11px">({open_n} abiertas)</span>
+      {t("Floating")}: <span id="eq-float" style="color:{float_color}">{float_sign}{eq_floating:+.2f} €</span>
+      &nbsp;<span style="color:var(--muted);font-size:11px">({open_n} {t("open")})</span>
     </div>
   </div>
   <div class="card">
-    <div class="card-title">Winrate sesión</div>
+    <div class="card-title">{t("Session winrate")}</div>
     <div class="card-value" style="color:{wr_color}">{wr_pct:.0f}%</div>
-    <div class="card-sub">✅ {wins_n} wins · ❌ {losses_n} losses · ⏳ {open_n} abiertas</div>
+    <div class="card-sub">✅ {wins_n} {t("wins")} · ❌ {losses_n} {t("losses")} · ⏳ {open_n} {t("open pos")}</div>
   </div>
   <div class="card">
-    <div class="card-title">Exportar señales (7 días)</div>
-    <div style="margin-top:8px"><a href="/api/export" class="export-btn" download>⬇ Descargar CSV</a></div>
-    <div class="card-sub" style="margin-top:8px">{len(history)} señales en historial</div>
+    <div class="card-title">{t("Export signals (7 days)")}</div>
+    <div style="margin-top:8px"><a href="/api/export" class="export-btn" download>{t("Download CSV")}</a></div>
+    <div class="card-sub" style="margin-top:8px">{len(history)} {t("signals in history")}</div>
   </div>
 </div>
 
 <div class="chart-container-full">
-  <div class="section-title" style="margin-bottom:12px">Curva de Equity — cerradas + flotante actual</div>
+  <div class="section-title" style="margin-bottom:12px">{t("Equity Curve — closed + current floating")}</div>
   <canvas id="equityChart" height="80"></canvas>
 </div>
 
 {real_positions_section}
-<div class="grid-2">
+<div class="grid-3">
   <div class="card">
-    <div class="section-title">Circuit Breaker</div>
+    <div class="section-title">{t("Circuit Breaker")}</div>
     <div class="cb-bar" style="margin-bottom:12px">
       <span class="cb-pill {'cb-ok' if cb_ok else 'cb-stop'}">{cb_lbl}</span>
       {'<span style="color:var(--red);font-size:11px">' + cb_rsn + '</span>' if not cb_ok else ''}
     </div>
     <div class="cb-bar">
-      <div class="cb-stat">Pérdidas: <span style="color:{'var(--red)' if cb_l>0 else 'var(--text)'}">{cb_l}</span></div>
-      <div class="cb-stat">Wins: <span style="color:{'var(--green)' if cb_w>0 else 'var(--text)'}">{cb_w}</span></div>
-      <div class="cb-stat">Riesgo ×<span style="color:{'var(--yellow)' if cb_m!=1.0 else 'var(--text)'}">{cb_m:.1f}</span></div>
+      <div class="cb-stat">{t("Losses")}: <span style="color:{'var(--red)' if cb_l>0 else 'var(--text)'}">{cb_l}</span></div>
+      <div class="cb-stat">{t("Wins")}: <span style="color:{'var(--green)' if cb_w>0 else 'var(--text)'}">{cb_w}</span></div>
+      <div class="cb-stat">{t("Risk")} ×<span style="color:{'var(--yellow)' if cb_m!=1.0 else 'var(--text)'}">{cb_m:.1f}</span></div>
     </div>
   </div>
   <div class="card">
-    <div class="section-title">Pares monitoreados</div>
-    <table><thead><tr><th>Par</th><th></th><th>Total</th><th>Mostradas</th><th>Score avg</th><th>Última</th></tr></thead>
+    <div class="section-title">{t("Monitored Pairs")}</div>
+    <table><thead><tr><th>{t("Pair")}</th><th></th><th>{t("Total")}</th><th>{t("Shown")}</th><th>{t("Score avg")}</th><th>{t("Last")}</th></tr></thead>
     <tbody>{sym_rows}</tbody></table>
   </div>
+  {eq_stats_html}
 </div>
 
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <div class="section-title" style="margin-bottom:0">Señales de esta sesión (P&amp;L en tiempo real)</div>
+    <div class="section-title" style="margin-bottom:0">{t("Session signals (real-time P&L)")}</div>
     <a href="/api/export" class="export-btn" download>⬇ CSV</a>
   </div>
   <div class="filter-bar">
@@ -742,14 +928,14 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
     <button class="filter-btn" onclick="filterSignals('BTCEUR')">BTCEUR</button>
   </div>
   <table id="signals-table">
-    <thead><tr><th>Hora</th><th>Par</th><th>Dir</th><th>Confianza</th><th>Entry</th><th style="color:var(--red)">SL</th><th style="color:var(--green)">TP</th><th>R:R</th><th>Estado</th><th>Enviada</th></tr></thead>
+    <thead><tr><th>{t("Time")}</th><th>{t("Pair")}</th><th>{t("Dir")}</th><th>{t("Confidence")}</th><th>Entry</th><th style="color:var(--red)">SL</th><th style="color:var(--green)">TP</th><th>R:R</th><th>{t("Latency")}</th><th>{t("Slippage")}</th><th>{t("Status_col")}</th><th>{t("Sent")}</th></tr></thead>
     <tbody>{recent_rows}</tbody>
   </table>
 </div>
 
 <div class="footer">
-  <span>Puerto: <a href="http://localhost:{port}">:{port}</a> · <a href="/api/metrics">API JSON</a> · <a href="/api/export">Export CSV</a></span>
-  <span id="exec-status">{'✅ Auto-ejecución MT5 activa' if self.auto_execute_enabled else '⏸ Auto-ejecución desactivada (AUTO_EXECUTE_SIGNALS=0)'}</span>
+  <span>{"Port" if lang == "en" else "Puerto"}: <a href="http://localhost:{port}">:{port}</a> · <a href="/api/metrics">API JSON</a> · <a href="/api/export">Export CSV</a></span>
+  <span id="exec-status">{'✅ Auto-execution MT5 active' if self.auto_execute_enabled else '⏸ Auto-execution disabled (AUTO_EXECUTE_SIGNALS=0)' if lang == 'en' else ('✅ Auto-ejecución MT5 activa' if self.auto_execute_enabled else '⏸ Auto-ejecución desactivada (AUTO_EXECUTE_SIGNALS=0)')}</span>
 </div>
 
 <script>
@@ -818,9 +1004,9 @@ function _checkNewSignals() {{
       var diff = count - _lastSignalCount;
       _lastSignalCount = count;
       if (Notification && Notification.permission === 'granted') {{
-        new Notification('🎯 Nueva señal detectada', {{
-          body: diff + ' nueva(s) señal(es) en el bot de trading.',
-          icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="28" font-size="28">🤖</text></svg>'
+        new Notification('🎯 {"New signal detected" if lang == "en" else "Nueva señal detectada"}', {{
+          body: diff + '{"new signal(s) from LastEdge." if lang == "en" else " nueva(s) señal(es) en LastEdge."}',
+          icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="28" font-size="28">⚡</text></svg>'
         }});
       }}
     }}
