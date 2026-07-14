@@ -38,7 +38,7 @@ export default function DashboardScreen() {
   const bottomPad = insets.bottom + 120;
 
   const handleOpenSettings = () => {
-    router.push("/settings-modal");
+    router.push("/settings-modal" as any);
   };
 
   return (

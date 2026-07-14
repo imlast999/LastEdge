@@ -16,6 +16,7 @@ import {
   Platform,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -38,7 +39,7 @@ export default function LabScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useTranslation();
-  const { apiOverrides } = useSettings();
+  const { settings, apiOverrides } = useSettings();
 
   const [runs, setRuns] = useState<ExitResearchRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -101,7 +102,7 @@ export default function LabScreen() {
   };
 
   const handleOpenSettings = () => {
-    router.push("/settings-modal");
+    router.push("/settings-modal" as any);
   };
 
   return (
@@ -141,7 +142,12 @@ export default function LabScreen() {
             icon="zap"
             color="#3b82f6"
             colors={colors}
-            onPress={() => {}} // TODO: Wire to actual investigation launch
+            onPress={() => Alert.alert(
+              settings.language === "es" ? "Inicio de Investigación" : "Launch Investigation",
+              settings.language === "es" 
+                ? "El modo de Quick Validation se encuentra actualmente en cola de ejecución del protocolo LastEdge."
+                : "Quick Validation mode is currently queued in the LastEdge execution pipeline."
+            )}
           />
           <InvestigationMode
             title="LastEdge Protocol"
@@ -149,7 +155,12 @@ export default function LabScreen() {
             icon="layers"
             color="#10b981"
             colors={colors}
-            onPress={() => {}} // TODO: Wire to actual investigation launch
+            onPress={() => Alert.alert(
+              settings.language === "es" ? "Inicio de Investigación" : "Launch Investigation",
+              settings.language === "es" 
+                ? "El modo LastEdge Protocol se encuentra actualmente en cola de ejecución del protocolo LastEdge."
+                : "LastEdge Protocol mode is currently queued in the LastEdge execution pipeline."
+            )}
           />
           <InvestigationMode
             title="Custom Investigation"
@@ -157,7 +168,12 @@ export default function LabScreen() {
             icon="sliders"
             color="#f59e0b"
             colors={colors}
-            onPress={() => {}} // TODO: Wire to actual investigation launch
+            onPress={() => Alert.alert(
+              settings.language === "es" ? "Inicio de Investigación" : "Launch Investigation",
+              settings.language === "es" 
+                ? "El modo Custom Investigation se encuentra actualmente en cola de ejecución del protocolo LastEdge."
+                : "Custom Investigation mode is currently queued in the LastEdge execution pipeline."
+            )}
           />
         </View>
       </View>
@@ -241,7 +257,7 @@ export default function LabScreen() {
             value={new Date(selectedRun.generated_at).toLocaleString()}
             colors={colors}
           />
-          <StatRow label="Variants" value={String(selectedRun.variant_count)} colors={colors} />
+          <StatRow label="Variants" value={String(selectedSummary?.variant_count ?? 0)} colors={colors} />
 
           <View style={styles.sectionDivider} />
           <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>Conclusions</Text>

@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -360,12 +360,67 @@ export default function SettingsScreen() {
         </View>
       </SettingsSection>
 
-      {/* ÔöÇÔöÇ Interfaz ÔöÇÔöÇ */}
-      <SettingsSection title="Interfaz">
+      {/* ── Interfaz ── */}
+      <SettingsSection title={settings.language === 'es' ? "Interfaz" : "Interface"}>
+        {/* ── Language selector ── */}
+        <View style={[styles.intervalBlock, { borderBottomColor: colors.border }]}>
+          <Text style={[styles.intervalLabel, { color: colors.mutedForeground }]}>
+            {settings.language === 'es' ? "Idioma de la app" : "App language"}
+          </Text>
+          <Text style={[styles.connLabel, { color: colors.mutedForeground, marginBottom: 8 }]}>
+            {settings.language === 'es' ? "Cambiar el idioma de la interfaz" : "Change the app interface language"}
+          </Text>
+          <View style={styles.intervalRow}>
+            <TouchableOpacity
+              onPress={() => updateSetting("language", "en")}
+              style={[
+                styles.intervalBtn,
+                {
+                  backgroundColor: settings.language === 'en' ? colors.primary : colors.secondary,
+                  borderColor: settings.language === 'en' ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={{ fontSize: 16 }}>🇬🇧</Text>
+                <Text
+                  style={[
+                    styles.intervalText,
+                    { color: settings.language === 'en' ? colors.primaryForeground : colors.foreground },
+                  ]}
+                >
+                  English
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => updateSetting("language", "es")}
+              style={[
+                styles.intervalBtn,
+                {
+                  backgroundColor: settings.language === 'es' ? colors.primary : colors.secondary,
+                  borderColor: settings.language === 'es' ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={{ fontSize: 16 }}>🇪🇸</Text>
+                <Text
+                  style={[
+                    styles.intervalText,
+                    { color: settings.language === 'es' ? colors.primaryForeground : colors.foreground },
+                  ]}
+                >
+                  Español
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
         <SettingsToggle
           icon="smartphone"
-          label="Vibraci├│n h├íptica"
-          description="Feedback al pulsar botones de prueba"
+          label={settings.language === 'es' ? "Vibración háptica" : "Haptic feedback"}
+          description={settings.language === 'es' ? "Feedback al pulsar botones de prueba" : "Feedback when pressing test buttons"}
           value={settings.hapticsEnabled}
           onValueChange={(v) => updateSetting("hapticsEnabled", v)}
           isLast

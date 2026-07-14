@@ -75,7 +75,7 @@ export default function TabLayout() {
             isIOS ? (
               <SymbolView name="flask.fill" tintColor={color} size={22} />
             ) : (
-              <Feather name="flask" size={22} color={color} />
+              <Feather name={"flask" as any} size={22} color={color} />
             ),
         }}
       />

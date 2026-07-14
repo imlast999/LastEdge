@@ -29,6 +29,8 @@ export interface AppSettings {
   serverUrl: string;
   /** Vacío = usar token del APK */
   serverToken: string;
+  /** Idioma de la app: 'en' | 'es' */
+  language: "en" | "es";
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -41,6 +43,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hapticsEnabled: true,
   serverUrl: "",
   serverToken: "",
+  language: "en",
 };
 
 interface SettingsContextValue {

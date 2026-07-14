@@ -46,7 +46,7 @@ export default function TradesScreen() {
   const bottomPad = insets.bottom + 120;
 
   const handleOpenSettings = () => {
-    router.push("/settings-modal");
+    router.push("/settings-modal" as any);
   };
 
   // Pendientes = señales que necesitan acción o ya están abiertas en MT5
@@ -86,26 +86,9 @@ export default function TradesScreen() {
   const totalPnL = closedTrades.reduce((s, t) => s + t.profit, 0);
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: 16, paddingBottom: bottomPad + 16 },
-      ]}
-      refreshControl={
-        <RefreshControl
-          refreshing={loading}
-          onRefresh={refresh}
-          tintColor={colors.primary}
-          colors={[colors.primary]}
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      <ApiErrorBanner />
-
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Safe Area: Header respects top inset */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: colors.foreground }]}>Trades</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
@@ -145,8 +128,35 @@ export default function TradesScreen() {
 
       {/* ── Contenido: Pendientes ── */}
       {activeTab === "pending" && (
-        <View>
-          {pendingSignals.length === 0 ? (
+        <FlatList
+          data={pendingSignals}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <SignalCard
+              signal={item}
+              onAccept={item.status === "pending" ? acceptSignal : undefined}
+              onReject={item.status === "pending" ? rejectSignal : undefined}
+            />
+          )}
+          contentContainerStyle={[
+            styles.list,
+            { paddingBottom: bottomPad },
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={refresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+          ListHeaderComponent={
+            <View style={styles.listHeader}>
+              <ApiErrorBanner />
+            </View>
+          }
+          ListEmptyComponent={
             <View style={styles.empty}>
               <View
                 style={[styles.emptyIcon, { backgroundColor: colors.card }]}
@@ -162,47 +172,37 @@ export default function TradesScreen() {
                 {t("noOpenTrades")}
               </Text>
             </View>
-          ) : (
-            pendingSignals.map((item) => (
-              <SignalCard
-                key={item.id}
-                signal={item}
-                onAccept={item.status === "pending" ? acceptSignal : undefined}
-                onReject={item.status === "pending" ? rejectSignal : undefined}
-              />
-            ))
-          )}
-        </View>
+          }
+        />
       )}
 
       {/* ── Contenido: Cerradas ── */}
       {activeTab === "closed" && (
-        <View>
-          {closedTrades.length === 0 ? (
-            <View style={styles.empty}>
-              <View
-                style={[styles.emptyIcon, { backgroundColor: colors.card }]}
-              >
-                <Feather name="clock" size={28} color={colors.mutedForeground} />
-              </View>
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                {t("noClosedTrades")}
-              </Text>
-              <Text
-                style={[styles.emptyText, { color: colors.mutedForeground }]}
-              >
-                {t("closedTradesSummary")}
-              </Text>
-            </View>
-          ) : (
-            <>
-              {closedTrades.map((item) => (
-                <TradeCard key={item.id} trade={item} colors={colors} />
-              ))}
+        <FlatList
+          data={closedTrades}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <TradeCard trade={item} />}
+          contentContainerStyle={[
+            styles.list,
+            { paddingBottom: bottomPad },
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={refresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+          ListHeaderComponent={
+            <View style={styles.listHeader}>
+              <ApiErrorBanner />
+              {/* Sumario de estadísticas */}
               {closedTrades.length > 0 && (
                 <View
                   style={[
-                    styles.summaryContainer,
+                    styles.summaryCard,
                     {
                       backgroundColor: colors.card,
                       borderColor: colors.border,
@@ -248,11 +248,28 @@ export default function TradesScreen() {
                   />
                 </View>
               )}
-            </>
-          )}
-        </View>
+            </View>
+          }
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <View
+                style={[styles.emptyIcon, { backgroundColor: colors.card }]}
+              >
+                <Feather name="clock" size={28} color={colors.mutedForeground} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+                {t("noClosedTrades")}
+              </Text>
+              <Text
+                style={[styles.emptyText, { color: colors.mutedForeground }]}
+              >
+                {t("closedTradesSummary")}
+              </Text>
+            </View>
+          }
+        />
       )}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -334,8 +351,8 @@ function SummaryItem({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingHorizontal: 16, gap: 16 },
   header: {
+    paddingHorizontal: 16,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
@@ -357,6 +374,7 @@ const styles = StyleSheet.create({
   subTabBar: {
     flexDirection: "row",
     borderBottomWidth: 1,
+    marginBottom: 10,
   },
   subTab: {
     flex: 1,

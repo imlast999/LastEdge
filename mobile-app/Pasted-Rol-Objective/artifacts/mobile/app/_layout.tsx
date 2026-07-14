@@ -31,7 +31,7 @@ function RootLayoutNav() {
         name="(tabs)" 
         options={{ 
           headerShown: false,
-          animationEnabled: false,
+          animation: "none",
         }} 
       />
       
@@ -41,7 +41,7 @@ function RootLayoutNav() {
         options={{ 
           headerShown: false,
           presentation: "modal",
-          animationEnabled: true,
+          animation: "slide_from_bottom",
         }} 
       />
     </Stack>
