@@ -77,6 +77,13 @@ CREATE TABLE IF NOT EXISTS trade_journal (
     -- Notas libres
     notes           TEXT,
 
+    -- Execution Quality (Slippage & Latency)
+    requested_price REAL,
+    executed_price  REAL,
+    slippage_pips   REAL,
+    latency_ms      INTEGER,
+    broker_message  TEXT,
+
     created_at      TEXT DEFAULT (datetime('now'))
 );
 """
@@ -121,8 +128,31 @@ class TradeJournal:
             with self._conn() as conn:
                 conn.execute(_CREATE_TABLE)
                 conn.execute(_CREATE_INDEX)
+                
+                # Migración: Añadir columnas de Execution Quality si no existen
+                try:
+                    conn.execute("ALTER TABLE trade_journal ADD COLUMN requested_price REAL;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE trade_journal ADD COLUMN executed_price REAL;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE trade_journal ADD COLUMN slippage_pips REAL;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE trade_journal ADD COLUMN latency_ms INTEGER;")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE trade_journal ADD COLUMN broker_message TEXT;")
+                except sqlite3.OperationalError:
+                    pass
+                    
         except Exception as e:
-            logger.error(f"[Journal] Error creando tabla: {e}")
+            logger.error(f"[Journal] Error creando tabla o migrando: {e}")
 
     # ── Escritura ─────────────────────────────────────────────────────────────
 
@@ -139,6 +169,11 @@ class TradeJournal:
         mt5_ticket: Optional[int] = None,
         mode: str = 'live',
         notes: str = '',
+        requested_price: Optional[float] = None,
+        executed_price: Optional[float] = None,
+        slippage_pips: Optional[float] = None,
+        latency_ms: Optional[int] = None,
+        broker_message: Optional[str] = None,
     ) -> int:
         """
         Registra la apertura de un trade.
@@ -177,19 +212,22 @@ class TradeJournal:
                          entry_price, sl_price, tp_price, lot_size,
                          confidence, confidence_score, signal_score,
                          market_conditions, market_session,
-                         mt5_ticket, entry_time, result, notes)
+                         mt5_ticket, entry_time, result, notes,
+                         requested_price, executed_price, slippage_pips, latency_ms, broker_message)
                     VALUES
                         (?, ?, ?, ?,
                          ?, ?, ?, ?,
                          ?, ?, ?,
                          ?, ?,
-                         ?, ?, 'PENDING', ?)
+                         ?, ?, 'PENDING', ?,
+                         ?, ?, ?, ?, ?)
                     """,
                     (symbol, strategy, sig_type, mode,
                      entry, sl, tp, lot_size if lot_size else None,
                      confidence, confidence_score, score,
                      mc_json, market_session,
-                     mt5_ticket, now_iso, notes),
+                     mt5_ticket, now_iso, notes,
+                     requested_price, executed_price, slippage_pips, latency_ms, broker_message),
                 )
                 trade_id = cur.lastrowid
                 logger.debug(f"[Journal] Entry logged: id={trade_id} {symbol} {sig_type} @{entry}")

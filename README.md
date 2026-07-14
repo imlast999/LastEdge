@@ -1,6 +1,6 @@
 <div align="center">
 
-![LastEdge banner](images/LastEdge%20banner.png)
+![LastEdge banner](branding/banners/LastEdge%20banner.png)
 
 # LastEdge
 
@@ -74,6 +74,19 @@ flowchart TD
     Q[News Filter] -->|Blackout active| L
 ```
 
+## Documentation
+
+Documentación modular del proyecto (en la carpeta `docs/`) con la responsabilidad por componente:
+
+- [Architecture](docs/architecture.md)
+- [LastEdge Protocol](docs/lastedge-protocol.md)
+- [Exit Research](docs/exit-research.md)
+- [Risk Engine](docs/risk-engine.md)
+- [Mobile API](docs/mobile-api.md)
+- [Strategies](docs/strategies.md)
+- [Mobile App README](mobile-app/README.md)
+
+Estos documentos amplían el README principal con guías específicas y autocontenidas por tema.
 ---
 
 ## Project Status

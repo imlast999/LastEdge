@@ -19,6 +19,11 @@ export interface BotStatus {
   equity: number;
   margin: number;
   freeMargin: number;
+  executionQuality?: {
+    avgLatency: number;
+    avgSlippage: number;
+    successRate: number;
+  };
 }
 
 export interface Signal {
@@ -45,6 +50,8 @@ export interface Trade {
   closeReason: "TAKE_PROFIT" | "STOP_LOSS" | "MANUAL";
   closedAt: string;
   lot: number;
+  latencyMs?: number;
+  slippagePips?: number;
 }
 
 export interface EquityPoint {

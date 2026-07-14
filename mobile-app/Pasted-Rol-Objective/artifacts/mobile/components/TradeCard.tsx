@@ -84,6 +84,21 @@ export function TradeCard({ trade }: Props) {
             </View>
           )}
         </View>
+
+        {(trade.latencyMs !== undefined || trade.slippagePips !== undefined) && (
+          <View style={styles.executionMetrics}>
+            {trade.latencyMs !== undefined && (
+              <Text style={[styles.metricText, { color: colors.mutedForeground }]}>
+                <Feather name="clock" size={10} /> {trade.latencyMs}ms
+              </Text>
+            )}
+            {trade.slippagePips !== undefined && (
+              <Text style={[styles.metricText, { color: colors.mutedForeground }]}>
+                <Feather name="activity" size={10} /> {trade.slippagePips > 0 ? trade.slippagePips : 0}pips
+              </Text>
+            )}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -178,8 +193,20 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   reasonText: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: "Inter_700Bold",
     letterSpacing: 0.5,
   },
+  executionMetrics: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: -4,
+  },
+  metricText: {
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
+    flexDirection: "row",
+    alignItems: "center",
+  }
 });

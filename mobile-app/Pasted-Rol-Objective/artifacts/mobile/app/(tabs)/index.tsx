@@ -151,6 +151,15 @@ export default function DashboardScreen() {
 
       <RiskWidget />
 
+      {safeStatus.executionQuality && (
+        <View style={[styles.accountCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.accountTitle, { color: colors.foreground }]}>Execution Quality</Text>
+          <AccountRow label="Success Rate" value={`${safeStatus.executionQuality.successRate}%`} colors={colors} highlight={safeStatus.executionQuality.successRate >= 95} />
+          <AccountRow label="Avg Latency" value={`${safeStatus.executionQuality.avgLatency} ms`} colors={colors} />
+          <AccountRow label="Avg Slippage" value={`${safeStatus.executionQuality.avgSlippage} pips`} colors={colors} />
+        </View>
+      )}
+
       <View style={[styles.accountCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.accountTitle, { color: colors.foreground }]}>{t("mt5Account")}</Text>
         <AccountRow label={t("marginUsed")} value={`${safeStatus.margin.toFixed(2)}€`} colors={colors} />

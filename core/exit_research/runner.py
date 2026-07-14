@@ -1329,6 +1329,39 @@ class ExitResearchRunner:
             winner = conclusions.get(key) or "—"
             lines.append(f"- **{label}:** `{winner}`")
 
+        # Execution Summary
+        eq_html = ""
+        try:
+            from core.journal import get_journal
+            with get_journal()._conn() as conn:
+                rows = conn.execute("SELECT latency_ms, slippage_pips FROM trade_journal WHERE latency_ms IS NOT NULL").fetchall()
+                lats = [r['latency_ms'] for r in rows]
+                slips = [r['slippage_pips'] for r in rows]
+                
+                avg_lat = sum(lats)/len(lats) if lats else 0
+                max_lat = max(lats) if lats else 0
+                avg_slip = sum(slips)/len(slips) if slips else 0
+                max_slip = max(slips) if slips else 0
+                
+            from services.execution import get_execution_service
+            exec_stats = get_execution_service().get_execution_statistics()
+            suc_rate = exec_stats['success_rate']
+            
+            lines += [
+                "",
+                "---",
+                "",
+                "## Execution Summary (Live Bot)",
+                "",
+                f"- **Success Rate**: {suc_rate:.1f}%",
+                f"- **Latency (Avg/Max)**: {avg_lat:.0f}ms / {max_lat:.0f}ms",
+                f"- **Slippage (Avg/Max)**: {avg_slip:.1f} pips / {max_slip:.1f} pips",
+                "",
+                "*(Nota: Estos datos son globales extraídos de trade_journal y NO afectan a los scores del backtest)*",
+            ]
+        except Exception:
+            pass
+
         lines += [
             "",
             "---",

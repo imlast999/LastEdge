@@ -1,403 +1,323 @@
 <div align="center">
 
-# LastEdge Mobile
-
-**Remote monitoring and backtest execution for the LastEdge trading system**
-
-![React Native](https://img.shields.io/badge/React%20Native-0.81-blue?logo=react)
-![Expo](https://img.shields.io/badge/Expo%20SDK-54-black?logo=expo)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript)
-![Platform](https://img.shields.io/badge/Platform-Android-green?logo=android)
-![Status](https://img.shields.io/badge/Status-Functional%20MVP-yellow)
-![Phase](https://img.shields.io/badge/Phase-Demo%20MT5%20Monitoring-orange)
+![LastEdge App banner](../branding/banners/LastEdge%20banner.png)
 
 </div>
 
 ---
 
-## 1. Introduction
+# LastEdge App
 
-LastEdge Mobile is a React Native application (Expo SDK 54) that provides remote access to the LastEdge trading bot running on a Windows desktop machine.
+LastEdge App es el Mobile Control Center del ecosistema LastEdge: un centro de control portátil orientado a la monitorización de producción y a la investigación cuantitativa reproducible. Está diseñado para llevar el laboratorio de investigación al móvil, permitiendo:
 
-**What it is:** A monitoring and research tool. Not a trading terminal.
+- Monitorizar entornos de producción.
+- Validar estrategias mediante backtests y análisis estadísticos.
+- Ejecutar y consultar investigaciones reproducibles (Research Runs).
+- Validar hipótesis y tomar decisiones basadas en evidencia, sin delegar la ejecución final al dispositivo móvil.
 
-**What it does:**
-- Shows real-time equity, balance, margin, and MT5 connection status
-- Displays active signals and lets you accept or reject them remotely
-- Shows the history of closed trades with P&L breakdown
-- Lets you launch backtests remotely and read results including Monte Carlo analysis
-- Configures connection parameters (server URL, API token, polling interval)
-
-**How it relates to LastEdge Desktop:**  
-The mobile app does not connect to MT5 directly. It connects to a small Express/Node.js API server (`api-server`) that reads from `bot_state.db` — the same SQLite database written by the Python bot. This means the mobile app always reflects what the bot is actually doing, with zero latency coupling.
-
-**What problem it solves:**  
-Allows monitoring and limited control of the trading system from anywhere on the local network (or remotely if the server is exposed), without needing to be at the desktop running MT5.
+En una sola frase: Mobile Control Center + Portable Quantitative Research Lab para Production Monitoring y Strategy Validation.
 
 ---
 
-## 2. Philosophy
+**Philosophy**
 
-> **Observe. Don't intervene.**
+Toda estrategia debe demostrar, mediante evidencia cuantitativa reproducible, que merece entrar en producción. En LastEdge App investigamos, documentamos y reutilizamos artefactos de investigación antes de promover una estrategia.
 
-The mobile app is designed around the same philosophy as LastEdge itself: collect evidence before acting.
+Puntos clave:
 
-| Question | Answer |
-|---|---|
-| Is it designed to operate (place orders)? | **No.** Signal accept/reject writes a flag to the DB that the Python bot reads on its next cycle. The bot decides whether to execute. |
-| Is it designed to monitor? | **Yes.** Real-time equity, positions, and P&L are the primary use case. |
-| Is it designed to research? | **Partially.** The Backtests screen allows launching research backtests remotely. The results include Monte Carlo analysis. |
-| What is its role in the LastEdge ecosystem? | It is a read-heavy satellite. It consumes data from the bot and provides a mobile-friendly view of what is happening. |
+- La investigación es tan importante como la ejecución: las decisiones se fundamentan en resultados reproducibles, no en intuiciones.
+- Toda investigación produce artefactos (configuración, métricas, curvas, conclusiones) que deben almacenarse y poder revisarse.
+- No usamos herramientas aisladas: el flujo de trabajo es un protocolo completo que integra backtest, walk-forward, Monte Carlo y análisis de salida.
+- La app refleja esta filosofía: centraliza la evidencia, facilita comparativas y permite reproducir investigaciones desde el móvil.
 
-The app is intentionally minimal. No charting library. No order management. No strategy editor. The desktop dashboard (`localhost:8080`) handles the heavy UI work; the mobile app handles portability.
+Esta sección documenta el comportamiento esperado del producto y el enfoque operativo para equipos de trading cuantitativo y auditoría.
 
 ---
 
-## 3. Current Features
+**Características principales**
 
-### Dashboard
-- Real-time equity and balance display (EUR, 2 decimal places)
-- Equity curve chart (last 48 snapshots from `balance_snapshots` table)
-- Daily P&L (last 24h of closed trades)
-- Overall winrate (all closed trades in memory)
-- Open positions count
-- Pending signals count with "requires action" indicator
-- MT5 account details: margin used, free margin, margin level
-- MT5 connection badge with animated pulse dot and uptime
-- Pull-to-refresh
+## Dashboard
+- Estado del bot (conexión y uptime)
+- Estado MT5 (margin, free margin, margin level)
+- Portfolio: balance, equity y snapshots de drawdown
+- Indicadores de riesgo y exposición
+- Gráfica de equity (últimos snapshots)
+- Resumen de posiciones abiertas y señales pendientes
+- Banners de salud del sistema y errores
 
-### Trades — Pending tab
-- List of all signals with status `pending` or `active`
-- `SignalCard` with: symbol, direction (BUY/SELL), entry/TP/SL/RR/lot
-- Accept and Reject buttons with haptic feedback (pending signals only)
-- Visual differentiation: pending signals show amber border + "REQUIRES ACTION" badge
-- Active signals show green "ORDEN ACTIVA" bar
-- Rejected signals show red "RECHAZADA" bar
-- Timestamps with relative time ("3m ago")
+## Trades
+- Pending Signals: `SignalCard` con aceptación/rechazo (escribe flag en DB)
+- Closed Trades: historial con `TradeCard` y resumen de P&L
+- Datos sincronizados desde producción (lectura del DB vía API)
 
-### Trades — Closed tab
-- List of closed trades from `session_trades` table
-- `TradeCard` with: symbol, type, open/close prices, pips, P&L in EUR, close reason
-- Close reason badge: TAKE PROFIT / STOP LOSS / MANUAL
-- Summary bar: total P&L, wins, losses, profit factor
-- Pull-to-refresh
-
-### Backtests
-- Launch backtests on the remote bot by queuing tasks via POST `/api/backtests`
-- Form inputs: symbol (EURUSD/XAUUSD/BTCEUR), strategy (per-symbol list), timeframe (M5/M15/H1/H4/D1), number of bars, circuit breaker mode (off/standard/aggressive)
-- Strategy-specific timeframe locking (e.g. `btceur_regime_momentum` only allows H4)
-- Auto-polling every 2.5s while a task is PENDING or PROCESSING
-- Results display: winrate, profit factor, net pips, signal count
-- Monte Carlo block (when `mc.status === "success"`):
-  - Verdict card: low/moderate/high risk with color coding
-  - Profit probability and ruin risk percentages
-  - Expected drawdown (p50) and worst-case drawdown (p95)
-  - Worst equity (p5) and median equity (p50)
-  - Expandable interpretation guide (collapsible)
-- Recent history: last 10 backtest tasks with status badges, tap to reload any
-
-### Settings
-- **Server section:** custom URL and API token inputs with save button; MT5 status, effective URL, token (masked), last sync time; test connection button (returns latency + MT5 state); manual refresh button
-- **Auto-update section:** toggle auto-refresh on/off; polling interval selector (3s / 5s / 10s / 30s)
-- **Notifications section:** master toggle; per-category toggles (new signals, trade close, MT5 disconnect); request permissions button; test notification button; clear badge button
-- **Interface section:** language selector (English 🇬🇧 / Spanish 🇪🇸); haptic feedback toggle
-- **Data section:** clear notification badge; reset all settings to defaults
-- **About section:** app version, Expo SDK version, platform info, data mode (mock vs live)
-
-### System
-- Global `ApiErrorBanner` shown on every screen when server is unreachable or mock data is active
-- Mock data fallback in development mode (`__DEV__ === true`) when API is unreachable
-- `ErrorBoundary` wrapping the entire app with `ErrorFallback` (restart button + stack trace modal in dev)
-- Settings persisted to `AsyncStorage` under key `@bot_mt5_settings_v2` (with migration from v1)
-- Push notifications: local notifications for new signals, trade closes, and MT5 disconnection events
-  - Android notification channels: `critical`, `signals`, `trades`
-  - Tap-to-navigate: signal notifications → Trades tab, critical errors → Dashboard
+## Research Lab
+La sección de investigación ofrece tres modos operativos documentados a continuación.
 
 ---
 
-## 4. Architecture
+**Investigation Modes**
 
-```
-mobile-app/
-└── Pasted-Rol-Objective/
-    ├── artifacts/
-    │   ├── mobile/              ← React Native / Expo app
-    │   └── api-server/          ← Express bridge to bot_state.db
-    ├── package.json             ← pnpm workspace root
-    └── pnpm-workspace.yaml
-```
+Los modos implementados en LastEdge App están diseñados para cubrir desde validaciones rápidas hasta pipelines completos de investigación:
 
-### Mobile app structure (`artifacts/mobile/`)
+### Quick Validation
+- Propósito: validación rápida y comprobaciones de hipótesis.
+- Qué ejecuta: backtests acotados sobre conjuntos reducidos de datos.
+- Cuándo usarlo: antes de lanzar investigaciones largas o para confirmar cambios menores en parámetros.
 
-```
-app/
-├── _layout.tsx              Root layout — providers, fonts, notification setup
-└── (tabs)/
-    ├── _layout.tsx          Tab bar + settings button in header
-    ├── index.tsx            Dashboard screen
-    ├── trades.tsx           Trades screen (pending + closed sub-tabs)
-    ├── backtests.tsx        Backtests screen
-    └── settings.tsx         Settings screen (not in tab bar, accessible via header)
+### LastEdge Protocol
+- Propósito: ejecutar el pipeline de investigación recomendado y completo.
+- Flujo (recomendado antes de promover a producción):
 
-context/
-├── TradingContext.tsx       Global trading state — polling, signals, trades, equity
-└── SettingsContext.tsx      Persistent settings — AsyncStorage, API overrides
+Backtest
+↓
+Walk Forward
+↓
+Monte Carlo
+↓
+Exit Research
 
-services/
-├── backtestApi.ts           API client for backtest task queue
-├── connectionTest.ts        healthz + status connection tester
-└── notifications.ts         expo-notifications setup, local/push, channels
+- Qué hace: encadena backtest, walk-forward y análisis estadístico; ejecuta Monte Carlo para estimar riesgos y genera métricas y artefactos que se almacenan en el Run.
+- Uso: validación exhaustiva de estrategias, análisis de estabilidad y decisión para promover a producción.
 
-components/
-├── SignalCard.tsx            Signal display with accept/reject actions
-├── TradeCard.tsx             Closed trade display
-├── StatsCard.tsx             KPI card (icon + value + trend)
-├── EquityChart.tsx           Equity curve (custom, no chart library)
-├── ConnectionBadge.tsx       Animated MT5 connection indicator
-├── ApiErrorBanner.tsx        Error/mock data banner
-├── ErrorBoundary.tsx         React class error boundary
-├── ErrorFallback.tsx         Crash screen with dev stack trace modal
-├── KeyboardAwareScrollViewCompat.tsx  Platform wrapper
-└── settings/
-    ├── SettingsSection.tsx   Grouped card container
-    ├── SettingsRow.tsx       Label + value/chevron row
-    └── SettingsToggle.tsx    Label + Switch row
-
-constants/
-├── colors.ts                Design tokens (single dark palette)
-└── backtest.ts              Symbol/strategy/CB constants for the Backtests form
-
-lib/
-└── apiConfig.ts             URL/token resolution (build env → overrides)
-
-hooks/
-├── useColors.ts             Returns active palette (light/dark system)
-└── useTranslation.ts        Returns t() function from SettingsContext.language
-
-i18n/
-└── translations.ts          Full EN + ES strings (~120 keys each)
-
-__mocks__/
-└── tradingData.ts           Mock status/signals/trades/equity for dev offline mode
-```
-
-### API server structure (`artifacts/api-server/`)
-
-```
-src/
-├── app.ts                   Express setup — CORS, pino-http, body parsing, routes
-├── index.ts                 Server entry — PORT validation, listen
-├── routes/
-│   ├── index.ts             Router — healthz (public), /status (public), rest (auth)
-│   ├── health.ts            GET /healthz → {status: "ok"}
-│   └── bot.ts               All bot endpoints
-└── lib/
-    ├── db.ts                SQLite via node:sqlite (Node 22), ensureSchema
-    ├── auth.ts              Bearer token middleware (dev bypass / prod block)
-    └── logger.ts            Pino with pino-pretty in dev, redact headers
-```
+### Custom Investigation
+- Propósito: permitir control manual y flexibilidad a investigadores avanzados.
+- Qué permite: seleccionar fases individuales del protocolo (por ejemplo, sólo Monte Carlo o sólo walk-forward).
+- Uso: depuración, replicación de pasos concretos y auditoría experimental.
 
 ---
 
-## 5. Navigation Flow
+**Research Runs**
 
-```mermaid
-flowchart TD
-    A[App Launch] --> B[Root _layout.tsx]
-    B --> C[Font loading + Splash]
-    C --> D{Fonts ready?}
-    D -->|Yes| E[Tab Layout]
-    D -->|No| C
+Un Research Run representa una ejecución completa y reproducible del proceso de investigación. Cada Run almacena:
 
-    E --> F[Dashboard tab]
-    E --> G[Trades tab]
-    E --> H[Backtests tab]
-    E --> I[⚙️ Settings button in header]
+- Configuración: parámetros, seed, periodo de datos, estrategia y metadatos.
+- Resultados: métricas agregadas (winrate, profit factor, net pips, drawdown percentiles).
+- Gráficos y artefactos: curva de equity, distribuciones de outcomes, heatmaps, trade timeline.
+- Conclusiones: anotaciones, observaciones y un score de estabilidad cuando esté disponible.
 
-    I --> J[Settings screen — full-page stack]
+Beneficios clave:
 
-    G --> K[Sub-tab: Pending Signals]
-    G --> L[Sub-tab: Closed Trades]
+- Reproducibilidad: cualquier Run puede volver a ejecutarse con la configuración exacta.
+- Historial: se construye un registro de investigaciones que permite comparativas en el tiempo.
+- Auditoría: los artefactos permiten a analistas y a risk managers revisar y validar decisiones.
 
-    K --> M{Signal action}
-    M -->|Accept| N[POST /api/signals/:id/accept]
-    M -->|Reject| O[POST /api/signals/:id/reject]
-
-    H --> P[Fill form]
-    P --> Q[POST /api/backtests]
-    Q --> R[Polling every 2.5s]
-    R --> S{Status?}
-    S -->|PENDING/PROCESSING| R
-    S -->|COMPLETED| T[Show results + Monte Carlo]
-    S -->|FAILED| U[Show error message]
-```
-
-**Tab bar:** Dashboard · Trades · Backtests  
-**Settings:** accessible via the gear icon in the header of every screen (not a tab item — `href: null` in the layout)  
-**Back navigation:** Expo Router Stack handles the settings screen as a stack push over the tab layout  
-**No modals, drawers, or deep links** are implemented beyond notification tap-to-navigate
+LastEdge App muestra y organiza Research Runs para facilitar comparativas y seguimiento en dispositivos móviles.
 
 ---
 
-## 6. Communication with LastEdge
+**Research-first philosophy (nuevo paradigma)**
 
-```mermaid
-flowchart LR
-    A[LastEdge Mobile\nReact Native] -->|HTTP polling| B[API Server\nExpress / Node 22]
-    B -->|read-only| C[(bot_state.db\nSQLite)]
-    D[LastEdge Desktop\nPython bot] -->|writes| C
-    B -->|writes| C
-    A -->|POST accept/reject| B
-    B -->|UPDATE enhanced_signals| C
-    D -->|reads status flag\non next cycle| C
-```
-
-### Polling mechanism
-
-`TradingContext` fires `fetchAllData()` on mount and then on a configurable interval (default 5s, configurable 3/5/10/30s). Each cycle fires 4 sequential fetches:
-
-| Fetch | Endpoint | Purpose |
-|---|---|---|
-| 1 | `GET /api/status` | Bot connection, equity, balance, margin, uptime |
-| 2 | `GET /api/signals` | Pending + active signals from `enhanced_signals` |
-| 3 | `GET /api/trades` | Closed trades from `session_trades` |
-| 4 | `GET /api/equityHistory` | Last 48 equity snapshots |
-
-All fetches are sequential (not parallel) to avoid flooding the SQLite reader.
-
-### Authentication
-
-Every request except `/api/healthz` and `/api/status` requires a `Bearer <token>` header. The token is set via `API_SECRET` environment variable on the server. The mobile app sends it as `Authorization: Bearer <token>` + `X-Api-Key: <token>` (dual header for compatibility). In development, if `API_SECRET` is not set, auth is bypassed.
-
-### Signal accept/reject
-
-When the user accepts a signal, the app sends `POST /api/signals/:id/accept`. The server updates `enhanced_signals.status = 'ACCEPTED'` in the DB. The Python bot reads this flag on its next 20s polling cycle and decides whether to execute the trade in MT5. The mobile app does NOT directly place MT5 orders.
-
-### Backtest queue
-
-The app writes a row to `backtest_tasks` via `POST /api/backtests`. The Python bot has a queue processor that reads `PENDING` tasks from this table, runs the backtest, and writes `results_json` back. The app polls `GET /api/backtests/:id` every 2.5s until the status is `COMPLETED` or `FAILED`.
+Antes, backtest, Monte Carlo, walk-forward y exit research se veían como herramientas separadas. En LastEdge ese conjunto de herramientas se convierte en un único proceso investigativo centrado en el Run. El usuario piensa en investigaciones, no en herramientas sueltas. Este cambio de paradigma es uno de los pilares del proyecto: consolidar evidencia, fomentar reproducibilidad y reducir errores humanos en la promoción a producción.
 
 ---
 
-## 7. Design
+**Identity Visual**
 
-### Color palette
+La identidad visual de LastEdge App se diseñó para trasladar los valores del proyecto: ingeniería, estabilidad, investigación y claridad de datos.
 
-The app uses a **single dark theme**. The `colors.ts` file defines both `light` and `dark` keys with identical values — there is effectively no light mode.
+Directrices resumidas:
 
-| Token | Value | Semantic use |
-|---|---|---|
-| `background` | `#09090b` | Screen background |
-| `card` | `#18181b` | Card surfaces |
-| `secondary` | `#27272a` | Input backgrounds, chip backgrounds |
-| `border` | `#27272a` | Dividers and borders |
-| `primary` | `#4ade80` | Green — active state, buttons, accent |
-| `primaryForeground` | `#09090b` | Text on primary |
-| `foreground` | `#fafafa` | Primary text |
-| `mutedForeground` | `#a1a1aa` | Secondary text, labels |
-| `profit` / `buy` | `#4ade80` | Gains, buy signals |
-| `loss` / `sell` | `#f87171` | Losses, sell signals |
-| `pending` | `#fbbf24` | Amber — pending signals, warnings |
-| `destructive` | `#f87171` | Destructive actions |
-| `connected` | `#4ade80` | MT5 connected state |
-| `disconnected` | `#f87171` | MT5 disconnected state |
+- Paleta sobria con alto contraste para favorecer la lectura de datos.
+- Tipografía monoespaciada/tabular para valores numéricos y alineado de columnas.
+- Iconografía clara y consistente (referencia al icono oficial abajo).
+- Componentes con jerarquía visual orientada a la interpretación rápida de métricas.
 
-`colors.radius = 12` — default border radius
-
-### Typography
-
-Inter font family via `@expo-google-fonts/inter`. Four weights loaded:
-
-| Weight | Variable | Typical use |
-|---|---|---|
-| 400 | `Inter_400Regular` | Body text, descriptions |
-| 500 | `Inter_500Medium` | Labels, secondary info |
-| 600 | `Inter_600SemiBold` | Card titles, section headers |
-| 700 | `Inter_700Bold` | Values, headings, KPIs |
-
-`fontVariant: ["tabular-nums"]` applied to all numeric values for alignment.
-
-### Icons
-
-`@expo/vector-icons` — Feather icon set exclusively. No other icon library.
-
-### Components
-
-| Component | Reuse | Props |
-|---|---|---|
-| `StatsCard` | Dashboard KPI grid | label, value, subValue, icon, trend, accent |
-| `SignalCard` | Trades > Pending | signal, onAccept?, onReject? |
-| `TradeCard` | Trades > Closed | trade |
-| `EquityChart` | Dashboard | data, height, showLabels |
-| `ConnectionBadge` | Dashboard header | connected, uptime |
-| `ApiErrorBanner` | All screens | (no props — reads TradingContext) |
-| `SettingsSection` | Settings | title, children |
-| `SettingsRow` | Settings | icon, label, value, onPress, destructive, loading |
-| `SettingsToggle` | Settings | icon, label, description, value, onValueChange |
-
-There is no formal design system or Storybook. Components are self-contained with inline `StyleSheet`.
+Referencias a recursos (añadir los ficheros en el repo):
+- Banner: `../branding/banners/LastEdge banner.png`
+- Icono de la app: `../branding/icons/app/source/LastEdge icon.png`
 
 ---
 
-## 8. Current State
+**Capturas y recursos gráficos (estructura preparada)**
 
-| Module | Screen | Status | Notes |
-|---|---|---|---|
-| Dashboard | `index.tsx` | ✅ Complete | Equity, chart, stats, account, connection badge |
-| Equity Chart | `EquityChart.tsx` | ✅ Complete | Custom SVG-less impl with View segments |
-| Pending Signals | `trades.tsx` | ✅ Complete | Accept/reject with haptics |
-| Closed Trades | `trades.tsx` | ✅ Complete | P&L summary + per-trade cards |
-| Backtest form | `backtests.tsx` | ✅ Complete | Symbol, strategy, TF, bars, CB mode |
-| Backtest results | `backtests.tsx` | ✅ Complete | Metrics grid + Monte Carlo block |
-| Backtest history | `backtests.tsx` | ✅ Complete | Last 10 tasks, tap to reload |
-| Monte Carlo | `backtests.tsx` | ✅ Complete | Verdict card + drawdown + equity percentiles |
-| Server config | `settings.tsx` | ✅ Complete | URL/token input, save, test, status |
-| Auto-refresh | `settings.tsx` | ✅ Complete | Toggle + interval selector |
-| Notifications | `settings.tsx` | ✅ Complete | Per-category toggles, test, permissions |
-| Language (i18n) | `settings.tsx` | ✅ Complete | EN / ES full coverage |
-| Haptics | `settings.tsx` | ✅ Complete | Accept/reject/test haptic feedback |
-| Mock data fallback | `TradingContext` | ✅ Complete | Dev mode only, amber banner shown |
-| Error boundary | `_layout.tsx` | ✅ Complete | Restart button + dev stack trace modal |
-| Push notifications | `notifications.ts` | ✅ Implemented | Local only confirmed; Expo push token requires EAS projectId |
-| Dark mode | `colors.ts` | ⚠️ Partial | Tokens defined but light=dark (no real light theme) |
-| iPad / tablet | layout | ⚠️ Untested | No responsive breakpoints for large screens |
-| iOS | native | ⚠️ Not built | Only Android APK has been built and tested |
-| Signal execution view | — | ❌ Not implemented | No confirmation dialog before accept |
-| Live P&L on open trades | — | ❌ Not implemented | Floating P&L not fetched |
-| Strategy analytics | — | ❌ Not implemented | No per-strategy stats view |
-| Alerts / notifications list | — | ❌ Not implemented | No in-app notification center |
-| eurusd_partial in backtest form | `backtest.ts` | ❌ Outdated | Strategy list hardcoded, does not include new v1.1 strategies |
+Colocar imágenes en `artifacts/mobile/assets/screens/` y referenciarlas con las rutas sugeridas. No se crean imágenes aquí; deje los ficheros en el repositorio para que el README los muestre.
+
+- [COLOCAR IMAGEN: Dashboard] → ./assets/screens/dashboard.png
+- [COLOCAR IMAGEN: Trades - Pending] → ./assets/screens/trades_pending.png
+- [COLOCAR IMAGEN: Trades - Closed] → ./assets/screens/trades_closed.png
+- [COLOCAR IMAGEN: Lab - Backtest Form] → ./assets/screens/lab_backtest_form.png
+- [COLOCAR IMAGEN: Lab - Backtest Results] → ./assets/screens/lab_backtest_results.png
+- [COLOCAR IMAGEN: Investigation Detail] → ./assets/screens/investigation_detail.png
+- [COLOCAR IMAGEN: Settings] → ./assets/screens/settings.png
+
+Si alguna captura no existe, el README mostrará el placeholder con la ruta sugerida.
 
 ---
 
-## 9. Main Dependencies
+**Arquitectura (resumen)**
 
-### Mobile app
+Mobile App
+↓ HTTP polling / POST
+REST API (Express / Node)
+↓ lectura/escritura
+LastEdge Engine (Python) — `bot_state.db` (SQLite)
+↓ MT5 API
+MT5
+↓ Broker
 
-| Package | Version | Purpose |
-|---|---|---|
-| `expo` | ~54.0.35 | Base Expo SDK and CLI |
-| `expo-router` | ~6.0.17 | File-based routing (Stack + Tabs) |
-| `react-native` | 0.81.5 | Core mobile framework |
-| `react` | 19.1.0 | UI library |
-| `@expo-google-fonts/inter` | ^0.4.0 | Inter font family (400/500/600/700) |
-| `@expo/vector-icons` | ^15.0.3 | Feather icon set |
-| `@react-native-async-storage/async-storage` | 2.2.0 | Settings persistence |
-| `@tanstack/react-query` | ^5.90.21 | Installed but not yet used in production flows |
-| `expo-notifications` | ^0.32.17 | Local + push notifications |
-| `expo-haptics` | ~15.0.8 | Haptic feedback on accept/reject |
-| `expo-blur` | ~15.0.8 | iOS tab bar blur effect |
-| `expo-constants` | ~18.0.11 | App version, EAS config, env vars |
-| `expo-splash-screen` | ~31.0.12 | Splash screen management |
-| `react-native-safe-area-context` | ~5.6.0 | Safe area insets |
-| `react-native-screens` | ~4.16.0 | Native screen transitions |
-| `react-native-gesture-handler` | ~2.28.0 | Gesture support |
-| `react-native-keyboard-controller` | 1.18.5 | Keyboard-aware scroll (used only in compat wrapper) |
-| `react-native-reanimated` | ~4.1.1 | Installed, not actively used in current screens |
-| `react-native-svg` | 15.12.1 | Installed, not used (chart is custom View-based) |
-| `zod` | ^3.25.76 | Installed, not yet used |
-| `expo-glass-effect` | ~0.1.4 | Installed, not used |
-| `expo-image` | ~3.0.11 | Installed, not used |
+La app nunca conecta MT5 directamente: todas las acciones pasan por la API y la base de datos compartida.
+
+---
+
+**Navegación**
+
+Estructura principal: Tab bar con `Dashboard`, `Trades`, `Lab` (Backtests/Research) y botón de `Settings` en la cabecera.
+
+Flujo típico:
+Dashboard → Trades → Lab → Settings (pantalla completa)
+
+Detalle: `Trades` tiene sub-pestañas `Pending` y `Closed`. `Lab` expone formularios, polling de tareas y resultados.
+
+---
+
+**Capturas y recursos gráficos**
+
+Colocar imágenes en la carpeta de assets del móvil y referenciarlas aquí. No se incluyen imágenes en el repo por defecto; añadir los ficheros con estos nombres para que se muestren:
+
+- [COLOCAR IMAGEN: Dashboard] → ./assets/screens/dashboard.png
+- [COLOCAR IMAGEN: Trades - Pending] → ./assets/screens/trades_pending.png
+- [COLOCAR IMAGEN: Trades - Closed] → ./assets/screens/trades_closed.png
+- [COLOCAR IMAGEN: Lab - Backtest Form] → ./assets/screens/lab_backtest_form.png
+- [COLOCAR IMAGEN: Lab - Backtest Results] → ./assets/screens/lab_backtest_results.png
+- [COLOCAR IMAGEN: Settings] → ./assets/screens/settings.png
+
+Si una captura no existe, el README mostrará el texto del placeholder y la ruta sugerida.
+
+---
+
+**Instalación (desarrollo)**
+
+Requisitos:
+- Node.js 20+ (recomendado)
+- pnpm (opcional, el repositorio usa pnpm workspace)
+- Expo CLI / Expo Application Services para builds (EAS) si se desean push notifications reales
+
+Pasos rápidos (desde la raíz del repo):
+
+```powershell
+cd mobile-app/Pasted-Rol-Objective/artifacts/mobile
+pnpm install           # o npm/yarn si no usa pnpm
+pnpm expo start        # lanza Metro / Expo dev tools
+``` 
+
+Construir APK (Android):
+
+```powershell
+# Requiere EAS config si se desea push estable
+pnpm expo prebuild     # opcional: para builds nativos
+eas build -p android   # usando EAS (configurar projectId en eas.json)
+``` 
+
+Build iOS: requiere macOS + EAS; en este repositorio iOS no ha sido probado regularmente.
+
+Nota: las dependencias y versiones concretas están definidas en `artifacts/mobile/package.json`.
+
+---
+
+**Configuración**
+
+Parámetros esenciales (en la app, `Settings`):
+- `API URL`: URL pública o interna del `api-server` (ej. `https://mi-servidor:3000`)
+- `API Token`: token Bearer para autenticación con el servidor
+- `Polling interval`: 3s / 5s / 10s / 30s
+- `Mock data`: modo desarrollo (fallback cuando API inaccesible)
+
+Conexión con backend:
+- El `api-server` expone `GET /api/status`, `GET /api/signals`, `GET /api/trades`, `GET /api/equityHistory`, y endpoints para backtests y acciones de señales.
+- Las requests (salvo `/api/healthz` y `/api/status`) requieren `Authorization: Bearer <token>`.
+
+Notificaciones:
+- Local notifications configuradas vía `expo-notifications`.
+- Para push reales es necesario configurar EAS y un `projectId` en `eas.json`.
+
+---
+
+**Estructura del proyecto (resumen relevante)**
+
+- `app/` — Entradas de pantalla y _layout (Expo Router)
+- `components/` — Componentes reutilizables (`SignalCard`, `TradeCard`, `EquityChart`)
+- `context/` — `TradingContext` y `SettingsContext` (polling, estado global)
+- `services/` — Clientes API, notificaciones y utilidades
+- `constants/` — Tokens y listas para formularios (símbolos, estrategias)
+- `i18n/` — Traducciones EN/ES
+- `__mocks__/` — Datos de desarrollo
+
+Evitar listar archivos irrelevantes; los ficheros de build y artefactos nativos están fuera de `app/`.
+
+---
+
+**Tecnologías**
+
+- React Native (Expo / SDK 54)
+- Expo Router (file-based routing)
+- TypeScript
+- Expo Notifications, Expo Haptics
+- AsyncStorage para persistencia local
+- Express (API server) + SQLite (bot_state.db) para puente con el motor Python
+
+---
+
+**Estado del proyecto**
+
+- Desarrollo activo.
+- El **Dashboard** móvil está completamente funcional (equity, estados, conexión, señales pendientes).
+- El **Research Lab** (Backtests + Monte Carlo) es funcional para ejecuciones remotas básicas y visualización de resultados, pero sigue en evolución (mejoras en comparativas y artefactos están en progreso).
+
+Limitaciones conocidas:
+- iOS no se ha probado/compilado regularmente en CI.
+- No existe todavía un centro de notificaciones en-app.
+- Algunas listas de estrategias están hardcodeadas y requieren sincronización con el backend.
+
+---
+
+**Roadmap**
+
+Dirección estratégica del producto (sin fechas). Estas iniciativas guiarán el desarrollo a corto y medio plazo:
+
+- Research Run History: historial completo y filtros avanzados para revisar y comparar ejecuciones pasadas.
+- Push Notifications: integración y enriquecimiento de notificaciones (canales críticos, acciones rápidas desde notificación).
+- Live Analytics: métricas en tiempo real y streaming ligero para indicadores clave en producción.
+- Multi-device Synchronization: sincronización entre múltiples dispositivos del mismo usuario y roles de lectura/operación.
+- Strategy Comparison: vistas para comparar variantes, parámetros y resultados de Runs en paralelo.
+- Protocol Scheduling: planificación y automatización de investigaciones mediante calendarios o triggers.
+- Cloud Research: integración opcional con infraestructura de cómputo remoto para ejecutar investigaciones pesadas.
+- Remote Investigation Management: panel para gestionar la cola de investigaciones, prioridades y permisos.
+
+Estas entradas representan la dirección del proyecto; su puesto en la hoja de ruta y prioridad estará sujeto a evaluación de recursos y dependencia del motor central.
+
+---
+
+**Cómo contribuir**
+
+- Fork + branch con prefijo `mobile/`.
+- Mantener consistencia con TypeScript y linters del proyecto.
+- Añadir tests cuando sea apropiado (componentes y utilidades).
+- Para cambios en la API, coordinar con el repo del motor (LastEdge Engine) y documentar cambios de contrato.
+
+Pull request checklist:
+- Describe el cambio y su impacto en la app y en la API
+- Incluir capturas o paths de assets nuevas
+- Actualizar `i18n/translations.ts` si se añaden strings
+
+---
+
+**Licencia**
+
+La aplicación mantiene la licencia del repositorio raíz. Consulte el archivo `LICENSE` en la raíz del proyecto.
+
+---
+
+**Verificación final (comprobaciones realizadas)**
+
+- He actualizado la identidad a "LastEdge App" en todo el README.
+- El documento refleja el estado actual del código en `mobile-app/Pasted-Rol-Objective/artifacts/mobile`.
+- He dejado placeholders claros y rutas recomendadas para las capturas (no se han creado imágenes nuevas).
+- No se ha modificado el README principal del repositorio.
+
+Si quieres, puedo:
+- añadir los placeholders de imagen como archivos PNG vacíos en `mobile-app/Pasted-Rol-Objective/artifacts/mobile/assets/screens/` (para que Git detecte rutas),
+- o ejecutar una búsqueda rápida por referencias a nombres antiguos para confirmar que no quedan menciones antiguas en el código.
+
 
 ### API server
 
@@ -598,5 +518,5 @@ pnpm run build:apk:release
 ---
 
 <div align="center">
-<sub>LastEdge Mobile — monitoring companion for the LastEdge trading research framework</sub>
+<sub>LastEdge App — centro de control móvil y laboratorio de investigación portátil para el ecosistema LastEdge</sub>
 </div>

@@ -10,6 +10,7 @@ Consolida toda la lógica de ejecución que estaba fragmentada en:
 import logging
 import os
 from datetime import datetime, timezone
+import time
 from typing import Dict, Optional, Tuple, List, Any
 from dataclasses import dataclass
 import MetaTrader5 as mt5
@@ -146,6 +147,17 @@ class ExecutionService:
             if execution_result['success']:
                 try:
                     from core.journal import get_journal
+                    
+                    # Calcular slippage en pips
+                    req_price = execution_result.get('requested_price', float(signal['entry']))
+                    exec_price = execution_result.get('executed_price', req_price)
+                    
+                    symbol = signal.get('symbol', 'EURUSD').upper()
+                    pip_sizes = {'EURUSD': 0.0001, 'XAUUSD': 0.1, 'BTCEUR': 1.0, 'BTCUSDT': 1.0}
+                    pip_size = pip_sizes.get(symbol, 0.0001)
+                    
+                    slippage_pips = abs(exec_price - req_price) / pip_size
+                    
                     journal_id = get_journal().log_entry(
                         signal,
                         confidence=str(signal.get('confidence', 'MEDIUM')),
@@ -155,6 +167,11 @@ class ExecutionService:
                         mt5_ticket=execution_result.get('order_id'),
                         mode='live',
                         notes='Ejecutado vía ExecutionService',
+                        requested_price=req_price,
+                        executed_price=exec_price,
+                        slippage_pips=slippage_pips,
+                        latency_ms=execution_result.get('latency_ms'),
+                        broker_message=execution_result.get('broker_message')
                     )
                 except Exception as journal_err:
                     logger.warning(f"Trade journal log_entry: {journal_err}")
@@ -529,7 +546,10 @@ class ExecutionService:
         
         for attempt in range(self.execution_config['retry_attempts']):
             try:
+                start_time = time.time()
                 result = mt5.order_send(order_request)
+                end_time = time.time()
+                latency_ms = int((end_time - start_time) * 1000)
                 
                 if result is None:
                     last_error = "MT5 order_send returned None"
@@ -540,7 +560,11 @@ class ExecutionService:
                         'success': True,
                         'message': 'Order executed successfully',
                         'order_id': result.order,
-                        'mt5_result': result._asdict()
+                        'mt5_result': result._asdict(),
+                        'latency_ms': latency_ms,
+                        'requested_price': order_request.get('price'),
+                        'executed_price': result.price,
+                        'broker_message': result.comment
                     }
                 else:
                     last_error = f"MT5 error {result.retcode}: {result.comment}"
@@ -560,7 +584,8 @@ class ExecutionService:
         return {
             'success': False,
             'message': f'Order failed after {self.execution_config["retry_attempts"]} attempts: {last_error}',
-            'order_id': None
+            'order_id': None,
+            'broker_message': last_error
         }
     
     def _get_current_price(self, symbol: str) -> Optional[float]:
