@@ -6,6 +6,8 @@ set "ROOT=%ROOT:~0,-1%"
 set "API_DIR=%ROOT%\mobile-app\Pasted-Rol-Objective\artifacts\api-server"
 set "WORKSPACE=%ROOT%\mobile-app\Pasted-Rol-Objective"
 
+if exist "C:\Users\dev-eugenio\AppData\Roaming\npm" set "PATH=C:\Users\dev-eugenio\AppData\Roaming\npm;%PATH%"
+
 echo ========================================
 echo    BOT-MT5 - Arranque completo
 echo    Bot Python + API movil

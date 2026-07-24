@@ -3,6 +3,8 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+project.ext.REACT_NATIVE_NODE_MODULES_DIR = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
+project.ext.REACT_NATIVE_WORKLETS_NODE_MODULES_DIR = new File(["node", "--print", "require.resolve('react-native-worklets/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
 /**
  * This is the configuration block to customize your React Native Android app.

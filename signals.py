@@ -65,10 +65,6 @@ STRATEGY_REGISTRY = {
     'btceur_regime_momentum': lambda: _get_btceur_regime_momentum(),
     'btcusdt':               lambda: get_strategy('BTCEUR'),
     'btc':                   lambda: get_strategy('BTCEUR'),
-
-    # Estrategias genéricas (fallback)
-    'rsi':  lambda: get_strategy('EURUSD'),
-    'macd': lambda: get_strategy('EURUSD'),
 }
 
 # ── Helpers para instanciar variantes avanzadas ───────────────────────────────
@@ -83,7 +79,7 @@ def _get_btc_trend_pullback():
 
 def _get_eurusd_asian_breakout():
     try:
-        from strategies.eurusd_asian_breakout import EURUSDAsianBreakoutStrategy
+        from strategies.experimental.eurusd_asian_breakout import EURUSDAsianBreakoutStrategy
         return EURUSDAsianBreakoutStrategy()
     except Exception as e:
         logger.warning(f"EURUSDAsianBreakoutStrategy no disponible: {e}")
@@ -91,7 +87,7 @@ def _get_eurusd_asian_breakout():
 
 def _get_xauusd_psychological():
     try:
-        from strategies.xauusd_psychological import XAUUSDPsychologicalStrategy
+        from strategies.experimental.xauusd_psychological import XAUUSDPsychologicalStrategy
         return XAUUSDPsychologicalStrategy()
     except Exception as e:
         logger.warning(f"XAUUSDPsychologicalStrategy no disponible: {e}")
@@ -130,11 +126,12 @@ def _get_eurusd_advanced():
 
 def _get_eurusd_mtf():
     try:
-        from strategies.eurusd_mtf import EURUSDMultiTimeframeStrategy
+        from strategies.experimental.eurusd_mtf import EURUSDMultiTimeframeStrategy
         return EURUSDMultiTimeframeStrategy()
     except Exception as e:
         logger.warning(f"EURUSDMultiTimeframeStrategy no disponible: {e}")
         return get_strategy('EURUSD')
+
 
 def _get_xauusd_advanced():
     try:
@@ -226,7 +223,7 @@ def detect_signal(
             cls_name = strategy_instance.__class__.__name__
             # Clases válidas para BTCEUR: BTCEURStrategy (baseline), BTCTrendPullbackV1Strategy,
             # BTCEURWeeklyBreakoutStrategy, BTCEURRegimeMomentumStrategy.
-            valid_btceur_classes = ('BTCEURStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy', 'BTCEURRegimeMomentumStrategy')
+            valid_btceur_classes = ('BTCEURStrategy', 'BTCEURPartialStrategy', 'BTCTrendPullbackV1Strategy', 'BTCEURWeeklyBreakoutStrategy', 'BTCEURRegimeMomentumStrategy')
             if cls_name not in valid_btceur_classes:
                 err_msg = f"Estrategia incorrecta: {cls_name} (válidas: {valid_btceur_classes})."
                 logger.error("[CRITICAL][BTCEUR] %s Abortando detección.", err_msg)
@@ -331,11 +328,15 @@ def get_available_strategies() -> Dict[str, str]:
         'ema50_200': 'EMA 50/200 Crossover (EURUSD)',
         'eurusd': 'EURUSD Breakout Strategy',
         'eurusd_advanced': 'EURUSD Advanced Multi-Timeframe',
+        'eurusd_asian_breakout': 'EURUSD Asian Range Breakout (Experimental)',
+        'eurusd_mtf': 'EURUSD Multi-Timeframe (Experimental)',
         'xauusd': 'XAUUSD Reversal Strategy',
         'xauusd_advanced': 'XAUUSD Advanced Ultra-Selective',
+        'xauusd_psychological': 'XAUUSD Psychological Levels (Experimental)',
         'btceur': 'BTCEUR Momentum Strategy',
-        'rsi': 'RSI Reversal (Generic)',
-        'macd': 'MACD Crossover (Generic)'
+        'btc_trend_pullback_v1': 'BTCEUR Trend Pullback V1',
+        'btceur_weekly_breakout': 'BTCEUR Weekly Breakout',
+        'btceur_regime_momentum': 'BTCEUR Regime Momentum',
     }
 
 def register_strategy(name: str, strategy_factory):

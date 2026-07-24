@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from collections import defaultdict, deque
 import threading
 import time
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 try:
     from core import active_symbols, set_language, get_language, get_language_name, get_supported_languages_display
@@ -73,6 +74,10 @@ class SignalEvent:
     slippage_pips: Optional[float] = None
 
 
+class ReusableThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+
+
 class DashboardService:
 
     def __init__(self):
@@ -89,8 +94,10 @@ class DashboardService:
             'data_file': os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dashboard_data.json')
         }
         self.is_running = False
-        self.update_thread = None
+        self.update_thread: Optional[threading.Thread] = None
         self.lock = threading.Lock()
+        self.server_instance: Optional[ThreadingHTTPServer] = None
+        self.server_thread: Optional[threading.Thread] = None
         # Estado de ejecución real (sincronizado con autosignals)
         self.auto_execute_enabled = os.getenv('AUTO_EXECUTE_SIGNALS', '1') == '1'
         self.auto_execute_confidence = os.getenv('AUTO_EXECUTE_CONFIDENCE', 'HIGH')
@@ -128,7 +135,6 @@ class DashboardService:
         try:
             if os.getenv('DISABLE_DASHBOARD', '0') == '1':
                 return
-            from http.server import HTTPServer, BaseHTTPRequestHandler
             dashboard_service = self
 
             class Handler(BaseHTTPRequestHandler):
@@ -174,7 +180,17 @@ class DashboardService:
                             except (ConnectionAbortedError, BrokenPipeError, OSError):
                                 pass  # navegador cerró la conexión — no es un error real
                         elif self.path == '/api/metrics':
-                            body = json.dumps(dashboard_service.get_current_metrics(), indent=2).encode('utf-8')
+                            body = json.dumps(dashboard_service.get_current_metrics(), indent=2, default=str).encode('utf-8')
+                            self.send_response(200)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            try:
+                                self.wfile.write(body)
+                            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                pass
+                        elif self.path == '/api/data':
+                            body = json.dumps(dashboard_service.get_dashboard_data(), indent=2, default=str).encode('utf-8')
                             self.send_response(200)
                             self.send_header('Content-type', 'application/json')
                             self.send_header('Access-Control-Allow-Origin', '*')
@@ -184,7 +200,7 @@ class DashboardService:
                             except (ConnectionAbortedError, BrokenPipeError, OSError):
                                 pass
                         elif self.path.startswith('/api/history'):
-                            body = json.dumps(dashboard_service.get_signal_history(hours=168), indent=2).encode('utf-8')
+                            body = json.dumps(dashboard_service.get_signal_history(hours=168), indent=2, default=str).encode('utf-8')
                             self.send_response(200)
                             self.send_header('Content-type', 'application/json')
                             self.send_header('Access-Control-Allow-Origin', '*')
@@ -208,7 +224,7 @@ class DashboardService:
 
                         elif self.path == '/api/equity':
                             # Equity en tiempo real (paper o real)
-                            body = json.dumps(dashboard_service.get_equity_snapshot(), indent=2).encode('utf-8')
+                            body = json.dumps(dashboard_service.get_equity_snapshot(), indent=2, default=str).encode('utf-8')
                             self.send_response(200)
                             self.send_header('Content-type', 'application/json')
                             self.send_header('Access-Control-Allow-Origin', '*')
@@ -223,7 +239,7 @@ class DashboardService:
                                 'auto_execute': dashboard_service.auto_execute_enabled,
                                 'confidence': dashboard_service.auto_execute_confidence,
                             }
-                            body = json.dumps(status).encode('utf-8')
+                            body = json.dumps(status, default=str).encode('utf-8')
                             self.send_response(200)
                             self.send_header('Content-type', 'application/json')
                             self.send_header('Access-Control-Allow-Origin', '*')
@@ -251,13 +267,21 @@ class DashboardService:
 
             port = int(os.getenv('DASHBOARD_PORT', '8080'))
 
+            try:
+                self.server_instance = ReusableThreadingHTTPServer(('', port), Handler)
+            except Exception as e:
+                logger.error(f"Failed to bind dashboard server on port {port}: {e}")
+                return
+
             def run():
                 try:
-                    HTTPServer(('', port), Handler).serve_forever()
+                    if self.server_instance:
+                        self.server_instance.serve_forever()
                 except Exception as e:
                     logger.error(f"Dashboard server error: {e}")
 
-            threading.Thread(target=run, daemon=True).start()
+            self.server_thread = threading.Thread(target=run, daemon=True)
+            self.server_thread.start()
             logger.info(f"Dashboard on http://localhost:{port}")
         except Exception as e:
             logger.error(f"Error starting web server: {e}")
@@ -270,6 +294,14 @@ class DashboardService:
                 self.is_running = False
                 if self.dashboard_config['enable_persistence']:
                     self._save_persisted_data()
+
+            if self.server_instance:
+                try:
+                    self.server_instance.shutdown()
+                    self.server_instance.server_close()
+                except Exception as se:
+                    logger.error(f"Error shutting down web server: {se}")
+                self.server_instance = None
         except Exception as e:
             logger.error(f"Error stopping dashboard: {e}")
 
@@ -279,51 +311,53 @@ class DashboardService:
                          entry: float = None, sl: float = None, tp: float = None,
                          mobile_status: str = None):
         try:
-            with self.lock:
-                # Obtener latency y slippage desde el journal si es posible
-                lat = None
-                slip = None
-                try:
-                    from core.journal import get_journal
-                    with get_journal()._conn() as conn:
-                        row = conn.execute(
-                            "SELECT latency_ms, slippage_pips FROM trade_journal ORDER BY id DESC LIMIT 1"
-                        ).fetchone()
-                        if row and row['latency_ms'] is not None:
-                            lat = row['latency_ms']
-                            slip = row['slippage_pips']
-                except Exception:
-                    pass
+            lat = None
+            slip = None
+            try:
+                from core.journal import get_journal
+                with get_journal()._conn() as conn:
+                    row = conn.execute(
+                        "SELECT latency_ms, slippage_pips FROM trade_journal ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+                    if row and row['latency_ms'] is not None:
+                        lat = row['latency_ms']
+                        slip = row['slippage_pips']
+            except Exception:
+                pass
 
-                event = SignalEvent(
-                    timestamp=datetime.now(timezone.utc),
-                    symbol=symbol, strategy=strategy, signal_type=signal_type,
-                    confidence=confidence, score=score, shown=shown,
-                    executed=executed, rejection_reason=rejection_reason,
-                    entry=entry, sl=sl, tp=tp,
-                    latency_ms=lat, slippage_pips=slip
-                )
+            event = SignalEvent(
+                timestamp=datetime.now(timezone.utc),
+                symbol=symbol, strategy=strategy, signal_type=signal_type,
+                confidence=confidence, score=score, shown=shown,
+                executed=executed, rejection_reason=rejection_reason,
+                entry=entry, sl=sl, tp=tp,
+                latency_ms=lat, slippage_pips=slip
+            )
+
+            with self.lock:
                 self.signal_history.append(event)
                 self._update_signal_metrics(event)
                 self.metrics.last_signal_time = event.timestamp
-                # Persistir en SQLite para la app móvil
-                if shown and entry and sl and tp:
-                    try:
-                        from services.mobile_store import get_mobile_store
-                        mobile_id = get_mobile_store().insert_signal(
-                            symbol=symbol,
-                            direction=signal_type,
-                            price=float(entry),
-                            tp_price=float(tp),
-                            sl_price=float(sl),
-                            confidence_score=float(score),
-                            confidence=confidence,
-                            strategy=strategy,
-                            status=mobile_status or ('OPEN' if executed else 'PROPOSED'),
-                        )
+
+            # Persistir en SQLite para la app móvil (fuera del lock para no bloquear IO)
+            if shown and entry and sl and tp:
+                try:
+                    from services.mobile_store import get_mobile_store
+                    mobile_id = get_mobile_store().insert_signal(
+                        symbol=symbol,
+                        direction=signal_type,
+                        price=float(entry),
+                        tp_price=float(tp),
+                        sl_price=float(sl),
+                        confidence_score=float(score),
+                        confidence=confidence,
+                        strategy=strategy,
+                        status=mobile_status or ('OPEN' if executed else 'PROPOSED'),
+                    )
+                    with self.lock:
                         event.mobile_signal_id = mobile_id
-                    except Exception as ms_err:
-                        logger.debug(f"Mobile store insert_signal: {ms_err}")
+                except Exception as ms_err:
+                    logger.debug(f"Mobile store insert_signal: {ms_err}")
         except Exception as e:
             logger.error(f"Error adding signal event: {e}")
 
@@ -363,7 +397,7 @@ class DashboardService:
                     },
                     'symbols': {
                         'activity': dict(self.metrics.symbol_activity),
-                        'performance': self.metrics.symbol_performance,
+                        'performance': {k: dict(v) for k, v in self.metrics.symbol_performance.items()},
                         'active': dict(active_symbols or {}),
                     },
                     'confidence_distribution': dict(self.metrics.confidence_distribution),
@@ -387,28 +421,29 @@ class DashboardService:
                            session_only: bool = False) -> List[Dict]:
         try:
             with self.lock:
-                cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-                # Si session_only, solo señales desde que arrancó esta sesión
-                if session_only:
-                    cutoff = max(cutoff, self.session_start)
-                result = []
-                for ev in self.signal_history:
-                    if ev.timestamp < cutoff:
-                        continue
-                    if symbol and ev.symbol != symbol:
-                        continue
-                    result.append({
-                        'timestamp': ev.timestamp.isoformat(),
-                        'symbol': ev.symbol, 'strategy': ev.strategy,
-                        'signal_type': ev.signal_type, 'confidence': ev.confidence,
-                        'score': ev.score, 'shown': ev.shown, 'executed': ev.executed,
-                        'rejection_reason': ev.rejection_reason,
-                        'entry': ev.entry, 'sl': ev.sl, 'tp': ev.tp,
-                        'final_status': ev.final_status,
-                        'current_price': ev.current_price,
-                        'unrealized_pnl': ev.unrealized_pnl,
-                    })
-                return result
+                history_copy = list(self.signal_history)
+                session_start = self.session_start
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+            if session_only:
+                cutoff = max(cutoff, session_start)
+            result = []
+            for ev in history_copy:
+                if ev.timestamp < cutoff:
+                    continue
+                if symbol and ev.symbol != symbol:
+                    continue
+                result.append({
+                    'timestamp': ev.timestamp.isoformat(),
+                    'symbol': ev.symbol, 'strategy': ev.strategy,
+                    'signal_type': ev.signal_type, 'confidence': ev.confidence,
+                    'score': ev.score, 'shown': ev.shown, 'executed': ev.executed,
+                    'rejection_reason': ev.rejection_reason,
+                    'entry': ev.entry, 'sl': ev.sl, 'tp': ev.tp,
+                    'final_status': ev.final_status,
+                    'current_price': ev.current_price,
+                    'unrealized_pnl': ev.unrealized_pnl,
+                })
+            return result
         except Exception as e:
             logger.error(f"Error getting signal history: {e}")
             return []
@@ -479,6 +514,63 @@ class DashboardService:
         except Exception as e:
             logger.debug(f"Error getting real positions: {e}")
             return []
+
+    def get_dashboard_data(self) -> Dict:
+        """Aggregates all metric, equity, signal history, and position data for front-end updates."""
+        try:
+            metrics = self.get_current_metrics()
+            equity = self.get_equity_snapshot()
+            session_history = self.get_signal_history(hours=24, session_only=True)
+            real_positions = self._get_real_positions()
+
+            wins_n = sum(1 for e in session_history if e.get('final_status') == 'win')
+            losses_n = sum(1 for e in session_history if e.get('final_status') == 'loss')
+            open_n = sum(1 for e in session_history if e.get('final_status') == 'open')
+            closed = wins_n + losses_n
+            win_rate = (wins_n / closed * 100) if closed > 0 else 0.0
+
+            eq_base = equity.get('base_balance', 5000.0)
+            eq_floating = equity.get('floating_pnl', 0.0)
+            eq_pts = [eq_base]
+            risk_pct_val = float(os.getenv('MT5_RISK_PCT', '0.5')) / 100.0
+            running = eq_base
+            for ev in session_history:
+                fs = ev.get('final_status')
+                entry = ev.get('entry'); sl_v = ev.get('sl'); tp_v = ev.get('tp')
+                if fs == 'win' and entry and sl_v and tp_v and abs(entry - sl_v) > 0:
+                    rr = abs(tp_v - entry) / abs(entry - sl_v)
+                    running += running * risk_pct_val * rr
+                    eq_pts.append(round(running, 2))
+                elif fs == 'loss':
+                    running -= running * risk_pct_val
+                    eq_pts.append(round(running, 2))
+            eq_pts.append(round(running + eq_floating, 2))
+
+            return {
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'metrics': metrics,
+                'equity': equity,
+                'session_signals': session_history,
+                'real_positions': real_positions,
+                'win_rate': {
+                    'win_rate_pct': win_rate,
+                    'wins': wins_n,
+                    'losses': losses_n,
+                    'open': open_n,
+                },
+                'equity_pts': eq_pts,
+            }
+        except Exception as e:
+            logger.error(f"Error getting dashboard data: {e}")
+            return {
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'metrics': self.get_current_metrics(),
+                'equity': self.get_equity_snapshot(),
+                'session_signals': [],
+                'real_positions': [],
+                'win_rate': {'win_rate_pct': 0.0, 'wins': 0, 'losses': 0, 'open': 0},
+                'equity_pts': [5000.0],
+            }
 
     def get_dashboard_html(self, lang: str = 'en') -> str:
         try:
@@ -578,7 +670,8 @@ class DashboardService:
                     tick = mt5.symbol_info_tick(sym)
                     if tick:
                         current_prices[sym] = (tick.bid + tick.ask) / 2
-                self.last_mt5_update = datetime.now(timezone.utc)
+                with self.lock:
+                    self.last_mt5_update = datetime.now(timezone.utc)
             except Exception:
                 pass
 
@@ -633,8 +726,11 @@ class DashboardService:
             eq_pts.append(round(running + eq_floating, 2))
             eq_pts_json = json.dumps(eq_pts)
 
-            if self.last_mt5_update:
-                d = (datetime.now(timezone.utc) - self.last_mt5_update).total_seconds()
+            with self.lock:
+                last_mt5_update = self.last_mt5_update
+
+            if last_mt5_update:
+                d = (datetime.now(timezone.utc) - last_mt5_update).total_seconds()
                 mt5_ind = t("Connected") if d < 120 else (f'🟡 {int(d//60)}m {t("min without data")}' if d < 300 else f'🔴 {int(d//60)}m {t("min without data")}')
                 mt5_col = '#3fb950' if d < 120 else '#d29922' if d < 300 else '#f85149'
             else:
@@ -680,16 +776,21 @@ class DashboardService:
                 else:
                     st_html = '<span style="color:#8b949e">—</span>'
 
+                lat_val = ev.get('latency_ms')
+                slip_val = ev.get('slippage_pips')
+                lat_str = f"{lat_val} ms" if lat_val is not None else "—"
+                slip_str = f"{slip_val:.1f} pips" if slip_val is not None else "—"
+
                 recent_rows += (f'<tr><td>{ts}</td><td class="sym">{sym}</td>'
                                  f'<td class="{dc}">{stype}</td><td class="{cc}">{conf}</td>'
                                  f'<td>{fmt(entry)}</td><td style="color:var(--red)">{fmt(sl)}</td>'
                                  f'<td style="color:var(--green)">{fmt(tp)}</td>'
                                  f'<td>{rr_str}</td>'
-                                 f'<td>{ev.get("latency_ms") or "—"} ms</td>'
-                                 f'<td>{f"{ev.get("slippage_pips"):.1f}" if ev.get("slippage_pips") is not None else "—"} pips</td>'
+                                 f'<td>{lat_str}</td>'
+                                 f'<td>{slip_str}</td>'
                                  f'<td>{st_html}</td><td>{shown}</td></tr>\n')
             if not recent_rows:
-                recent_rows = '<tr><td colspan="12" class="empty">Sin señales en esta sesión aún</td></tr>'
+                recent_rows = f'<tr><td colspan="12" class="empty">{t("No signals in this session")}</td></tr>'
 
             sig = metrics.get('signals', {}); trd = metrics.get('trading', {})
             sp  = metrics.get('symbols', {}).get('performance', {})
@@ -729,7 +830,7 @@ class DashboardService:
   <div class="section-title">{t("Open Positions in MT5")}</div>
   <table>
     <thead><tr><th>{t("Pair")}</th><th>{t("Dir")}</th><th>{t("Volume")}</th><th>{t("Open price")}</th><th>{t("Current price")}</th><th>P&amp;L</th><th style="color:var(--red)">SL</th><th style="color:var(--green)">TP</th></tr></thead>
-    <tbody>{{real_pos_rows}}</tbody>
+    <tbody>{real_pos_rows}</tbody>
   </table>
 </div>"""
             def sym_row(sym):
@@ -738,8 +839,8 @@ class DashboardService:
                 h = (symbol_health or {}).get(sym, {}); lt = h.get('last_signal_time')
                 nu = datetime.now(timezone.utc)
                 if lt:
-                    t = lt if lt.tzinfo else lt.replace(tzinfo=timezone.utc)
-                    d = (nu-t).total_seconds()
+                    t_val = lt if lt.tzinfo else lt.replace(tzinfo=timezone.utc)
+                    d = (nu-t_val).total_seconds()
                     ltxt = "<1 min" if d<60 else f"{int(d//60)}m" if d<3600 else f"{int(d//3600)}h {int((d%3600)//60)}m"
                     inact = d > 5400
                 else:
@@ -752,49 +853,57 @@ class DashboardService:
             port = os.getenv('DASHBOARD_PORT', '8080')
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-            # Execution Quality Stats
+            # Execution Quality Stats (P1.1)
             eq_stats_html = ""
             try:
-                from services.execution import get_execution_service
-                exec_stats = get_execution_service().get_execution_statistics()
-                
-                # Fetch latency and slippage from DB
                 from core.journal import get_journal
-                with get_journal()._conn() as conn:
-                    rows = conn.execute("SELECT latency_ms, slippage_pips FROM trade_journal WHERE latency_ms IS NOT NULL").fetchall()
-                    lats = [r['latency_ms'] for r in rows]
-                    slips = [r['slippage_pips'] for r in rows]
-                    
-                    avg_lat = sum(lats)/len(lats) if lats else 0
-                    max_lat = max(lats) if lats else 0
-                    avg_slip = sum(slips)/len(slips) if slips else 0
-                    max_slip = max(slips) if slips else 0
-                    
-                suc_rate = exec_stats['success_rate']
-                exec_suc = exec_stats['orders_successful']
-                exec_fail = exec_stats['orders_failed']
+                eq_data = get_journal().get_execution_quality_summary(days=30)
+                
+                tot_orders = eq_data.get('total_orders', 0)
+                rej_rate = eq_data.get('rejection_rate_pct', 0.0)
+                avg_lat = eq_data.get('avg_latency_ms', 0.0)
+                max_lat = eq_data.get('max_latency_ms', 0)
+                avg_slip = eq_data.get('avg_slippage_pips', 0.0)
+                avg_sprd = eq_data.get('avg_spread_pips', 0.0)
+                fav_slip_pct = eq_data.get('favorable_slippage_pct', 0.0)
+                slip_cost_eur = eq_data.get('total_slippage_cost_eur', 0.0)
                 
                 eq_stats_html = f"""
                 <div class="card">
                   <div class="section-title">{t("Execution Quality")}</div>
                   <div class="cb-bar" style="margin-bottom:12px; gap: 10px;">
-                    <div class="cb-stat">{t("Success Rate")}: <span style="color:var(--green)">{suc_rate:.1f}%</span></div>
-                    <div class="cb-stat">{t("Executed")}: <span>{exec_suc}</span></div>
-                    <div class="cb-stat">{t("Rejected")}: <span style="color:var(--red)">{exec_fail}</span></div>
+                    <div class="cb-stat">{t("Total Orders")}: <span>{tot_orders}</span></div>
+                    <div class="cb-stat">{t("Rejection Rate")}: <span style="color:{'var(--red)' if rej_rate > 3.0 else 'var(--green)'}">{rej_rate:.1f}%</span></div>
+                    <div class="cb-stat">{t("Avg Spread")}: <span style="color:var(--yellow)">{avg_sprd:.1f} p</span></div>
                   </div>
                   <div class="cb-bar" style="gap: 10px;">
                     <div class="cb-stat">{t("Avg Latency")}: <span style="color:var(--blue)">{avg_lat:.0f} ms</span></div>
                     <div class="cb-stat">{t("Max Latency")}: <span>{max_lat:.0f} ms</span></div>
                   </div>
                   <div class="cb-bar" style="margin-top:4px; gap: 10px;">
-                    <div class="cb-stat">{t("Avg Slippage")}: <span style="color:var(--yellow)">{avg_slip:.1f} p</span></div>
-                    <div class="cb-stat">{t("Max Slippage")}: <span>{max_slip:.1f} p</span></div>
+                    <div class="cb-stat">{t("Avg Slippage")}: <span style="color:{'var(--red)' if avg_slip > 0 else 'var(--green)'}">{avg_slip:+.2f} p</span></div>
+                    <div class="cb-stat">{t("Slippage Cost")}: <span style="color:var(--yellow)">{slip_cost_eur:+.2f} €</span></div>
+                    <div class="cb-stat">{t("Price Improvement")}: <span style="color:var(--green)">{fav_slip_pct:.1f}%</span></div>
                   </div>
                 </div>
                 """
             except Exception as e:
-                logger.error(f"Error generating Execution Quality html: {{e}}")
-            
+                logger.error(f"Error generating Execution Quality html: {e}")
+
+            lang_en_active = 'lang-active' if lang == 'en' else ''
+            lang_es_active = 'lang-active' if lang == 'es' else ''
+            live_str = t('Live · updates every 30s')
+            cb_ok_cls = 'cb-ok' if cb_ok else 'cb-stop'
+            cb_rsn_html = f'<span style="color:var(--red);font-size:11px">{cb_rsn}</span>' if not cb_ok else ''
+            loss_col = 'var(--red)' if cb_l > 0 else 'var(--text)'
+            win_col = 'var(--green)' if cb_w > 0 else 'var(--text)'
+            risk_col = 'var(--yellow)' if cb_m != 1.0 else 'var(--text)'
+            exec_active_text = t('Auto-execution active') if self.auto_execute_enabled else t('Auto-execution disabled')
+            new_sig_title = t("New signal detected")
+            new_sig_body_suffix = t("new signal(s) from LastEdge.")
+            port_label = "Port" if lang == "en" else "Puerto"
+            no_signals_msg = t("No signals in this session")
+
             return f"""<!DOCTYPE html>
 <html lang="{lang}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -845,20 +954,20 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
   <h1>⚡ LastEdge <span style="color:var(--muted);font-weight:400">/ Dashboard</span></h1>
   <div class="meta">
     <div class="lang-bar">
-      <a href="/api/set-language?lang=en&redirect=/" title="English" class="lang-btn {'lang-active' if lang == 'en' else ''}">🇬🇧</a>
-      <a href="/api/set-language?lang=es&redirect=/" title="Español" class="lang-btn {'lang-active' if lang == 'es' else ''}">🇪🇸</a>
+      <a href="/api/set-language?lang=en&redirect=/" title="English" class="lang-btn {lang_en_active}">🇬🇧</a>
+      <a href="/api/set-language?lang=es&redirect=/" title="Español" class="lang-btn {lang_es_active}">🇪🇸</a>
     </div>
-    <div><span class="dot-live"></span>{'Live · updates every 30s' if lang == 'en' else 'En vivo · actualiza cada 30s'}</div>
+    <div><span class="dot-live"></span>{live_str}</div>
     <div>{now_str}</div>
     <div style="color:{mt5_col}">{mt5_ind}</div>
   </div>
 </div>
 
 <div class="grid-4">
-  <div class="card"><div class="card-title">{t("Status")}</div><div class="card-value" style="font-size:18px;color:var(--green)">{sys_st}</div><div class="card-sub">{t("Uptime")}: {uptime}</div></div>
-  <div class="card"><div class="card-title">{t("Signals (session)")}</div><div class="card-value" style="color:var(--blue)">{s_today}</div><div class="card-sub">{t("Shown_count")}: {s_shown} ({s_rate})</div></div>
-  <div class="card"><div class="card-title">{t("Open positions")}</div><div class="card-value" style="color:var(--purple)">{pos_open}</div><div class="card-sub">{t("Last signal")}: {ls_fmt}</div></div>
-  <div class="card"><div class="card-title">{t("Total profit")}</div><div class="card-value" style="color:{p_color}">{t_profit:+.2f} €</div><div class="card-sub">{t("MT5 account")}</div></div>
+  <div class="card"><div class="card-title">{t("Status")}</div><div class="card-value" id="stat-sys-status" style="font-size:18px;color:var(--green)">{sys_st}</div><div class="card-sub" id="stat-uptime">{t("Uptime")}: {uptime}</div></div>
+  <div class="card"><div class="card-title">{t("Signals (session)")}</div><div class="card-value" id="stat-signals-today" style="color:var(--blue)">{s_today}</div><div class="card-sub" id="stat-signals-shown">{t("Shown_count")}: {s_shown} ({s_rate})</div></div>
+  <div class="card"><div class="card-title">{t("Open positions")}</div><div class="card-value" id="stat-pos-open" style="color:var(--purple)">{pos_open}</div><div class="card-sub" id="stat-last-signal">{t("Last signal")}: {ls_fmt}</div></div>
+  <div class="card"><div class="card-title">{t("Total profit")}</div><div class="card-value" id="stat-total-profit" style="color:{p_color}">{t_profit:+.2f} €</div><div class="card-sub">{t("MT5 account")}</div></div>
 </div>
 
 <div class="grid-3">
@@ -870,17 +979,17 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
     </div>
     <div class="card-sub" style="margin-top:6px">
       {t("Base")}: {eq_base:,.2f} € &nbsp;·&nbsp;
-      {t("Closed")}: <span style="color:{eq_color}">{change_sign}{eq_change:+.2f} €</span>
+      {t("Closed")}: <span style="color:{eq_color}" id="eq-closed">{change_sign}{eq_change:+.2f} €</span>
     </div>
     <div class="card-sub" style="margin-top:2px">
       {t("Floating")}: <span id="eq-float" style="color:{float_color}">{float_sign}{eq_floating:+.2f} €</span>
-      &nbsp;<span style="color:var(--muted);font-size:11px">({open_n} {t("open")})</span>
+      &nbsp;<span style="color:var(--muted);font-size:11px" id="eq-open-count">({open_n} {t("open")})</span>
     </div>
   </div>
   <div class="card">
     <div class="card-title">{t("Session winrate")}</div>
-    <div class="card-value" style="color:{wr_color}">{wr_pct:.0f}%</div>
-    <div class="card-sub">✅ {wins_n} {t("wins")} · ❌ {losses_n} {t("losses")} · ⏳ {open_n} {t("open pos")}</div>
+    <div class="card-value" id="stat-winrate" style="color:{wr_color}">{wr_pct:.0f}%</div>
+    <div class="card-sub" id="stat-winrate-sub">✅ {wins_n} {t("wins")} · ❌ {losses_n} {t("losses")} · ⏳ {open_n} {t("open pos")}</div>
   </div>
   <div class="card">
     <div class="card-title">{t("Export signals (7 days)")}</div>
@@ -899,13 +1008,13 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
   <div class="card">
     <div class="section-title">{t("Circuit Breaker")}</div>
     <div class="cb-bar" style="margin-bottom:12px">
-      <span class="cb-pill {'cb-ok' if cb_ok else 'cb-stop'}">{cb_lbl}</span>
-      {'<span style="color:var(--red);font-size:11px">' + cb_rsn + '</span>' if not cb_ok else ''}
+      <span class="cb-pill {cb_ok_cls}">{cb_lbl}</span>
+      {cb_rsn_html}
     </div>
     <div class="cb-bar">
-      <div class="cb-stat">{t("Losses")}: <span style="color:{'var(--red)' if cb_l>0 else 'var(--text)'}">{cb_l}</span></div>
-      <div class="cb-stat">{t("Wins")}: <span style="color:{'var(--green)' if cb_w>0 else 'var(--text)'}">{cb_w}</span></div>
-      <div class="cb-stat">{t("Risk")} ×<span style="color:{'var(--yellow)' if cb_m!=1.0 else 'var(--text)'}">{cb_m:.1f}</span></div>
+      <div class="cb-stat">{t("Losses")}: <span style="color:{loss_col}">{cb_l}</span></div>
+      <div class="cb-stat">{t("Wins")}: <span style="color:{win_col}">{cb_w}</span></div>
+      <div class="cb-stat">{t("Risk")} ×<span style="color:{risk_col}">{cb_m:.1f}</span></div>
     </div>
   </div>
   <div class="card">
@@ -934,21 +1043,22 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
 </div>
 
 <div class="footer">
-  <span>{"Port" if lang == "en" else "Puerto"}: <a href="http://localhost:{port}">:{port}</a> · <a href="/api/metrics">API JSON</a> · <a href="/api/export">Export CSV</a></span>
-  <span id="exec-status">{'✅ Auto-execution MT5 active' if self.auto_execute_enabled else '⏸ Auto-execution disabled (AUTO_EXECUTE_SIGNALS=0)' if lang == 'en' else ('✅ Auto-ejecución MT5 activa' if self.auto_execute_enabled else '⏸ Auto-ejecución desactivada (AUTO_EXECUTE_SIGNALS=0)')}</span>
+  <span>{port_label}: <a href="http://localhost:{port}">:{port}</a> · <a href="/api/metrics">API JSON</a> · <a href="/api/export">Export CSV</a></span>
+  <span id="exec-status">{exec_active_text}</span>
 </div>
 
 <script>
+var equityChart = null;
 (function() {{
   try {{
     var eqData = {eq_pts_json};
     var eqColor = '{eq_color}';
     var ctx = document.getElementById('equityChart');
     if (!ctx || !eqData || eqData.length < 2) return;
-    new Chart(ctx, {{
+    equityChart = new Chart(ctx, {{
       type: 'line',
       data: {{
-        labels: eqData.map(function(_, i) {{ return i === 0 ? 'Inicio' : 'T+' + i; }}),
+        labels: eqData.map(function(_, i) {{ return i === 0 ? '{t("Start")}' : 'T+' + i; }}),
         datasets: [{{
           label: 'Equity (€)',
           data: eqData,
@@ -962,6 +1072,7 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
       }},
       options: {{
         responsive: true,
+        animation: false,
         plugins: {{
           legend: {{ display: false }},
           tooltip: {{
@@ -980,17 +1091,23 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
 }})();
 
 // ── Symbol filter ─────────────────────────────────────────────────────────
+var currentFilter = 'ALL';
 function filterSignals(sym) {{
+  currentFilter = sym;
   document.querySelectorAll('.filter-btn').forEach(function(b) {{
-    b.classList.toggle('active', b.textContent === sym);
+    b.classList.toggle('active', b.textContent.trim() === sym);
   }});
+  applyFilter();
+}}
+
+function applyFilter() {{
   var rows = document.querySelectorAll('#signals-table tbody tr');
   rows.forEach(function(row) {{
-    if (sym === 'ALL') {{
+    if (currentFilter === 'ALL') {{
       row.style.display = '';
     }} else {{
       var symCell = row.querySelector('td:nth-child(2)');
-      row.style.display = (symCell && symCell.textContent.trim() === sym) ? '' : 'none';
+      row.style.display = (symCell && symCell.textContent.trim() === currentFilter) ? '' : 'none';
     }}
   }});
 }}
@@ -1004,8 +1121,8 @@ function _checkNewSignals() {{
       var diff = count - _lastSignalCount;
       _lastSignalCount = count;
       if (Notification && Notification.permission === 'granted') {{
-        new Notification('🎯 {"New signal detected" if lang == "en" else "Nueva señal detectada"}', {{
-          body: diff + '{"new signal(s) from LastEdge." if lang == "en" else " nueva(s) señal(es) en LastEdge."}',
+        new Notification('🎯 {new_sig_title}', {{
+          body: diff + ' {new_sig_body_suffix}',
           icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="28" font-size="28">⚡</text></svg>'
         }});
       }}
@@ -1015,32 +1132,167 @@ function _checkNewSignals() {{
 if (Notification && Notification.permission === 'default') {{
   Notification.requestPermission();
 }}
-setInterval(_checkNewSignals, 30000);
 
-// ── Equity en tiempo real (actualiza cada 10s sin recargar) ──────────────
-function _updateEquity() {{
-  fetch('/api/equity').then(function(r) {{ return r.json(); }}).then(function(d) {{
-    var total   = d.total_equity || 0;
-    var change  = d.change || 0;
-    var pct     = d.change_pct || 0;
-    var float_  = d.floating_pnl || 0;
-    var color   = change >= 0 ? '#3fb950' : '#f85149';
-    var fcolor  = float_ >= 0 ? '#3fb950' : '#f85149';
-    var sign    = change >= 0 ? '+' : '';
-    var fsign   = float_ >= 0 ? '+' : '';
+// ── Client-side JS update loop polling /api/data every 10s via fetch() ────
+function fetchDashboardUpdate() {{
+  fetch('/api/data')
+    .then(function(r) {{ return r.json(); }})
+    .then(function(data) {{
+      if (!data) return;
+      var metrics = data.metrics || {{}};
+      var sig = metrics.signals || {{}};
+      var trd = metrics.trading || {{}};
+      var eq = data.equity || {{}};
+      var wr = data.win_rate || {{}};
+      var sessionSignals = data.session_signals || [];
 
-    var elTotal = document.getElementById('eq-total');
-    var elPct   = document.getElementById('eq-pct');
-    var elFloat = document.getElementById('eq-float');
+      // Update stat counters
+      var elSysStatus = document.getElementById('stat-sys-status');
+      if (elSysStatus && metrics.system_status) elSysStatus.textContent = metrics.system_status;
 
-    if (elTotal) {{ elTotal.textContent = total.toLocaleString('es-ES', {{minimumFractionDigits:2, maximumFractionDigits:2}}) + ' €'; elTotal.style.color = color; }}
-    if (elPct)   {{ elPct.textContent   = sign + pct.toFixed(2) + '%'; elPct.style.color = color; }}
-    if (elFloat) {{ elFloat.textContent = fsign + float_.toFixed(2) + ' €'; elFloat.style.color = fcolor; }}
-  }}).catch(function() {{}});
+      var elUptime = document.getElementById('stat-uptime');
+      if (elUptime && metrics.uptime_formatted) {{
+        elUptime.textContent = '{t("Uptime")}: ' + metrics.uptime_formatted;
+      }}
+
+      var elSigToday = document.getElementById('stat-signals-today');
+      if (elSigToday) elSigToday.textContent = sig.today || 0;
+
+      var elSigShown = document.getElementById('stat-signals-shown');
+      if (elSigShown) {{
+        var sRate = (sig.show_rate || 0).toFixed(0) + '%';
+        elSigShown.textContent = '{t("Shown_count")}: ' + sessionSignals.length + ' (' + sRate + ')';
+      }}
+
+      var elPosOpen = document.getElementById('stat-pos-open');
+      if (elPosOpen) elPosOpen.textContent = trd.positions_open || 0;
+
+      var elLastSig = document.getElementById('stat-last-signal');
+      if (elLastSig) {{
+        var ls = sig.last_signal_time || '';
+        var lsFmt = ls ? ls.substring(0, 16).replace('T', ' ') : '—';
+        elLastSig.textContent = '{t("Last signal")}: ' + lsFmt;
+      }}
+
+      var elProfit = document.getElementById('stat-total-profit');
+      if (elProfit) {{
+        var pVal = trd.total_profit || 0.0;
+        var pSign = pVal >= 0 ? '+' : '';
+        elProfit.textContent = pSign + pVal.toFixed(2) + ' €';
+        elProfit.style.color = pVal >= 0 ? '#3fb950' : '#f85149';
+      }}
+
+      // Update Equity Card
+      var total = eq.total_equity || 0;
+      var change = eq.change || 0;
+      var pct = eq.change_pct || 0;
+      var float_ = eq.floating_pnl || 0;
+      var color = change >= 0 ? '#3fb950' : '#f85149';
+      var fcolor = float_ >= 0 ? '#3fb950' : '#f85149';
+      var sign = change >= 0 ? '+' : '';
+      var fsign = float_ >= 0 ? '+' : '';
+
+      var elTotal = document.getElementById('eq-total');
+      var elPct = document.getElementById('eq-pct');
+      var elClosed = document.getElementById('eq-closed');
+      var elFloat = document.getElementById('eq-float');
+      var elOpenCnt = document.getElementById('eq-open-count');
+
+      if (elTotal) {{ elTotal.textContent = total.toLocaleString('es-ES', {{minimumFractionDigits:2, maximumFractionDigits:2}}) + ' €'; elTotal.style.color = color; }}
+      if (elPct) {{ elPct.textContent = sign + pct.toFixed(2) + '%'; elPct.style.color = color; }}
+      if (elClosed) {{ elClosed.textContent = sign + change.toFixed(2) + ' €'; elClosed.style.color = color; }}
+      if (elFloat) {{ elFloat.textContent = fsign + float_.toFixed(2) + ' €'; elFloat.style.color = fcolor; }}
+      if (elOpenCnt) {{ elOpenCnt.textContent = '(' + (wr.open || 0) + ' {t("open")})'; }}
+
+      // Update Win Rate
+      var elWr = document.getElementById('stat-winrate');
+      var wrPct = wr.win_rate_pct || 0;
+      var wrColor = wrPct >= 50 ? '#3fb950' : (wrPct >= 40 ? '#d29922' : '#f85149');
+      if (elWr) {{
+        elWr.textContent = wrPct.toFixed(0) + '%';
+        elWr.style.color = wrColor;
+      }}
+      var elWrSub = document.getElementById('stat-winrate-sub');
+      if (elWrSub) {{
+        elWrSub.textContent = '✅ ' + (wr.wins || 0) + ' {t("wins")} · ❌ ' + (wr.losses || 0) + ' {t("losses")} · ⏳ ' + (wr.open || 0) + ' {t("open pos")}';
+      }}
+
+      // Update Signals Table
+      var tbody = document.querySelector('#signals-table tbody');
+      if (tbody && sessionSignals) {{
+        if (sessionSignals.length === 0) {{
+          tbody.innerHTML = '<tr><td colspan="12" class="empty">{no_signals_msg}</td></tr>';
+        }} else {{
+          var html = '';
+          var rev = sessionSignals.slice(-50).reverse();
+          rev.forEach(function(ev) {{
+            var ts = (ev.timestamp || '').substring(0, 16).replace('T', ' ');
+            var sym = ev.symbol || '';
+            var stype = ev.signal_type || '';
+            var conf = ev.confidence || '';
+            var shown = ev.shown ? '✅' : '—';
+            var cc = {{'HIGH':'conf-high','VERY_HIGH':'conf-high','MEDIUM-HIGH':'conf-med-high','MEDIUM':'conf-med'}}[conf] || 'conf-low';
+            var dc = stype === 'BUY' ? 'dir-buy' : 'dir-sell';
+            var entry = ev.entry; var sl = ev.sl; var tp = ev.tp;
+
+            var fmtVal = function(v) {{
+              if (v == null) return '—';
+              if (sym === 'EURUSD') return v.toFixed(5);
+              if (sym === 'XAUUSD') return v.toFixed(2);
+              return v.toFixed(0);
+            }};
+
+            var rrStr = (entry != null && sl != null && tp != null && Math.abs(entry - sl) > 0)
+              ? (Math.abs(tp - entry) / Math.abs(entry - sl)).toFixed(1)
+              : '—';
+
+            var fs = ev.final_status;
+            var stHtml = '<span style="color:#8b949e">—</span>';
+            if (fs === 'win') {{
+              stHtml = '<span style="color:#3fb950;font-weight:600">WIN ✅</span>';
+            }} else if (fs === 'loss') {{
+              stHtml = '<span style="color:#f85149;font-weight:600">LOSS ❌</span>';
+            }} else if (fs === 'open') {{
+              var pnl = ev.unrealized_pnl;
+              var cur = ev.current_price;
+              if (pnl != null && cur != null) {{
+                var pnlColor = pnl >= 0 ? '#3fb950' : '#f85149';
+                var pnlSign = pnl >= 0 ? '+' : '';
+                stHtml = '<span style="color:' + pnlColor + '">OPEN ' + pnlSign + pnl.toFixed(0) + '%</span>';
+              }} else {{
+                stHtml = '<span style="color:#d29922">OPEN ⏳</span>';
+              }}
+            }}
+
+            var latStr = (ev.latency_ms != null) ? ev.latency_ms + ' ms' : '—';
+            var slipStr = (ev.slippage_pips != null) ? ev.slippage_pips.toFixed(1) + ' pips' : '—';
+
+            html += '<tr><td>' + ts + '</td><td class="sym">' + sym + '</td>'
+                  + '<td class="' + dc + '">' + stype + '</td><td class="' + cc + '">' + conf + '</td>'
+                  + '<td>' + fmtVal(entry) + '</td><td style="color:var(--red)">' + fmtVal(sl) + '</td>'
+                  + '<td style="color:var(--green)">' + fmtVal(tp) + '</td>'
+                  + '<td>' + rrStr + '</td>'
+                  + '<td>' + latStr + '</td>'
+                  + '<td>' + slipStr + '</td>'
+                  + '<td>' + stHtml + '</td><td>' + shown + '</td></tr>\n';
+          }});
+          tbody.innerHTML = html;
+        }}
+        applyFilter();
+      }}
+
+      // Update Chart.js datasets in-place
+      if (equityChart && data.equity_pts) {{
+        equityChart.data.labels = data.equity_pts.map(function(_, i) {{ return i === 0 ? '{t("Start")}' : 'T+' + i; }});
+        equityChart.data.datasets[0].data = data.equity_pts;
+        equityChart.update('none');
+      }}
+    }})
+    .catch(function(err) {{
+      console.warn('Dashboard poll error:', err);
+    }});
 }}
-setInterval(_updateEquity, 10000);
-
-setTimeout(()=>location.reload(),30000);
+setInterval(fetchDashboardUpdate, 10000);
 </script>
 </body></html>"""
 
@@ -1100,72 +1352,75 @@ setTimeout(()=>location.reload(),30000);
             from core.trade_costs import get_round_trip_cost_pips
 
             with self.lock:
-                for ev in self.signal_history:
-                    # Si ya está cerrada, no recalcular
-                    if ev.final_status in ('win', 'loss'):
-                        continue
-                    if not (ev.entry and ev.sl and ev.tp and ev.shown):
-                        continue
+                history_copy = list(self.signal_history)
 
-                    tick = mt5.symbol_info_tick(ev.symbol)
-                    if not tick:
-                        continue
+            for ev in history_copy:
+                # Si ya está cerrada, no recalcular
+                if ev.final_status in ('win', 'loss'):
+                    continue
+                if not (ev.entry and ev.sl and ev.tp and ev.shown):
+                    continue
 
-                    price = (tick.bid + tick.ask) / 2
-                    ev.current_price = price
+                tick = mt5.symbol_info_tick(ev.symbol)
+                if not tick:
+                    continue
+
+                price = (tick.bid + tick.ask) / 2
+                ev.current_price = price
+                with self.lock:
                     self.last_mt5_update = datetime.now(timezone.utc)
 
-                    # Calcular P&L no realizado como % del riesgo (con costes)
-                    risk = abs(ev.entry - ev.sl)
-                    if risk > 0:
-                        if ev.signal_type == 'BUY':
-                            move = price - ev.entry
-                        else:
-                            move = ev.entry - price
+                # Calcular P&L no realizado como % del riesgo (con costes)
+                risk = abs(ev.entry - ev.sl)
+                if risk > 0:
+                    if ev.signal_type == 'BUY':
+                        move = price - ev.entry
+                    else:
+                        move = ev.entry - price
 
-                        # Descontar coste de spread+comisión del movimiento bruto
+                    # Descontar coste de spread+comisión del movimiento bruto
+                    pip_sizes = {'EURUSD': 0.0001, 'XAUUSD': 0.1, 'BTCEUR': 1.0}
+                    pip_size  = pip_sizes.get(ev.symbol, 0.0001)
+                    cost_pips = get_round_trip_cost_pips(ev.symbol)
+                    cost_price = cost_pips * pip_size   # coste en unidades de precio
+                    move_net  = move - cost_price       # movimiento neto tras costes
+
+                    ev.unrealized_pnl = (move_net / risk) * 100   # % del riesgo
+
+                # Verificar si tocó TP o SL — estado permanente
+                prev_status = ev.final_status
+                if ev.signal_type == 'BUY':
+                    if price >= ev.tp:
+                        ev.final_status = 'win'
+                    elif price <= ev.sl:
+                        ev.final_status = 'loss'
+                    else:
+                        ev.final_status = 'open'
+                else:
+                    if price <= ev.tp:
+                        ev.final_status = 'win'
+                    elif price >= ev.sl:
+                        ev.final_status = 'loss'
+                    else:
+                        ev.final_status = 'open'
+
+                # Notificar al circuit breaker al cerrar señal
+                if prev_status not in ('win', 'loss') and ev.final_status in ('win', 'loss'):
+                    try:
+                        from core.circuit_breaker import get_circuit_breaker
                         pip_sizes = {'EURUSD': 0.0001, 'XAUUSD': 0.1, 'BTCEUR': 1.0}
                         pip_size  = pip_sizes.get(ev.symbol, 0.0001)
-                        cost_pips = get_round_trip_cost_pips(ev.symbol)
-                        cost_price = cost_pips * pip_size   # coste en unidades de precio
-                        move_net  = move - cost_price       # movimiento neto tras costes
-
-                        ev.unrealized_pnl = (move_net / risk) * 100   # % del riesgo
-
-                    # Verificar si tocó TP o SL — estado permanente
-                    prev_status = ev.final_status
-                    if ev.signal_type == 'BUY':
-                        if price >= ev.tp:
-                            ev.final_status = 'win'
-                        elif price <= ev.sl:
-                            ev.final_status = 'loss'
+                        if ev.final_status == 'win':
+                            pips = abs(ev.tp - ev.entry) / pip_size
                         else:
-                            ev.final_status = 'open'
-                    else:
-                        if price <= ev.tp:
-                            ev.final_status = 'win'
-                        elif price >= ev.sl:
-                            ev.final_status = 'loss'
-                        else:
-                            ev.final_status = 'open'
-
-                    # Notificar al circuit breaker al cerrar señal
-                    if prev_status not in ('win', 'loss') and ev.final_status in ('win', 'loss'):
-                        try:
-                            from core.circuit_breaker import get_circuit_breaker
-                            pip_sizes = {'EURUSD': 0.0001, 'XAUUSD': 0.1, 'BTCEUR': 1.0}
-                            pip_size  = pip_sizes.get(ev.symbol, 0.0001)
-                            if ev.final_status == 'win':
-                                pips = abs(ev.tp - ev.entry) / pip_size
-                            else:
-                                pips = -abs(ev.entry - ev.sl) / pip_size
-                            get_circuit_breaker().record_result(
-                                outcome=ev.final_status.upper(),
-                                pips=pips,
-                                symbol=ev.symbol,
-                            )
-                        except Exception as cb_err:
-                            logger.debug(f"Circuit breaker record error: {cb_err}")
+                            pips = -abs(ev.entry - ev.sl) / pip_size
+                        get_circuit_breaker().record_result(
+                            outcome=ev.final_status.upper(),
+                            pips=pips,
+                            symbol=ev.symbol,
+                        )
+                    except Exception as cb_err:
+                        logger.debug(f"Circuit breaker record error: {cb_err}")
 
         except Exception as e:
             logger.debug(f"Simulated positions update error: {e}")
@@ -1187,10 +1442,11 @@ setTimeout(()=>location.reload(),30000);
             margin = float(info.margin)
             free_margin = float(info.margin_free)
 
-            if self.metrics.paper_balance_base == 0.0:
-                self.metrics.paper_balance_base = balance
+            with self.lock:
+                if self.metrics.paper_balance_base == 0.0:
+                    self.metrics.paper_balance_base = balance
+                base = self.metrics.paper_balance_base
 
-            base = self.metrics.paper_balance_base
             change = equity - base
 
             return {
@@ -1207,7 +1463,8 @@ setTimeout(()=>location.reload(),30000);
 
         except Exception as e:
             logger.debug(f"get_equity_snapshot error: {e}")
-            base = self.metrics.paper_balance_base or 5000.0
+            with self.lock:
+                base = self.metrics.paper_balance_base or 5000.0
             return {
                 'mode': 'mt5',
                 'balance': base,
@@ -1223,14 +1480,16 @@ setTimeout(()=>location.reload(),30000);
     def _cleanup_old_data(self):
         try:
             cutoff = datetime.now(timezone.utc) - timedelta(hours=self.dashboard_config['history_retention_hours'])
-            while self.signal_history and self.signal_history[0].timestamp < cutoff:
-                self.signal_history.popleft()
-            while self.performance_history:
-                t = datetime.fromisoformat(self.performance_history[0]['timestamp'].replace('Z', '+00:00'))
-                if t < cutoff:
-                    self.performance_history.popleft()
-                else:
-                    break
+            with self.lock:
+                while self.signal_history and self.signal_history[0].timestamp < cutoff:
+                    self.signal_history.popleft()
+                while self.performance_history:
+                    t_str = self.performance_history[0]['timestamp']
+                    t_val = datetime.fromisoformat(t_str.replace('Z', '+00:00'))
+                    if t_val < cutoff:
+                        self.performance_history.popleft()
+                    else:
+                        break
         except Exception as e:
             logger.error(f"Cleanup error: {e}")
 
@@ -1241,6 +1500,20 @@ setTimeout(()=>location.reload(),30000);
 
     def _save_persisted_data(self):
         try:
+            with self.lock:
+                history_copy = list(self.signal_history)
+                metrics_data = {
+                    'signals_today': self.metrics.signals_today,
+                    'signals_shown': self.metrics.signals_shown,
+                    'signals_executed': self.metrics.signals_executed,
+                    'signals_rejected': self.metrics.signals_rejected,
+                    'symbol_activity': dict(self.metrics.symbol_activity),
+                    'symbol_performance': {k: dict(v) for k, v in self.metrics.symbol_performance.items()},
+                    'confidence_distribution': dict(self.metrics.confidence_distribution),
+                    'paper_balance': self.metrics.paper_balance,
+                    'paper_balance_base': self.metrics.paper_balance_base,
+                }
+
             history_serialized = [
                 {'timestamp': ev.timestamp.isoformat(), 'symbol': ev.symbol,
                  'strategy': ev.strategy, 'signal_type': ev.signal_type,
@@ -1251,25 +1524,15 @@ setTimeout(()=>location.reload(),30000);
                  'final_status': ev.final_status,
                  'current_price': ev.current_price,
                  'unrealized_pnl': ev.unrealized_pnl}
-                for ev in self.signal_history
+                for ev in history_copy
             ]
             data = {
-                'metrics': {
-                    'signals_today': self.metrics.signals_today,
-                    'signals_shown': self.metrics.signals_shown,
-                    'signals_executed': self.metrics.signals_executed,
-                    'signals_rejected': self.metrics.signals_rejected,
-                    'symbol_activity': dict(self.metrics.symbol_activity),
-                    'symbol_performance': self.metrics.symbol_performance,
-                    'confidence_distribution': dict(self.metrics.confidence_distribution),
-                    'paper_balance': self.metrics.paper_balance,
-                    'paper_balance_base': self.metrics.paper_balance_base,
-                },
+                'metrics': metrics_data,
                 'signal_history': history_serialized,
                 'last_save': datetime.now(timezone.utc).isoformat(),
             }
             with open(self.dashboard_config['data_file'], 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+                json.dump(data, f, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.error(f"Error saving data: {e}")
 

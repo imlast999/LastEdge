@@ -255,3 +255,35 @@ export async function fetchMonteCarloFan(
     overrides
   );
 }
+
+// ── Run Exit Research ────────────────────────────────────────────────────────
+
+export interface RunExitResearchResult {
+  ok: boolean;
+  taskId?: number;
+  message?: string;
+}
+
+/**
+ * Ejecuta / encola una simulación de Exit Research.
+ * POST /api/research/exit-research
+ */
+export async function runExitResearch(
+  params: { strategy: string; symbol: string },
+  overrides?: { url?: string; token?: string }
+): Promise<RunExitResearchResult> {
+  const { url, token } = resolveApiConfig(overrides);
+  const res = await fetch(`${url}/api/research/exit-research`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify(params),
+  });
+  const data = await res.json();
+  if (!res.ok || data.ok === false) {
+    throw new Error((data as any).message ?? `HTTP ${res.status}`);
+  }
+  return data as RunExitResearchResult;
+}

@@ -21,6 +21,7 @@ import { Router, Request, Response } from "express";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { logger } from "../lib/logger.js";
+import { run } from "../lib/db.js";
 
 export const researchRouter = Router();
 
@@ -152,6 +153,29 @@ researchRouter.get("/exit-research", (_req: Request, res: Response) => {
   } catch (err) {
     logger.error({ err }, "GET /api/research/exit-research error");
     res.status(500).json({ ok: false, message: "Failed to list exit research runs" });
+  }
+});
+
+// ── POST /api/research/exit-research ─────────────────────────────────────────
+
+researchRouter.post("/exit-research", (req: Request, res: Response) => {
+  const { symbol, strategy } = req.body;
+  if (!symbol || !strategy) {
+    res.status(400).json({ ok: false, message: "Missing required parameters: strategy and symbol" });
+    return;
+  }
+
+  try {
+    const result = run(
+      `INSERT INTO backtest_tasks (symbol, strategy, bars, cb_losses, cb_pause, status)
+       VALUES (?, ?, 20000, 4, 168, 'PENDING')`,
+      [String(symbol).toUpperCase(), String(strategy), 20000, 4, 168]
+    );
+
+    res.json({ ok: true, taskId: result.lastInsertRowid, message: "Exit research task queued successfully" });
+  } catch (err) {
+    logger.error({ err }, "POST /api/research/exit-research error");
+    res.status(500).json({ ok: false, message: "Failed to queue exit research task" });
   }
 });
 

@@ -22,6 +22,21 @@ set ROOT=%~dp0..
 set MOBILE=%ROOT%\artifacts\mobile
 set APIK_SERVER=%ROOT%\artifacts\api-server
 
+if exist "C:\Users\dev-eugenio\jdk-17.0.14+7" set "JAVA_HOME=C:\Users\dev-eugenio\jdk-17.0.14+7"
+if exist "C:\Users\dev-eugenio\android-sdk" (
+    set "ANDROID_HOME=C:\Users\dev-eugenio\android-sdk"
+    set "ANDROID_SDK_ROOT=C:\Users\dev-eugenio\android-sdk"
+    set "PATH=C:\Users\dev-eugenio\android-sdk\cmake\3.22.1\bin;C:\Users\dev-eugenio\android-sdk\ndk\27.1.12297006;C:\Users\dev-eugenio\android-sdk\build-tools\36.0.0;C:\Users\dev-eugenio\android-sdk\platform-tools;C:\Users\dev-eugenio\android-sdk\cmdline-tools\latest\bin;%PATH%"
+)
+if exist "C:\Users\dev-eugenio\AppData\Roaming\npm" set "PATH=C:\Users\dev-eugenio\AppData\Roaming\npm;%PATH%"
+if defined JAVA_HOME set "PATH=%JAVA_HOME%\bin;%PATH%"
+set "NODE_ENV=production"
+set "COMSPEC=C:\Windows\System32\cmd.exe"
+set "TEMP=C:\Users\dev-eugenio\AppData\Local\Temp"
+set "TMP=C:\Users\dev-eugenio\AppData\Local\Temp"
+set "EXPO_USE_COMMUNITY_AUTOLINKING=1"
+
+
 :: Perfil: release por defecto, debug si se pasa argumento
 set PROFILE=release
 if "%1"=="debug" set PROFILE=debug

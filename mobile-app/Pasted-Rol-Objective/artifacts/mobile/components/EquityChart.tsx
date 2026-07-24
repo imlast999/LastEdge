@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { View, StyleSheet, Text } from "react-native";
+import Svg, { Path, Defs, LinearGradient, Stop } from "react-native-svg";
 import { useColors } from "@/hooks/useColors";
 import type { EquityPoint } from "@/context/TradingContext";
 
@@ -22,93 +23,59 @@ export function EquityChart({ data, height = 100, showLabels = true }: Props) {
 
     const pts = data.map((d, i) => ({
       x: (i / (data.length - 1)) * 100,
-      y: 100 - ((d.value - min) / range) * 100,
+      y: 100 - ((d.value - min) / range) * 90 - 5,
     }));
 
     return { points: pts, minVal: min, maxVal: max, isPositive: isPos };
   }, [data]);
 
   const lineColor = isPositive ? colors.profit : colors.loss;
-  const fillColor = isPositive
-    ? "rgba(74, 222, 128, 0.08)"
-    : "rgba(248, 113, 113, 0.08)";
 
   if (points.length < 2) {
     return <View style={[styles.container, { height }]} />;
   }
 
-  const chartPadding = 4;
   const chartHeight = height - (showLabels ? 24 : 0);
+
+  const linePathD = points.reduce((acc, pt, i) => {
+    return i === 0 ? `M ${pt.x.toFixed(2)} ${pt.y.toFixed(2)}` : `${acc} L ${pt.x.toFixed(2)} ${pt.y.toFixed(2)}`;
+  }, "");
+
+  const areaPathD = `${linePathD} L 100 100 L 0 100 Z`;
+
+  const lastPt = points[points.length - 1];
 
   return (
     <View style={[styles.container, { height }]}>
       <View style={[styles.chartArea, { height: chartHeight }]}>
-        {points.map((pt, i) => {
-          if (i === 0) return null;
-          const prev = points[i - 1];
-          const x1 = `${prev.x}%`;
-          const x2 = `${pt.x}%`;
-          const y1 = chartPadding + (prev.y / 100) * (chartHeight - chartPadding * 2);
-          const y2 = chartPadding + (pt.y / 100) * (chartHeight - chartPadding * 2);
-          const dx = pt.x - prev.x;
-          const dy = y2 - y1;
-          const length = Math.sqrt(
-            (dx * 0.01 * 100) ** 2 + dy ** 2
-          );
-          const angle = Math.atan2(dy, dx * 0.01 * 100) * (180 / Math.PI);
-          const segWidth = Math.abs(dx / 100);
+        <Svg width="100%" height={chartHeight} viewBox="0 0 100 100" preserveAspectRatio="none">
+          <Defs>
+            <LinearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0%" stopColor={lineColor} stopOpacity={0.2} />
+              <Stop offset="100%" stopColor={lineColor} stopOpacity={0.0} />
+            </LinearGradient>
+          </Defs>
+          <Path d={areaPathD} fill="url(#equityGradient)" />
+          <Path
+            d={linePathD}
+            stroke={lineColor}
+            strokeWidth={2}
+            fill="none"
+            vectorEffect="non-scaling-stroke"
+          />
+        </Svg>
 
-          return (
-            <View
-              key={i}
-              style={[
-                styles.segment,
-                {
-                  left: x1 as any,
-                  top: y1,
-                  width: `${dx}%` as any,
-                  backgroundColor: "transparent",
-                },
-              ]}
-            >
-              <View
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: 1.5,
-                  backgroundColor: lineColor,
-                  transform: [
-                    { translateY: (y2 - y1) / 2 },
-                    { rotate: `${Math.atan2(y2 - y1, 100) * (180 / Math.PI)}deg` },
-                  ],
-                  transformOrigin: "0 0",
-                }}
-              />
-            </View>
-          );
-        })}
-
-        {points.map((pt, i) => {
-          if (i !== points.length - 1) return null;
-          const x = `${pt.x}%`;
-          const y = chartPadding + (pt.y / 100) * (chartHeight - chartPadding * 2);
-          return (
-            <View
-              key="dot"
-              style={[
-                styles.dot,
-                {
-                  left: x as any,
-                  top: y,
-                  backgroundColor: lineColor,
-                  shadowColor: lineColor,
-                },
-              ]}
-            />
-          );
-        })}
+        <View
+          style={[
+            styles.dot,
+            {
+              left: `${lastPt.x}%` as any,
+              top: (lastPt.y / 100) * chartHeight,
+              backgroundColor: lineColor,
+              shadowColor: lineColor,
+            },
+          ]}
+        />
       </View>
 
       {showLabels && (
@@ -133,10 +100,6 @@ const styles = StyleSheet.create({
     width: "100%",
     position: "relative",
     overflow: "hidden",
-  },
-  segment: {
-    position: "absolute",
-    height: 2,
   },
   dot: {
     position: "absolute",

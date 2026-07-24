@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS trade_journal (
     market_conditions TEXT,             -- {"atr": ..., "trend": ..., "volatility_ratio": ...}
 
     -- Sesión de mercado
-    market_session  TEXT,               -- london | newyork | overlap | asian | always
+    market_session  TEXT,               -- london | newyork | overlap | asian | night | always
 
     -- MT5 ticket (si se ejecutó en live/paper con MT5)
     mt5_ticket      INTEGER,
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS trade_journal (
     close_time      TEXT,
 
     -- Resultado
-    result          TEXT,               -- WIN | LOSS | BREAKEVEN | PENDING
+    result          TEXT,               -- WIN | LOSS | BREAKEVEN | PENDING | REJECTED | FAILED
     close_price     REAL,
     pnl_pips        REAL,               -- pips netos (incluye costes)
     pnl_eur         REAL,               -- P&L en EUR/USD según balance
@@ -77,12 +77,29 @@ CREATE TABLE IF NOT EXISTS trade_journal (
     -- Notas libres
     notes           TEXT,
 
-    -- Execution Quality (Slippage & Latency)
+    -- Execution Quality & Telemetry (P1.1)
     requested_price REAL,
     executed_price  REAL,
-    slippage_pips   REAL,
-    latency_ms      INTEGER,
+    slippage_pips   REAL,               -- Slippage con signo (positivo = adverso, negativo = favorable)
+    slippage_cost_eur REAL,             -- Impacto financiero en EUR
+    spread_open_pips REAL,              -- Spread al abrir
+    spread_close_pips REAL,             -- Spread al cerrar
+    max_allowed_spread_pips REAL,       -- Límite de spread de la estrategia
+    latency_ms      INTEGER,            -- Latencia total ida y vuelta
+    fill_time_ms    INTEGER,            -- Tiempo de llenado por el bróker
+    execution_session TEXT,             -- LONDON | NEWYORK | OVERLAP | ASIAN | NIGHT
+    execution_status TEXT DEFAULT 'SUCCESS', -- SUCCESS | REJECTED | FAILED | RETRIED
+    execution_error TEXT,               -- Mensaje de error si falla
+    mt5_retcode     INTEGER,            -- Código retcode de MT5 (10009, 10015, etc.)
     broker_message  TEXT,
+
+    -- Telemetría de Cierre
+    close_requested_price REAL,
+    close_executed_price  REAL,
+    close_slippage_pips   REAL,
+    close_latency_ms      INTEGER,
+    commission            REAL,
+    swap                  REAL,
 
     created_at      TEXT DEFAULT (datetime('now'))
 );
@@ -123,33 +140,42 @@ class TradeJournal:
             conn.close()
 
     def _ensure_table(self):
-        """Crea la tabla si no existe (migración idempotente)."""
+        """Crea la tabla si no existe (migración idempotente sin romper esquemas)."""
         try:
             with self._conn() as conn:
                 conn.execute(_CREATE_TABLE)
                 conn.execute(_CREATE_INDEX)
                 
-                # Migración: Añadir columnas de Execution Quality si no existen
-                try:
-                    conn.execute("ALTER TABLE trade_journal ADD COLUMN requested_price REAL;")
-                except sqlite3.OperationalError:
-                    pass
-                try:
-                    conn.execute("ALTER TABLE trade_journal ADD COLUMN executed_price REAL;")
-                except sqlite3.OperationalError:
-                    pass
-                try:
-                    conn.execute("ALTER TABLE trade_journal ADD COLUMN slippage_pips REAL;")
-                except sqlite3.OperationalError:
-                    pass
-                try:
-                    conn.execute("ALTER TABLE trade_journal ADD COLUMN latency_ms INTEGER;")
-                except sqlite3.OperationalError:
-                    pass
-                try:
-                    conn.execute("ALTER TABLE trade_journal ADD COLUMN broker_message TEXT;")
-                except sqlite3.OperationalError:
-                    pass
+                # Migración segura utilizando PRAGMA table_info
+                existing_cols = {row['name'] for row in conn.execute("PRAGMA table_info(trade_journal)").fetchall()}
+                new_columns = [
+                    ("requested_price", "REAL"),
+                    ("executed_price", "REAL"),
+                    ("slippage_pips", "REAL"),
+                    ("slippage_cost_eur", "REAL"),
+                    ("spread_open_pips", "REAL"),
+                    ("spread_close_pips", "REAL"),
+                    ("max_allowed_spread_pips", "REAL"),
+                    ("latency_ms", "INTEGER"),
+                    ("fill_time_ms", "INTEGER"),
+                    ("execution_session", "TEXT"),
+                    ("execution_status", "TEXT"),
+                    ("execution_error", "TEXT"),
+                    ("mt5_retcode", "INTEGER"),
+                    ("broker_message", "TEXT"),
+                    ("close_requested_price", "REAL"),
+                    ("close_executed_price", "REAL"),
+                    ("close_slippage_pips", "REAL"),
+                    ("close_latency_ms", "INTEGER"),
+                    ("commission", "REAL"),
+                    ("swap", "REAL"),
+                ]
+                for col_name, col_type in new_columns:
+                    if col_name not in existing_cols:
+                        try:
+                            conn.execute(f"ALTER TABLE trade_journal ADD COLUMN {col_name} {col_type};")
+                        except sqlite3.OperationalError as err:
+                            logger.debug(f"[Journal] Nota de migración de columna {col_name}: {err}")
                     
         except Exception as e:
             logger.error(f"[Journal] Error creando tabla o migrando: {e}")
@@ -172,26 +198,19 @@ class TradeJournal:
         requested_price: Optional[float] = None,
         executed_price: Optional[float] = None,
         slippage_pips: Optional[float] = None,
+        slippage_cost_eur: Optional[float] = None,
+        spread_open_pips: Optional[float] = None,
+        max_allowed_spread_pips: Optional[float] = None,
         latency_ms: Optional[int] = None,
+        fill_time_ms: Optional[int] = None,
+        execution_session: Optional[str] = None,
+        execution_status: str = 'SUCCESS',
+        execution_error: Optional[str] = None,
+        mt5_retcode: Optional[int] = None,
         broker_message: Optional[str] = None,
     ) -> int:
         """
-        Registra la apertura de un trade.
-
-        Args:
-            signal:            Dict de señal con symbol, type, entry, sl, tp.
-            score:             Score final del FlexibleScoring (0–1).
-            confidence:        Nivel de confianza ('HIGH', 'MEDIUM', etc.).
-            confidence_score:  Score numérico del ConfidenceSystem (0–1).
-            market_conditions: Dict de condiciones de mercado al entrar.
-            market_session:    Sesión activa ('london', 'newyork', etc.).
-            lot_size:          Tamaño del lote ejecutado.
-            mt5_ticket:        Ticket de MT5 si se ejecutó.
-            mode:              'live' (ejecución MT5).
-            notes:             Notas libres.
-
-        Returns:
-            ID del registro creado (usar para log_close).
+        Registra la apertura de un trade (o un intento de orden fallida/rechazada).
         """
         symbol   = str(signal.get('symbol', 'UNKNOWN')).upper()
         sig_type = str(signal.get('type', 'BUY')).upper()
@@ -202,6 +221,7 @@ class TradeJournal:
 
         mc_json = json.dumps(market_conditions or {}, ensure_ascii=False)
         now_iso = datetime.now(timezone.utc).isoformat()
+        initial_result = 'PENDING' if execution_status == 'SUCCESS' else execution_status
 
         try:
             with self._conn() as conn:
@@ -213,24 +233,30 @@ class TradeJournal:
                          confidence, confidence_score, signal_score,
                          market_conditions, market_session,
                          mt5_ticket, entry_time, result, notes,
-                         requested_price, executed_price, slippage_pips, latency_ms, broker_message)
+                         requested_price, executed_price, slippage_pips, slippage_cost_eur,
+                         spread_open_pips, max_allowed_spread_pips, latency_ms, fill_time_ms,
+                         execution_session, execution_status, execution_error, mt5_retcode, broker_message)
                     VALUES
                         (?, ?, ?, ?,
                          ?, ?, ?, ?,
                          ?, ?, ?,
                          ?, ?,
-                         ?, ?, 'PENDING', ?,
+                         ?, ?, ?, ?,
+                         ?, ?, ?, ?,
+                         ?, ?, ?, ?,
                          ?, ?, ?, ?, ?)
                     """,
                     (symbol, strategy, sig_type, mode,
                      entry, sl, tp, lot_size if lot_size else None,
                      confidence, confidence_score, score,
-                     mc_json, market_session,
-                     mt5_ticket, now_iso, notes,
-                     requested_price, executed_price, slippage_pips, latency_ms, broker_message),
+                     mc_json, market_session or execution_session or '',
+                     mt5_ticket, now_iso, initial_result, notes,
+                     requested_price, executed_price, slippage_pips, slippage_cost_eur,
+                     spread_open_pips, max_allowed_spread_pips, latency_ms, fill_time_ms,
+                     execution_session or market_session or '', execution_status, execution_error, mt5_retcode, broker_message),
                 )
                 trade_id = cur.lastrowid
-                logger.debug(f"[Journal] Entry logged: id={trade_id} {symbol} {sig_type} @{entry}")
+                logger.debug(f"[Journal] Entry logged: id={trade_id} {symbol} {sig_type} status={execution_status}")
                 return trade_id
         except Exception as e:
             logger.error(f"[Journal] Error en log_entry: {e}")
@@ -245,20 +271,16 @@ class TradeJournal:
         pnl_pips: float = 0.0,
         pnl_eur: float = 0.0,
         notes: str = '',
+        spread_close_pips: Optional[float] = None,
+        close_requested_price: Optional[float] = None,
+        close_executed_price: Optional[float] = None,
+        close_slippage_pips: Optional[float] = None,
+        close_latency_ms: Optional[int] = None,
+        commission: Optional[float] = None,
+        swap: Optional[float] = None,
     ) -> bool:
         """
-        Actualiza el cierre de un trade.
-
-        Args:
-            trade_id:    ID devuelto por log_entry.
-            result:      'WIN' | 'LOSS' | 'BREAKEVEN'.
-            close_price: Precio de cierre.
-            pnl_pips:    P&L en pips (neto de costes).
-            pnl_eur:     P&L en EUR/USD.
-            notes:       Notas adicionales al cierre.
-
-        Returns:
-            True si se actualizó correctamente.
+        Actualiza el cierre de un trade con telemetría de salida.
         """
         close_iso = datetime.now(timezone.utc).isoformat()
         try:
@@ -267,10 +289,14 @@ class TradeJournal:
                     """
                     UPDATE trade_journal
                     SET result=?, close_price=?, pnl_pips=?, pnl_eur=?,
+                        spread_close_pips=?, close_requested_price=?, close_executed_price=?,
+                        close_slippage_pips=?, close_latency_ms=?, commission=?, swap=?,
                         close_time=?, notes = CASE WHEN notes='' THEN ? ELSE notes||' | '||? END
                     WHERE id=?
                     """,
                     (result.upper(), close_price, pnl_pips, pnl_eur,
+                     spread_close_pips, close_requested_price, close_executed_price,
+                     close_slippage_pips, close_latency_ms, commission, swap,
                      close_iso, notes, notes, trade_id),
                 )
                 logger.debug(f"[Journal] Close logged: id={trade_id} result={result} pnl={pnl_pips:.1f}p")
@@ -290,6 +316,9 @@ class TradeJournal:
         pnl_eur: float = 0.0,
         mt5_ticket: Optional[int] = None,
         notes: str = '',
+        spread_close_pips: Optional[float] = None,
+        close_slippage_pips: Optional[float] = None,
+        close_latency_ms: Optional[int] = None,
     ) -> bool:
         """Cierra el trade PENDING que coincida por ticket MT5 o por entrada."""
         try:
@@ -319,6 +348,9 @@ class TradeJournal:
                 pnl_pips=pnl_pips,
                 pnl_eur=pnl_eur,
                 notes=notes,
+                spread_close_pips=spread_close_pips,
+                close_slippage_pips=close_slippage_pips,
+                close_latency_ms=close_latency_ms,
             )
         except Exception as e:
             logger.error(f"[Journal] close_matching_pending: {e}")
@@ -334,14 +366,6 @@ class TradeJournal:
     ) -> Dict:
         """
         Genera un reporte de rendimiento del journal.
-
-        Args:
-            days:   Ventana en días hacia atrás (0 = todos).
-            symbol: Filtrar por símbolo (None = todos).
-            mode:   Filtrar por 'paper' o 'live' (None = ambos).
-
-        Returns:
-            Dict con métricas completas.
         """
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat() if days > 0 else '2000-01-01'
 
@@ -454,6 +478,54 @@ class TradeJournal:
             'by_strategy':       strategies,
         }
 
+    def get_execution_quality_summary(self, days: int = 30) -> Dict:
+        """
+        Calcula estadísticas completas de Calidad de Ejecución (P1.1).
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat() if days > 0 else '2000-01-01'
+        try:
+            with self._conn() as conn:
+                rows = conn.execute(
+                    "SELECT * FROM trade_journal WHERE entry_time >= ? ORDER BY entry_time DESC",
+                    (cutoff,),
+                ).fetchall()
+        except Exception as e:
+            logger.error(f"[Journal] Error en get_execution_quality_summary: {e}")
+            return {}
+
+        if not rows:
+            return {
+                'total_orders': 0,
+                'avg_latency_ms': 0.0,
+                'avg_slippage_pips': 0.0,
+                'avg_spread_pips': 0.0,
+                'favorable_slippage_pct': 0.0,
+                'rejection_rate_pct': 0.0,
+            }
+
+        latencies = [r['latency_ms'] for r in rows if r['latency_ms'] is not None]
+        slippages = [r['slippage_pips'] for r in rows if r['slippage_pips'] is not None]
+        spreads   = [r['spread_open_pips'] for r in rows if r['spread_open_pips'] is not None]
+        statuses  = [r['execution_status'] for r in rows if r['execution_status']]
+
+        total_orders = len(rows)
+        rejected = sum(1 for s in statuses if s in ('REJECTED', 'FAILED'))
+        favorable_slips = sum(1 for s in slippages if s < 0)
+
+        return {
+            'period_days': days,
+            'total_orders': total_orders,
+            'successful_orders': total_orders - rejected,
+            'rejected_orders': rejected,
+            'rejection_rate_pct': round((rejected / total_orders * 100), 1) if total_orders else 0.0,
+            'avg_latency_ms': round(sum(latencies) / len(latencies), 1) if latencies else 0.0,
+            'max_latency_ms': max(latencies) if latencies else 0,
+            'avg_slippage_pips': round(sum(slippages) / len(slippages), 2) if slippages else 0.0,
+            'avg_spread_pips': round(sum(spreads) / len(spreads), 2) if spreads else 0.0,
+            'favorable_slippage_pct': round((favorable_slips / len(slippages) * 100), 1) if slippages else 0.0,
+            'total_slippage_cost_eur': round(sum(r['slippage_cost_eur'] or 0.0 for r in rows), 2),
+        }
+
     def get_recent_trades(self, limit: int = 10, symbol: Optional[str] = None) -> List[Dict]:
         """Devuelve los N trades más recientes como lista de dicts."""
         conditions = []
@@ -504,3 +576,4 @@ def get_journal(db_path: str = _DEFAULT_DB) -> TradeJournal:
     if _journal is None:
         _journal = TradeJournal(db_path)
     return _journal
+

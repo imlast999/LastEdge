@@ -350,6 +350,184 @@ botRouter.get("/equityHistory", (_req: Request, res: Response) => {
   }
 });
 
+// ── GET /api/risk-dashboard ───────────────────────────────────────────────────
+
+botRouter.get("/risk-dashboard", (_req: Request, res: Response) => {
+  try {
+    type SessionRow = {
+      start_time?: string | null;
+      current_balance?: number | null;
+      total_pnl?: number | null;
+      max_drawdown?: number | null;
+      consecutive_losses?: number | null;
+      circuit_breaker_triggered?: number | boolean | null;
+      circuit_breaker_until?: string | null;
+    };
+
+    type SnapRow = {
+      balance?: number | null;
+      equity?: number | null;
+      margin?: number | null;
+      free_margin?: number | null;
+    };
+
+    type PeakRow = { peak_equity?: number | null };
+
+    type OpenPosRow = {
+      id: number;
+      pair: string;
+      type: string;
+      entry_price: number;
+      lot_size: number;
+      sl_price?: number | null;
+      tp_price?: number | null;
+    };
+
+    let session: SessionRow | null = null;
+    try {
+      session = queryOne<SessionRow>(
+        `SELECT start_time, current_balance, total_pnl, max_drawdown,
+                consecutive_losses, circuit_breaker_triggered, circuit_breaker_until
+         FROM session_stats
+         ORDER BY rowid DESC
+         LIMIT 1`
+      );
+    } catch {
+      // Table may not exist yet
+    }
+
+    let snap: SnapRow | null = null;
+    try {
+      snap = queryOne<SnapRow>(
+        `SELECT balance, equity, margin, free_margin
+         FROM balance_snapshots
+         ORDER BY rowid DESC
+         LIMIT 1`
+      );
+    } catch {
+      // Table may not exist yet
+    }
+
+    let peakRow: PeakRow | null = null;
+    try {
+      peakRow = queryOne<PeakRow>(
+        `SELECT MAX(equity) as peak_equity FROM balance_snapshots`
+      );
+    } catch {
+      // Ignore if table missing
+    }
+
+    const balance = safeFloat(snap?.balance ?? session?.current_balance);
+    const equity = safeFloat(snap?.equity ?? balance);
+    const margin = safeFloat(snap?.margin);
+    const freeMargin = safeFloat(snap?.free_margin ?? equity - margin);
+    const marginLevel = margin > 0 ? parseFloat(((equity / margin) * 100).toFixed(2)) : 0;
+
+    const peakEquity = Math.max(safeFloat(peakRow?.peak_equity), equity);
+    const currentDrawdownPct = peakEquity > 0 && equity < peakEquity
+      ? parseFloat((((peakEquity - equity) / peakEquity) * 100).toFixed(2))
+      : 0;
+    const maxDrawdownPct = Math.max(
+      safeFloat(session?.max_drawdown),
+      currentDrawdownPct
+    );
+
+    const circuitBreakerTriggered = Boolean(session?.circuit_breaker_triggered);
+    const consecutiveLosses = session?.consecutive_losses ?? 0;
+    const pauseUntil = session?.circuit_breaker_until ?? null;
+
+    let openPosRows: OpenPosRow[] = [];
+    try {
+      openPosRows = query<OpenPosRow>(
+        `SELECT id, pair, type, entry_price, lot_size, sl_price, tp_price
+         FROM session_trades
+         WHERE status = 'OPEN'`
+      );
+    } catch {
+      // Ignore if table missing
+    }
+
+    let portfolioRiskAmount = 0;
+    const openPositions = openPosRows.map((r) => {
+      const entry = safeFloat(r.entry_price);
+      const sl = safeFloat(r.sl_price);
+      const lot = safeFloat(r.lot_size, 0.01);
+      const hasSl = Boolean(r.sl_price && r.sl_price > 0);
+      const riskAmount = hasSl ? Math.abs(entry - sl) * lot * 100000 : 0;
+      const riskPct = equity > 0 ? parseFloat(((riskAmount / equity) * 100).toFixed(2)) : 0;
+      portfolioRiskAmount += riskAmount;
+      return {
+        symbol: r.pair ?? "UNKNOWN",
+        ticket: r.id,
+        volume: lot,
+        risk_pct: riskPct,
+        risk_amount: parseFloat(riskAmount.toFixed(2)),
+        has_sl: hasSl,
+      };
+    });
+
+    const portfolioRiskPct = equity > 0
+      ? parseFloat(((portfolioRiskAmount / equity) * 100).toFixed(2))
+      : 0;
+    const maxPortfolioRiskPct = 2.0;
+    const remainingCapacityPct = Math.max(
+      0,
+      parseFloat((maxPortfolioRiskPct - portfolioRiskPct).toFixed(2))
+    );
+
+    const estimations: Record<string, { lot: number; approved: boolean; reason: string }> = {};
+    const defaultSymbols = ["EURUSD", "XAUUSD", "BTCEUR"];
+    for (const sym of defaultSymbols) {
+      if (circuitBreakerTriggered) {
+        estimations[sym] = {
+          lot: 0.0,
+          approved: false,
+          reason: "[CIRCUIT_BREAKER] Trading paused due to consecutive losses",
+        };
+      } else if (remainingCapacityPct <= 0) {
+        estimations[sym] = {
+          lot: 0.0,
+          approved: false,
+          reason: "[RISK_LIMIT] Max portfolio risk reached",
+        };
+      } else {
+        estimations[sym] = {
+          lot: 0.01,
+          approved: true,
+          reason: "Risk check passed",
+        };
+      }
+    }
+
+    res.json({
+      balance,
+      equity,
+      free_margin: freeMargin,
+      margin,
+      margin_level: marginLevel,
+      portfolio_risk_pct: portfolioRiskPct,
+      max_portfolio_risk_pct: maxPortfolioRiskPct,
+      remaining_capacity_pct: remainingCapacityPct,
+      drawdown_status: {
+        current_drawdown_pct: currentDrawdownPct,
+        max_drawdown_pct: maxDrawdownPct,
+        peak_equity: peakEquity,
+      },
+      circuit_breaker: {
+        triggered: circuitBreakerTriggered,
+        consecutive_losses: consecutiveLosses,
+        pause_until: pauseUntil,
+      },
+      open_positions: openPositions,
+      estimations,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.error({ err }, "GET /api/risk-dashboard error");
+    res.status(500).json({ error: "Failed to read risk dashboard" });
+  }
+});
+
 // ── POST /api/signals/:id/accept ─────────────────────────────────────────────
 
 botRouter.post("/signals/:id/accept", (req: Request, res: Response) => {

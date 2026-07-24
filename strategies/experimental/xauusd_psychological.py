@@ -21,7 +21,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timezone, timedelta
 
-from .base import BaseStrategy
+from ..base import BaseStrategy
 
 logger = logging.getLogger(__name__)
 

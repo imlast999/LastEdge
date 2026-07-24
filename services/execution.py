@@ -144,37 +144,84 @@ class ExecutionService:
             self._update_execution_stats(signal, lot_size, execution_result['success'])
 
             journal_id = None
-            if execution_result['success']:
+            try:
+                from core.journal import get_journal
+                
+                # Obtener detalles de ejecución
+                req_price = execution_result.get('requested_price', float(signal['entry']))
+                exec_price = execution_result.get('executed_price', req_price)
+                symbol = signal.get('symbol', 'EURUSD').upper()
+                sig_type = signal.get('type', 'BUY').upper()
+                
+                # Calcular pip_size dinámico
+                pip_sizes = {'EURUSD': 0.0001, 'GBPUSD': 0.0001, 'USDJPY': 0.01, 'XAUUSD': 0.1, 'BTCEUR': 1.0, 'BTCUSDT': 1.0}
+                pip_size = pip_sizes.get(symbol, 0.0001)
+                
+                # Slippage con signo (Positivo = Adverso / Desfavorable, Negativo = Favorable)
+                if sig_type == 'BUY':
+                    slippage_pips = (exec_price - req_price) / pip_size
+                else:
+                    slippage_pips = (req_price - exec_price) / pip_size
+                    
+                # Coste aproximado del slippage en EUR
+                slippage_cost_eur = slippage_pips * (lot_size * 10.0) if symbol in ('EURUSD', 'GBPUSD') else (slippage_pips * lot_size)
+                
+                # Captura de spread en apertura y límite de spread
+                spread_open_pips = None
+                max_allowed_spread = float(signal.get('max_allowed_spread_pips') or signal.get('max_spread') or 3.0)
                 try:
-                    from core.journal import get_journal
-                    
-                    # Calcular slippage en pips
-                    req_price = execution_result.get('requested_price', float(signal['entry']))
-                    exec_price = execution_result.get('executed_price', req_price)
-                    
-                    symbol = signal.get('symbol', 'EURUSD').upper()
-                    pip_sizes = {'EURUSD': 0.0001, 'XAUUSD': 0.1, 'BTCEUR': 1.0, 'BTCUSDT': 1.0}
-                    pip_size = pip_sizes.get(symbol, 0.0001)
-                    
-                    slippage_pips = abs(exec_price - req_price) / pip_size
-                    
-                    journal_id = get_journal().log_entry(
-                        signal,
-                        confidence=str(signal.get('confidence', 'MEDIUM')),
-                        confidence_score=float(signal.get('confidence_score', 0) or 0),
-                        score=float(signal.get('score', 0) or 0),
-                        lot_size=lot_size,
-                        mt5_ticket=execution_result.get('order_id'),
-                        mode='live',
-                        notes='Ejecutado vía ExecutionService',
-                        requested_price=req_price,
-                        executed_price=exec_price,
-                        slippage_pips=slippage_pips,
-                        latency_ms=execution_result.get('latency_ms'),
-                        broker_message=execution_result.get('broker_message')
-                    )
-                except Exception as journal_err:
-                    logger.warning(f"Trade journal log_entry: {journal_err}")
+                    tick = mt5.symbol_info_tick(symbol)
+                    if tick and tick.bid > 0 and tick.ask > 0:
+                        spread_open_pips = round((tick.ask - tick.bid) / pip_size, 2)
+                except Exception as tick_err:
+                    logger.debug(f"Error al obtener tick spread en apertura para {symbol}: {tick_err}")
+                
+                # Determinar sesión de mercado actual
+                utc_hour = datetime.now(timezone.utc).hour
+                if 8 <= utc_hour < 12:
+                    exec_session = 'LONDON'
+                elif 12 <= utc_hour < 16:
+                    exec_session = 'OVERLAP'
+                elif 16 <= utc_hour < 21:
+                    exec_session = 'NEWYORK'
+                elif 21 <= utc_hour < 23:
+                    exec_session = 'NIGHT'
+                else:
+                    exec_session = 'ASIAN'
+
+                # Estado de ejecución y códigos de retorno
+                exec_status = 'SUCCESS' if execution_result['success'] else 'FAILED'
+                exec_error = None if execution_result['success'] else execution_result.get('message')
+                mt5_retcode = execution_result.get('retcode')
+                mt5_res = execution_result.get('mt5_result')
+                if isinstance(mt5_res, dict) and 'retcode' in mt5_res:
+                    mt5_retcode = mt5_res['retcode']
+
+                journal_id = get_journal().log_entry(
+                    signal,
+                    confidence=str(signal.get('confidence', 'MEDIUM')),
+                    confidence_score=float(signal.get('confidence_score', 0) or 0),
+                    score=float(signal.get('score', 0) or 0),
+                    lot_size=lot_size,
+                    mt5_ticket=execution_result.get('order_id'),
+                    mode='live',
+                    notes='Ejecutado vía ExecutionService',
+                    requested_price=req_price,
+                    executed_price=exec_price,
+                    slippage_pips=round(slippage_pips, 2),
+                    slippage_cost_eur=round(slippage_cost_eur, 2),
+                    spread_open_pips=spread_open_pips,
+                    max_allowed_spread_pips=max_allowed_spread,
+                    latency_ms=execution_result.get('latency_ms'),
+                    fill_time_ms=execution_result.get('latency_ms'),
+                    execution_session=exec_session,
+                    execution_status=exec_status,
+                    execution_error=exec_error,
+                    mt5_retcode=mt5_retcode,
+                    broker_message=execution_result.get('broker_message')
+                )
+            except Exception as journal_err:
+                logger.warning(f"Trade journal log_entry error: {journal_err}")
 
             return ExecutionResult(
                 success=execution_result['success'],
@@ -571,10 +618,11 @@ class ExecutionService:
                     
                     # Si es un error de precio, intentar con precio actual
                     if result.retcode in [mt5.TRADE_RETCODE_PRICE_OFF, mt5.TRADE_RETCODE_INVALID_PRICE]:
-                        current_price = self._get_current_price(order_request['symbol'])
+                        order_type_str = 'SELL' if order_request.get('type') == mt5.ORDER_TYPE_SELL else 'BUY'
+                        current_price = self._get_current_price(order_request['symbol'], order_type_str)
                         if current_price:
                             order_request['price'] = current_price
-                            logger.info(f"Retrying with current price: {current_price}")
+                            logger.info(f"Retrying with current price ({order_type_str}): {current_price}")
                             continue
                 
             except Exception as e:
@@ -588,14 +636,15 @@ class ExecutionService:
             'broker_message': last_error
         }
     
-    def _get_current_price(self, symbol: str) -> Optional[float]:
-        """Obtiene el precio actual de un símbolo"""
+    def _get_current_price(self, symbol: str, order_type: str = 'BUY') -> Optional[float]:
+        """Obtiene el precio actual de un símbolo respetando la dirección de la orden"""
         try:
             tick = mt5.symbol_info_tick(symbol)
             if tick is None:
                 return None
             
-            # Usar bid para SELL, ask para BUY (simplificado, usar ask por defecto)
+            if order_type.upper() == 'SELL':
+                return tick.bid
             return tick.ask
             
         except Exception as e:

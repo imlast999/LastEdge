@@ -58,6 +58,12 @@ env/
 temp/
 tmp/
 chart_*.png
+repo_*.txt
+structure_inspect.txt
+all_dirs.txt
+tree*.txt
+top_level_dirs.txt
+
 *.png
 !mobile-app/**/*.png
 !mobile-app/**/*.webp

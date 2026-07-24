@@ -29,6 +29,7 @@ import { useTranslation } from "@/hooks/useTranslation";
 import {
   listExitResearchRuns,
   fetchExitResearchDetail,
+  runExitResearch,
   type ExitResearchRun,
   type ExitResearchDetail,
   type ExitVariant,
@@ -46,6 +47,8 @@ export default function LabScreen() {
   const [selectedRun, setSelectedRun] = useState<ExitResearchDetail | null>(null);
   const [loadingRuns, setLoadingRuns] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [executingMode, setExecutingMode] = useState<string | null>(null);
+  const [executionStatus, setExecutionStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const topPad = insets.top;
@@ -105,6 +108,43 @@ export default function LabScreen() {
     router.push("/settings-modal" as any);
   };
 
+  const handleRunInvestigation = useCallback(
+    async (modeTitle: string, strategy: string) => {
+      setExecutingMode(modeTitle);
+      setError(null);
+      const isEs = settings.language === "es";
+      setExecutionStatus(
+        isEs
+          ? `Ejecutando investigación (${modeTitle})...`
+          : `Running investigation (${modeTitle})...`
+      );
+
+      try {
+        const res = await runExitResearch({ strategy, symbol: "EURUSD" }, apiOverrides);
+        if (res.ok) {
+          const msg = res.taskId
+            ? isEs
+              ? `Investigación iniciada (Tarea #${res.taskId}).`
+              : `Investigation started (Task #${res.taskId}).`
+            : isEs
+            ? "Investigación completada con éxito."
+            : "Investigation completed successfully.";
+          setExecutionStatus(msg);
+          await loadRuns();
+        } else {
+          setError(res.message ?? (isEs ? "Error al ejecutar la investigación" : "Failed to run investigation"));
+          setExecutionStatus(null);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        setExecutionStatus(null);
+      } finally {
+        setExecutingMode(null);
+      }
+    },
+    [apiOverrides, settings.language, loadRuns]
+  );
+
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -132,6 +172,18 @@ export default function LabScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Execution Status Banner */}
+      {executionStatus ? (
+        <View style={[styles.statusBanner, { backgroundColor: colors.secondary, borderColor: colors.primary }]}>
+          {executingMode ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Feather name="check-circle" size={16} color={colors.primary} />
+          )}
+          <Text style={[styles.statusText, { color: colors.foreground }]}>{executionStatus}</Text>
+        </View>
+      ) : null}
+
       {/* Investigation Modes */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>Investigation Modes</Text>
@@ -142,12 +194,9 @@ export default function LabScreen() {
             icon="zap"
             color="#3b82f6"
             colors={colors}
-            onPress={() => Alert.alert(
-              settings.language === "es" ? "Inicio de Investigación" : "Launch Investigation",
-              settings.language === "es" 
-                ? "El modo de Quick Validation se encuentra actualmente en cola de ejecución del protocolo LastEdge."
-                : "Quick Validation mode is currently queued in the LastEdge execution pipeline."
-            )}
+            loading={executingMode === "Quick Validation"}
+            disabled={executingMode !== null}
+            onPress={() => handleRunInvestigation("Quick Validation", "QuickValidation")}
           />
           <InvestigationMode
             title="LastEdge Protocol"
@@ -155,12 +204,9 @@ export default function LabScreen() {
             icon="layers"
             color="#10b981"
             colors={colors}
-            onPress={() => Alert.alert(
-              settings.language === "es" ? "Inicio de Investigación" : "Launch Investigation",
-              settings.language === "es" 
-                ? "El modo LastEdge Protocol se encuentra actualmente en cola de ejecución del protocolo LastEdge."
-                : "LastEdge Protocol mode is currently queued in the LastEdge execution pipeline."
-            )}
+            loading={executingMode === "LastEdge Protocol"}
+            disabled={executingMode !== null}
+            onPress={() => handleRunInvestigation("LastEdge Protocol", "LastEdgeProtocol")}
           />
           <InvestigationMode
             title="Custom Investigation"
@@ -168,12 +214,9 @@ export default function LabScreen() {
             icon="sliders"
             color="#f59e0b"
             colors={colors}
-            onPress={() => Alert.alert(
-              settings.language === "es" ? "Inicio de Investigación" : "Launch Investigation",
-              settings.language === "es" 
-                ? "El modo Custom Investigation se encuentra actualmente en cola de ejecución del protocolo LastEdge."
-                : "Custom Investigation mode is currently queued in the LastEdge execution pipeline."
-            )}
+            loading={executingMode === "Custom Investigation"}
+            disabled={executingMode !== null}
+            onPress={() => handleRunInvestigation("Custom Investigation", "Custom")}
           />
         </View>
       </View>
@@ -317,6 +360,8 @@ function InvestigationMode({
   color,
   colors,
   onPress,
+  loading,
+  disabled,
 }: {
   title: string;
   description: string;
@@ -324,14 +369,26 @@ function InvestigationMode({
   color: string;
   colors: ReturnType<typeof useColors>;
   onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={[styles.modeCard, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+      disabled={disabled || loading}
+      activeOpacity={0.75}
+      style={[
+        styles.modeCard,
+        { backgroundColor: colors.secondary, borderColor: colors.border },
+        (disabled || loading) && { opacity: 0.6 },
+      ]}
     >
       <View style={[styles.modeIcon, { backgroundColor: color }]}>
-        <Feather name={icon} size={24} color="white" />
+        {loading ? (
+          <ActivityIndicator size="small" color="white" />
+        ) : (
+          <Feather name={icon} size={24} color="white" />
+        )}
       </View>
       <Text style={[styles.modeTitle, { color: colors.foreground }]}>{title}</Text>
       <Text style={[styles.modeDescription, { color: colors.mutedForeground }]}>{description}</Text>
@@ -404,6 +461,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginTop: 2,
+  },
+  statusBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  statusText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    flex: 1,
   },
   section: { gap: 12 },
   sectionTitle: {

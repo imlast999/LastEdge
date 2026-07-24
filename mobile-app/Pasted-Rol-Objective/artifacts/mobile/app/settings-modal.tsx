@@ -79,7 +79,7 @@ export default function SettingsScreen() {
     if (result.ok && result.status) {
       const s = result.status;
       setTestResult(
-        `OK ┬À ${result.latencyMs} ms ┬À MT5 ${s.connected ? "conectado" : "desconectado"} ┬À ${s.equity.toFixed(2)} Ôé¼`
+        `OK · ${result.latencyMs} ms · MT5 ${s.connected ? "conectado" : "desconectado"} · ${s.equity.toFixed(2)} €`
       );
     } else {
       setTestResult(result.error ?? "No se pudo conectar al servidor");
@@ -89,7 +89,7 @@ export default function SettingsScreen() {
   const saveConnection = useCallback(() => {
     updateSetting("serverUrl", urlDraft.trim());
     updateSetting("serverToken", tokenDraft.trim());
-    Alert.alert("Guardado", "Conexi├│n actualizada. La app recargar├í datos autom├íticamente.");
+    Alert.alert("Guardado", "Conexión actualizada. La app recargará datos automáticamente.");
   }, [urlDraft, tokenDraft, updateSetting]);
 
   const handleRequestPermissions = useCallback(async () => {
@@ -98,16 +98,16 @@ export default function SettingsScreen() {
     setPermStatus(
       perm === "granted"
         ? token
-          ? "Permisos concedidos ┬À push activo"
-          : "Permisos concedidos ┬À notificaciones locales"
-        : "Permisos denegados ÔÇö act├¡valos en Ajustes del sistema"
+          ? "Permisos concedidos · push activo"
+          : "Permisos concedidos · notificaciones locales"
+        : "Permisos denegados — actívalos en Ajustes del sistema"
     );
   }, []);
 
   const handleTestNotification = useCallback(async () => {
     await sendLocalNotification(
       "NEW_SIGNAL",
-      "­ƒöö Notificaci├│n de prueba",
+      "🔔 Notificación de prueba",
       "Si ves esto, las alertas locales funcionan correctamente."
     );
     if (settings.hapticsEnabled) {
@@ -123,7 +123,7 @@ export default function SettingsScreen() {
   const handleResetSettings = useCallback(() => {
     Alert.alert(
       "Restablecer ajustes",
-      "┬┐Volver a la configuraci├│n predeterminada?",
+      "¿Volver a la configuración predeterminada?",
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -165,11 +165,11 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ÔöÇÔöÇ Servidor ÔöÇÔöÇ */}
+      {/* ── Servidor ── */}
       <SettingsSection title="Servidor">
         <View style={[styles.connEdit, { borderBottomColor: colors.border }]}>
           <Text style={[styles.connLabel, { color: colors.mutedForeground }]}>
-            URL personalizada (vac├¡o = APK)
+            URL personalizada (vacío = APK)
           </Text>
           <TextInput
             value={urlDraft}
@@ -203,13 +203,13 @@ export default function SettingsScreen() {
             style={[styles.saveConnBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
           >
             <Feather name="save" size={15} color={colors.primary} />
-            <Text style={[styles.saveConnText, { color: colors.primary }]}>Guardar conexi├│n</Text>
+            <Text style={[styles.saveConnText, { color: colors.primary }]}>Guardar conexión</Text>
           </TouchableOpacity>
         </View>
         <SettingsRow
           icon="activity"
           label="Estado MT5"
-          value={connected ? `Conectado ┬À uptime ${status?.uptime ?? "ÔÇö"}` : "Desconectado"}
+          value={connected ? `Conectado · uptime ${status?.uptime ?? "—"}` : "Desconectado"}
           valueColor={connected ? colors.connected : colors.disconnected}
         />
         <SettingsRow
@@ -222,14 +222,14 @@ export default function SettingsScreen() {
           label="Token API"
           value={
             effective.token
-              ? `Configurado ┬À ${maskSecret(effective.token)}`
+              ? `Configurado · ${maskSecret(effective.token)}`
               : "No configurado"
           }
           valueColor={effective.token ? colors.connected : colors.pending}
         />
         <SettingsRow
           icon="clock"
-          label="├Ültima sincronizaci├│n"
+          label="Última sincronización"
           value={formatLastSync(lastSyncAt)}
           isLast={!testResult}
         />
@@ -244,7 +244,7 @@ export default function SettingsScreen() {
         ) : null}
         <View style={[styles.actions, { borderTopColor: colors.border }]}>
           <ActionButton
-            label="Probar conexi├│n"
+            label="Probar conexión"
             icon="wifi"
             onPress={handleTestConnection}
             loading={testing}
@@ -261,12 +261,12 @@ export default function SettingsScreen() {
         </View>
       </SettingsSection>
 
-      {/* ÔöÇÔöÇ Actualizaci├│n ÔöÇÔöÇ */}
-      <SettingsSection title="Actualizaci├│n autom├ítica">
+      {/* ── Actualización ── */}
+      <SettingsSection title="Actualización automática">
         <SettingsToggle
           icon="repeat"
-          label="Actualizaci├│n en segundo plano"
-          description="Consulta el servidor peri├│dicamente"
+          label="Actualización en segundo plano"
+          description="Consulta el servidor periódicamente"
           value={settings.autoRefresh}
           onValueChange={(v) => updateSetting("autoRefresh", v)}
         />
@@ -306,7 +306,7 @@ export default function SettingsScreen() {
         </View>
       </SettingsSection>
 
-      {/* ÔöÇÔöÇ Notificaciones ÔöÇÔöÇ */}
+      {/* ── Notificaciones ── */}
       <SettingsSection title="Notificaciones">
         <SettingsToggle
           icon="bell"
@@ -317,7 +317,7 @@ export default function SettingsScreen() {
         />
         <SettingsToggle
           icon="target"
-          label="Nuevas se├▒ales"
+          label="Nuevas señales"
           value={settings.notifyNewSignals}
           onValueChange={(v) => updateSetting("notifyNewSignals", v)}
           disabled={!settings.notificationsEnabled}
@@ -331,8 +331,8 @@ export default function SettingsScreen() {
         />
         <SettingsToggle
           icon="alert-triangle"
-          label="Desconexi├│n MT5"
-          description="Alerta cr├¡tica si el bot pierde conexi├│n"
+          label="Desconexión MT5"
+          description="Alerta crítica si el bot pierde conexión"
           value={settings.notifyDisconnect}
           onValueChange={(v) => updateSetting("notifyDisconnect", v)}
           disabled={!settings.notificationsEnabled}
@@ -427,7 +427,7 @@ export default function SettingsScreen() {
         />
       </SettingsSection>
 
-      {/* ÔöÇÔöÇ Datos ÔöÇÔöÇ */}
+      {/* ── Datos ── */}
       <SettingsSection title="Datos">
         <SettingsRow
           icon="trash-2"
@@ -443,9 +443,9 @@ export default function SettingsScreen() {
         />
       </SettingsSection>
 
-      {/* ÔöÇÔöÇ Acerca de ÔöÇÔöÇ */}
+      {/* ── Acerca de ── */}
       <SettingsSection title="Acerca de">
-        <SettingsRow icon="box" label="Versi├│n" value={getAppVersion()} />
+        <SettingsRow icon="box" label="Versión" value={getAppVersion()} />
         <SettingsRow
           icon="cpu"
           label="Expo SDK"
@@ -466,7 +466,7 @@ export default function SettingsScreen() {
       </SettingsSection>
 
       <Text style={[styles.footer, { color: colors.mutedForeground }]}>
-        LastEdge ┬À cuenta demo MT5{"\n"}
+        LastEdge · cuenta demo MT5{"\n"}
         Intervalo predeterminado: {DEFAULT_SETTINGS.pollIntervalMs / 1000}s
       </Text>
     </ScrollView>
