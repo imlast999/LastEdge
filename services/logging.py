@@ -119,14 +119,7 @@ class IntelligentLogger:
 
             class TeeOutput:
                 """
-                Duplica stdout/stderr al archivo de log SIN bloquear el event loop.
-                
-                Reglas:
-                - La escritura a la terminal es fire-and-forget (thread daemon, sin join).
-                  Si la terminal está lenta o bloqueada, simplemente se abandona.
-                - La escritura al archivo es directa y síncrona (el archivo nunca bloquea).
-                - El FileHandler de logging NO usa este stream — tiene su propio
-                  handler directo al archivo para evitar doble escritura y bloqueos.
+                Duplica stdout/stderr al archivo de log con saltos de línea garantizados.
                 """
                 def __init__(self, file_path, original_stream):
                     self.file_path = file_path
@@ -134,22 +127,30 @@ class IntelligentLogger:
                     self.terminal = original_stream
 
                 def write(self, message):
-                    # 1. Terminal: fire-and-forget, sin join, nunca bloquea
-                    import threading
-                    def _do_write():
-                        try:
-                            self.terminal.write(message)
-                            self.terminal.flush()
-                        except Exception:
-                            pass
-                    threading.Thread(target=_do_write, daemon=True).start()
-
-                    # 2. Archivo: escritura directa, nunca bloquea
+                    # 1. Escribir a la terminal original
                     try:
-                        if message.strip():
-                            with open(self.file_path, 'a', encoding='utf-8') as f:
-                                timestamp = datetime.now().strftime('%H:%M:%S')
-                                f.write(f"[{timestamp}] {message}")
+                        self.terminal.write(message)
+                        self.terminal.flush()
+                    except Exception:
+                        pass
+
+                    # 2. Escribir al archivo de log línea por línea con salto de línea garantizado
+                    try:
+                        if not message or not message.strip():
+                            return
+
+                        lines = message.splitlines()
+                        now_str = datetime.now().strftime('%H:%M:%S')
+                        with open(self.file_path, 'a', encoding='utf-8') as f:
+                            for line in lines:
+                                clean_line = line.strip('\r')
+                                if not clean_line.strip():
+                                    continue
+                                # Si ya empieza por timestamp '[', escribir tal cual
+                                if clean_line.startswith('['):
+                                    f.write(f"{clean_line}\n")
+                                else:
+                                    f.write(f"[{now_str}] {clean_line}\n")
                     except Exception:
                         pass
 

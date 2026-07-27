@@ -111,7 +111,7 @@ class ReplayEngine:
             ReplayStatistics con resultados completos
         """
         import time
-        from mt5_client import get_candles, initialize as mt5_initialize
+        from services.mt5_client import get_candles, initialize as mt5_initialize
         import MetaTrader5 as mt5
         from core.engine import get_trading_engine
         

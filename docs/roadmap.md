@@ -8,208 +8,560 @@
 
 LastEdge is not built around adding features as quickly as possible.
 
-Every improvement must satisfy three conditions:
-- Make the platform more reliable
-- Make future development easier
-- Increase the quality of research or execution
+Every improvement must satisfy at least one of these goals:
+
+- Increase platform reliability.
+- Improve maintainability.
+- Improve quantitative research.
+- Improve execution quality.
 
 If a feature does not improve one of these areas, it should not be implemented.
 
 ---
 
-# Current Project Status (v1.1 LastEdge)
+# Current Project Status (v1.2)
 
 Current maturity:
 
-🟢 **MT5 Execution Engine** ......... Stable (Async watchdog & auto-reconnect)
+🟢 MT5 Execution Engine ............... Stable
 
-🟢 **Strategy Framework** .......... Stable (`eurusd_partial`, `xauusd_partial`, `btceur_partial`)
+🟢 Strategy Framework ................. Stable
 
-🟢 **Risk Engine v2** .............. Stable (`core/risk/` PositionSizer, MarginChecker, PortfolioRisk)
+🟢 Risk Engine v2 .................... Stable
 
-🟢 **Circuit Breaker** ............. Stable (Auto-pause 168 candles on 4 consecutive losses)
+🟢 Circuit Breaker .................... Stable
 
-🟢 **Exit Research** .............. Stable (13 variants evaluation & MAE/MFE/MC metrics)
+🟢 Exit Research Framework ............ Stable
 
-🟢 **Walk-Forward Validator** ...... Stable (4 rolling TRAIN/TEST windows)
+🟢 Walk Forward Validation ............ Stable
 
-🟢 **Monte Carlo Simulator** ...... Stable (2,000 bootstrap simulations & ruin probability)
+🟢 Monte Carlo Simulator .............. Stable
 
-🟢 **Validation Pipeline** ........ Stable (Phases 3–8 master validation runner `run_validation.py`)
+🟢 Validation Pipeline ................ Stable
 
-🟢 **Web Dashboard** .............. Stable (`ThreadingHTTPServer`, thread-safe locks, DOM polling)
+🟢 Execution Quality Monitoring ....... Stable (P1.1)
 
-🟢 **Node.js REST API** ............ Stable (Express server with `/api/risk-dashboard` and `/api/research/*`)
+🟢 Research Database ................. Stable
 
-🟢 **Mobile Application** .......... Beta (React Native Expo Android app)
+🟢 Research Reproducibility .......... Stable
 
-🟢 **Technical Documentation** .... Completed (Comprehensive single source of truth in `docs/`)
+🟢 Web Dashboard ...................... Stable
+
+🟢 REST API ........................... Stable
+
+🟢 Mobile Application ................. Stable Beta
+
+🟢 Discord Bot ....................... Stable
+
+🟢 Telegram Bot ...................... Stable
+
+🟢 BotService Architecture ........... Stable
+
+🟢 Notification Dispatcher ........... Stable
+
+🟢 Documentation ..................... Updated
 
 ---
 
 # Priority Levels
 
-The roadmap is divided into four priorities.
-
-## P0 — Critical (Core Architecture & Research Infrastructure)
-
-*Status: Completed in v1.1. Ongoing maintenance and demo monitoring.*
-
-- **Repository Cleanliness & Structure:** Standardize `core/`, `services/`, `strategies/`, and `strategies/experimental/` isolation.
-- **Risk Engine v2 Architecture:** Decouple lot sizing, margin checking, portfolio exposure, and circuit breaker.
-- **Web Dashboard Refactor:** `ThreadingHTTPServer` implementation with strict `self.lock` discipline.
-- **REST API Extensions:** `/api/risk-dashboard` and `/api/research/*` endpoints for mobile telemetry.
-- **Exit Research & Validation Pipeline:** 13 exit variants comparison, Stability Score, decision records.
-- **Technical Documentation:** Authoritative single-source-of-truth documentation across `docs/` and `README.md`.
+The roadmap is divided into six priorities.
 
 ---
 
-## P1 — High Priority (Demo Validation & Operational Automation)
-
-- **Demo MT5 Forward Validation Monitoring:** Monitor live forward execution for `eurusd_partial`, `xauusd_partial`, and `btceur_partial` targeting ≥ 50 closed trades per pair.
-- **Automated Go-Live Verification Command (`/go_live_check`):** Discord and CLI command verifying all 6 go-live criteria against MT5 demo results.
-- **Enhanced Mobile Telemetry:** Real-time push notifications for circuit breaker auto-pause events and trade entries.
-- **Research Lab Analytics:** Interactive comparison UI for historical Exit Research runs in Mobile App and Web Dashboard.
-
-## Execution Quality
+# P0 — Core Platform
 
 Status
 
-🟢 Initial Version Completed
+✅ Completed
 
-Future improvements
+Goal
 
-- Better latency measurements
-- Better slippage analysis
-- Spread monitoring
+Build a reliable quantitative trading platform.
+
+Completed
+
+- MT5 execution engine
+- Strategy framework
+- Risk Engine v2
+- Circuit Breaker
+- Validation Pipeline
+- Exit Research
+- Monte Carlo
+- Walk Forward
+- REST API
+- Mobile App
+- Web Dashboard
+
+---
+
+# P1 — Research Platform
+
+Status
+
+✅ Completed
+
+Goal
+
+Transform research into a reproducible scientific process.
+
+Completed
+
+- Research Database
+- Research Registry
+- Experiment persistence
+- CRUD API
+- Reproducibility layer
+- Historical experiments
+- Git commit tracking
+- Decision workflow
+- Research comparison
+- Research reopening
+- Mobile Research UI
+- Dashboard Research UI
+
+---
+
+# P2 — Multi Platform Ecosystem
+
+Status
+
+✅ Completed
+
+Goal
+
+Allow every interface to consume the exact same business logic.
+
+Completed
+
+Architecture
+
+Core
+
+↓
+
+BotService
+
+↓
+
+NotificationDispatcher
+
+↓
+
+Discord
+
+Telegram
+
+Dashboard
+
+Mobile App
+
+Completed
+
+- Discord Adapter
+- Telegram Adapter
+- Shared BotService
+- Shared Notification Dispatcher
+- Unified commands
+- Unified execution
+- Shared notifications
+
+Current command set
+
+Core Commands
+
+- /status
+- /positions
+- /close_position
+- /equity
+- /risk
+- /journal
+- /research
+- /autosignals
+
+Technical Commands
+
+- /health
+- /version
+- /logs
+- /discord (Discord only)
+- /ping (Telegram only)
+
+---
+
+# P3 — Technical Consolidation
+
+Status
+
+🟡 Next Priority
+
+Goal
+
+Remove technical debt before adding new features.
+
+---
+
+## P3.1 Database Layer
+
+Priority
+
+🔴 Critical
+
+Goals
+
+- Create DatabaseManager
+- Single SQLite connection layer
+- WAL mode
+- Context Managers
+- Shared transactions
+- Eliminate "database is locked"
+- Remove duplicated database access
+
+---
+
+## P3.2 Security
+
+Priority
+
+🔴 Critical
+
+Goals
+
+- Remove mt5_key.key from project
+- Use MT5_ENCRYPTION_KEY
+- Improve secrets management
+- Review credential handling
+
+---
+
+## P3.3 Repository Cleanup
+
+Priority
+
+🟠 High
+
+Goals
+
+- Clean project root
+- Reorganize scripts
+- Flatten mobile folder structure
+- Remove obsolete folders
+- Improve project organization
+
+---
+
+## P3.4 Exit Research Cleanup
+
+Priority
+
+🟠 High
+
+Goals
+
+- Merge duplicated runners
+- Parameterize execution
+- Remove duplicated code
+
+---
+
+## P3.5 Notification Dispatcher
+
+Priority
+
+🟠 High
+
+Goals
+
+- Persistent aiohttp ClientSession
+- Better resource management
+- Eliminate socket leaks
+
+---
+
+## P3.6 Thread Safety
+
+Priority
+
+🟠 High
+
+Goals
+
+- Protect shared state
+- Remove race conditions
+- Thread-safe containers
+- Lock shared dictionaries
+
+---
+
+## P3.7 General Cleanup
+
+Priority
+
+🟠 High
+
+Goals
+
+- Remove legacy files
+- Remove compatibility modules
+- Clean requirements
+- Remove obsolete logs
+- Improve naming consistency
+
+---
+
+# P4 — Observability
+
+Status
+
+Planned
+
+Goals
+
+- Advanced execution analytics
 - Broker quality metrics
-- Execution history
-- Execution statistics
+- Latency visualization
+- Slippage visualization
+- Execution explorer
+- Health dashboard
+- Internal metrics
+- Better monitoring
 
 ---
 
-## Research Lab
+# P5 — Production Readiness
 
-Status
+## Status
 
-🟡 In Progress
-
-Goals
-
-- Better experiment management
-- Research queue
-- Progress tracking
-- Historical runs
-- Better comparison tools
+Blocked until P4 ✅
 
 ---
 
-## Mobile Dashboard
+# Goal
 
-Goals
+Guarantee that LastEdge is fully production-ready for continuous real-world operation.
 
-- Better charts
-- More statistics
-- Live synchronization
-- Better notifications
-- Portfolio overview
+This phase is **not** about adding new features.
 
----
+Its purpose is to validate that everything built during P1–P4 is stable, reliable, secure, observable and maintainable under real operating conditions.
 
-## Web Dashboard
-
-Goals
-
-- Complete responsive layout
-- Better charts
-- Better trade explorer
-- Better research visualization
-- More filters
+At the end of this phase, LastEdge should be capable of running continuously on a VPS or dedicated server for extended periods with minimal human intervention.
 
 ---
 
-## Research Framework
+# P5.1 — Go Live Checklist
 
-Goals
+Create a complete pre-production checklist.
 
-- Better reports
-- Better exports
-- Better run metadata
-- Better reproducibility
+The checklist should automatically verify:
 
----
+- MT5 connection
+- Correct trading account
+- Expected broker
+- Market open status
+- Risk configuration
+- Circuit Breaker status
+- Autosignals configuration
+- Database availability
+- Dashboard availability
+- Mobile API availability
+- Discord connectivity
+- Telegram connectivity
+- Research Database availability
+- Environment variables
+- Available disk space
+- System clock synchronization
+- No critical runtime errors
 
-# P2 — Platform Improvements
+Each verification must return:
 
-## Strategy Management
+- PASS
+- FAIL
 
-Ideas
-
-- Better strategy comparison
-- Version history
-- Strategy metadata
-- Promotion workflow
-
----
-
-## Risk Engine
-
-Ideas
-
-- Portfolio level statistics
-- Exposure visualization
-- Correlation monitoring
-- Drawdown analysis
+with a clear explanation.
 
 ---
 
-## Repository
+# P5.2 — Automated Production Verification
 
-Ideas
+Create a complete automated production verification process.
 
-- More examples
-- Better templates
-- More automation
-- Cleaner scripts
+It should verify every critical subsystem:
+
+- Database
+- MT5
+- Risk Engine
+- Trade Journal
+- Notification Dispatcher
+- Dashboard
+- Mobile API
+- Discord
+- Telegram
+- Execution Analytics
+- Research Database
+
+All checks must run automatically without user interaction.
 
 ---
 
-## Developer Experience
+# P5.3 — Long Forward Validation
 
-Ideas
+Validate long-term runtime stability.
 
-- Better tooling
-- Better logging
-- Better debugging
-- Better CI
+Objectives:
+
+- Continuous execution
+- Stable memory usage
+- No memory leaks
+- Automatic reconnection
+- Graceful recovery after failures
+- Stable asynchronous loops
+
+Run long-duration validation sessions:
+
+- 24 hours
+- 72 hours
+- 7 days
+
+Record every anomaly or unexpected behavior.
 
 ---
 
-# P3 — Future
+# P5.4 — Broker Certification
 
-These ideas are intentionally low priority.
+Fully validate broker interaction.
 
-They should only be considered after the platform reaches a stable state.
+Verify:
 
-Possible future areas
+- Order opening
+- Order closing
+- Order modification
+- Stop Loss
+- Take Profit
+- Reconnection handling
+- Temporary connection loss
+- Rejected orders
+- Requotes
+- Closed market handling
+- Invalid or unavailable symbols
+
+Every event must be logged by the Trade Journal.
+
+---
+
+# P5.5 — Stability Verification
+
+Perform a complete stability audit.
+
+Inspect for:
+
+- Memory leaks
+- File handle leaks
+- Socket leaks
+- Orphan asyncio tasks
+- Silent exceptions
+- Deadlocks
+- SQLite locking issues
+- Race conditions
+- Infinite reconnection loops
+
+The objective is to demonstrate that the system can remain operational indefinitely.
+
+---
+
+# P5.6 — Operational Readiness
+
+Prepare the project for daily production use.
+
+Create complete operational documentation covering:
+
+- Startup procedure
+- Shutdown procedure
+- Failure recovery
+- Bot updates
+- Strategy updates
+- Backup procedure
+- Restore procedure
+- Log rotation
+
+The documentation should allow another developer or operator to run the system without needing to understand the internal implementation.
+
+---
+
+# P5.7 — Production Monitoring
+
+Verify that the observability platform implemented in P4 is sufficient for production.
+
+Validate monitoring through:
+
+- Dashboard
+- Mobile App
+- Discord
+- Telegram
+- Health Monitor
+- Execution Analytics
+
+There should be no operational blind spots.
+
+Any critical issue must be detectable quickly.
+
+---
+
+# P5.8 — Final Production Audit
+
+Perform a final audit of the entire project.
+
+Do **not** implement new features.
+
+Only verify:
+
+- Architecture
+- Security
+- Stability
+- Performance
+- Observability
+- Maintainability
+- Documentation
+
+Produce an honest production readiness report indicating whether LastEdge is ready for live trading.
+
+If not, list only the remaining critical blockers.
+
+---
+
+# Exit Criteria
+
+P5 can only be considered complete when:
+
+- All automated checks return PASS.
+- No known critical issues remain.
+- Long-duration validation tests complete successfully.
+- All observability tools function correctly.
+- Failure recovery has been verified.
+- Operational documentation is complete.
+- The final production audit confirms that LastEdge is ready for real-world deployment.
+```
+
+# P6 — Future Evolution
+
+Only after production stability.
+
+Possible areas
 
 - Multi-account support
-
 - Portfolio management
-
 - Multi-broker execution
-
-- Advanced analytics
-
+- Docker deployment
+- VPS deployment
 - Cloud synchronization
-
 - Plugin system
+- Advanced analytics
+- AI-assisted research (optional)
 
 ---
 
 # Development Rules
 
-Before implementing any feature, ask:
+Before implementing anything ask:
 
 ## Does this improve architecture?
 
@@ -227,7 +579,7 @@ If no
 
 ---
 
-## Does this increase maintainability?
+## Does this improve maintainability?
 
 If no
 
@@ -235,13 +587,13 @@ If no
 
 ---
 
-## Is there already a module responsible for this?
+## Can an existing module do this?
 
 If yes
 
-→ Improve it.
+→ Improve the existing module.
 
-Don't create another one.
+Do not create another one.
 
 ---
 
@@ -249,13 +601,13 @@ Don't create another one.
 
 If no
 
-→ It shouldn't exist.
+→ It probably shouldn't exist.
 
 ---
 
 # Long-Term Vision
 
-LastEdge aims to become a professional quantitative trading platform where every decision is supported by research.
+LastEdge aims to become a professional quantitative trading platform where every operational decision is backed by measurable research.
 
 The objective is not to build the largest platform.
 
@@ -263,12 +615,14 @@ The objective is to build one that remains clean, maintainable and reliable afte
 
 ---
 
-# Guiding Principle
+# Guiding Principles
 
 > Simplicity over complexity.
 
 > Evidence over assumptions.
 
 > Architecture over shortcuts.
+
+> Maintainability over feature count.
 
 > Quality over quantity.

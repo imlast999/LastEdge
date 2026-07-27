@@ -980,7 +980,7 @@ class ExitResearchRunner:
 
     def _download_data(self, total_bars: int) -> Optional[pd.DataFrame]:
         try:
-            from mt5_client import get_candles, initialize as mt5_init
+            from services.mt5_client import get_candles, initialize as mt5_init
             import MetaTrader5 as mt5
             mt5_init()
             df = get_candles(self.symbol, mt5.TIMEFRAME_H1, total_bars)

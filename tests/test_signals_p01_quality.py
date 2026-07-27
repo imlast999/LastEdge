@@ -2,8 +2,8 @@ import pytest
 import pandas as pd
 import numpy as np
 
-import signals
-from signals import (
+from services import signals
+from services.signals import (
     _get_eurusd_asian_breakout,
     _get_xauusd_psychological,
     _get_eurusd_mtf,

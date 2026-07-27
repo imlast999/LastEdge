@@ -469,7 +469,7 @@ class TradingEngine:
         """
         try:
             # Importar MT5 client functions
-            import mt5_client
+            from services import mt5_client
             
             # Obtener datos usando la función get_candles
             df = mt5_client.get_candles(symbol, timeframe, count)

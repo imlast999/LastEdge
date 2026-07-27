@@ -202,7 +202,7 @@ class WalkForwardTester:
             WalkForwardReport con todas las ventanas y métricas agregadas
         """
         from core.replay_engine import ReplayEngine
-        from mt5_client import get_candles, initialize as mt5_initialize
+        from services.mt5_client import get_candles, initialize as mt5_initialize
         import MetaTrader5 as mt5
 
         strategy_instance = None

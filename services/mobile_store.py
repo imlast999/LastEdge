@@ -32,21 +32,67 @@ class MobileStore:
 
     @contextmanager
     def _conn(self):
-        conn = sqlite3.connect(self.db_path, timeout=10)
-        conn.row_factory = sqlite3.Row
-        try:
+        from services.database import get_database_manager
+        with get_database_manager(self.db_path).get_connection() as conn:
             yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
 
     def ensure_tables(self) -> None:
         """Migraciones ligeras sobre el esquema existente del bot."""
         try:
             with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS session_stats (
+                        session_id      TEXT PRIMARY KEY,
+                        start_time      TEXT NOT NULL,
+                        initial_balance REAL NOT NULL,
+                        current_balance REAL NOT NULL,
+                        peak_balance    REAL NOT NULL,
+                        total_pnl       REAL DEFAULT 0,
+                        last_update     TEXT NOT NULL
+                    )
+                """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS balance_snapshots (
+                        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id     TEXT,
+                        timestamp      TEXT NOT NULL,
+                        balance        REAL NOT NULL,
+                        equity         REAL NOT NULL,
+                        margin         REAL DEFAULT 0,
+                        free_margin    REAL DEFAULT 0,
+                        profit         REAL DEFAULT 0,
+                        open_positions INTEGER DEFAULT 0
+                    )
+                """)
+                bs_cols = {r[1] for r in conn.execute("PRAGMA table_info(balance_snapshots)")}
+                for col_name, col_def in [
+                    ("session_id", "TEXT"),
+                    ("margin", "REAL DEFAULT 0"),
+                    ("free_margin", "REAL DEFAULT 0"),
+                    ("profit", "REAL DEFAULT 0"),
+                    ("open_positions", "INTEGER DEFAULT 0"),
+                ]:
+                    if col_name not in bs_cols:
+                        try:
+                            conn.execute(f"ALTER TABLE balance_snapshots ADD COLUMN {col_name} {col_def}")
+                        except Exception:
+                            pass
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS enhanced_signals (
+                        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp        TEXT NOT NULL,
+                        symbol           TEXT NOT NULL,
+                        signal_type      TEXT NOT NULL,
+                        strategy         TEXT NOT NULL,
+                        entry_price      REAL NOT NULL,
+                        sl_price         REAL NOT NULL,
+                        tp_price         REAL NOT NULL,
+                        score            REAL DEFAULT 0,
+                        confidence       TEXT,
+                        executed         INTEGER DEFAULT 0,
+                        mobile_processed INTEGER DEFAULT 0
+                    )
+                """)
                 cols = {r[1] for r in conn.execute("PRAGMA table_info(enhanced_signals)")}
                 if cols and "mobile_processed" not in cols:
                     conn.execute(

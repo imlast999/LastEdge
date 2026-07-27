@@ -1,3 +1,4 @@
+@if not "%~1"=="am_child" (@cmd /c "%~f0" am_child %* <nul & @exit /b %errorlevel%)
 @echo off
 setlocal EnableDelayedExpansion
 
@@ -6,7 +7,7 @@ set "ROOT=%ROOT:~0,-1%"
 set "API_DIR=%ROOT%\mobile-app\Pasted-Rol-Objective\artifacts\api-server"
 set "WORKSPACE=%ROOT%\mobile-app\Pasted-Rol-Objective"
 
-if exist "C:\Users\dev-eugenio\AppData\Roaming\npm" set "PATH=C:\Users\dev-eugenio\AppData\Roaming\npm;%PATH%"
+if exist "%APPDATA%\npm" set "PATH=%APPDATA%\npm;%PATH%"
 
 echo ========================================
 echo    BOT-MT5 - Arranque completo
@@ -84,14 +85,14 @@ for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":5000.*LISTENING"') do (
     echo     AVISO: Puerto 5000 ocupado por PID %%p — cerrando proceso previo...
     taskkill /PID %%p /F >nul 2>&1
 )
-start "BOT-MT5 API" cmd /k "cd /d "%API_DIR%" && set NODE_ENV=development && pnpm run start"
+start "BOT-MT5 API" cmd /c "cd /d "%API_DIR%" && set NODE_ENV=development && pnpm run start"
 
 REM Breve pausa para que el API arranque
 timeout /t 2 /nobreak >nul
 
 REM ── Arrancar bot Python (ventana separada) ──────────────────────────────────
 echo [3/3] Iniciando bot Python (dashboard en puerto 8080)...
-start "BOT-MT5 Bot" cmd /k "cd /d "%ROOT%" && set DASHBOARD_PORT=8080 && call start_bot.bat"
+start "BOT-MT5 Bot" cmd /c "cd /d "%ROOT%" && set DASHBOARD_PORT=8080 && call start_bot.bat"
 
 echo.
 echo ========================================

@@ -3,6 +3,7 @@
 *.env
 mt5_credentials.enc
 mt5_key.key
+prompt.md
 
 # ── Datos de sesión (locales, no compartir) ───────────────────────────────────
 bot_state.db
@@ -68,6 +69,7 @@ top_level_dirs.txt
 !mobile-app/**/*.png
 !mobile-app/**/*.webp
 !images/*.png
+!branding/**
 *.jpg
 !images/*.jpg
 *.jpeg

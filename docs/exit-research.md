@@ -87,11 +87,16 @@ Exit Research artifacts are exposed to the Web Dashboard and React Native Mobile
 
 | Method | Endpoint Path | Description |
 |---|---|---|
+| `GET` | `/api/research/experiments` | Queries and filters the Research Database (by symbol, strategy, decision_status, tag, search, min_pf) |
+| `POST` | `/api/research/experiments` | Registers a new reproducible research experiment record in `research_experiments` SQLite table |
+| `GET` | `/api/research/experiments/:id` | Retrieves complete experiment details (git_commit, bot_version, hypothesis, config_json, metrics) |
+| `PATCH` | `/api/research/experiments/:id` | Updates research decision status (`PROMOTED`, `REJECTED`, `CANDIDATE`), rationale, hypothesis, or notes |
+| `GET` | `/api/research/experiments/:id/reopen` | Returns exact reproducible payload and parameter recipe to re-run or clone the experiment |
 | `GET` | `/api/research/exit-research` | Lists all available Exit Research sessions in `backtest_results/exit_research/` |
 | `POST` | `/api/research/exit-research` | Queues a new Exit Research task in `backtest_tasks` SQLite table |
 | `GET` | `/api/research/exit-research/:runId` | Returns `summary.json` enriched with `comparison_table` and `degradation_table` |
-| `GET` | `/api/research/exit-research/:runId/trades/:variant` | Returns trade list for a specific variant in a run |
-| `GET` | `/api/research/exit-research/:runId/montecarlo?variant=partial_close` | Computes 2,000 Monte Carlo bootstrap equity percentile curves for a variant |
+| `GET` | `/api/research/exit-research/:runId/trades` | Returns trade list for a specific variant in a run |
+| `GET` | `/api/research/exit-research/:runId/montecarlo` | Computes Monte Carlo bootstrap equity percentile curves for a variant |
 
 ---
 

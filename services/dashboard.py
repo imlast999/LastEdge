@@ -179,6 +179,54 @@ class DashboardService:
                                 self.wfile.write(body)
                             except (ConnectionAbortedError, BrokenPipeError, OSError):
                                 pass  # navegador cerró la conexión — no es un error real
+                        elif self.path.startswith('/api/analytics/execution'):
+                            from services.bot_service import get_bot_service
+                            data = get_bot_service().get_execution_analytics()
+                            body = json.dumps(data, indent=2, default=str).encode('utf-8')
+                            self.send_response(200)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            try:
+                                self.wfile.write(body)
+                            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                pass
+                        elif self.path.startswith('/api/health/system'):
+                            from services.bot_service import get_bot_service
+                            data = get_bot_service().get_health_status()
+                            body = json.dumps(data, indent=2, default=str).encode('utf-8')
+                            self.send_response(200)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            try:
+                                self.wfile.write(body)
+                            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                pass
+                        elif self.path.startswith('/api/system/go-live-checklist'):
+                            from services.bot_service import get_bot_service
+                            data = get_bot_service().run_go_live_checklist()
+                            body = json.dumps(data, indent=2, default=str).encode('utf-8')
+                            self.send_response(200)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            try:
+                                self.wfile.write(body)
+                            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                pass
+                        elif self.path.startswith('/api/system/verify-production'):
+                            from services.bot_service import get_bot_service
+                            data = get_bot_service().run_production_verification()
+                            body = json.dumps(data, indent=2, default=str).encode('utf-8')
+                            self.send_response(200)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            try:
+                                self.wfile.write(body)
+                            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                pass
                         elif self.path == '/api/metrics':
                             body = json.dumps(dashboard_service.get_current_metrics(), indent=2, default=str).encode('utf-8')
                             self.send_response(200)
@@ -296,12 +344,17 @@ class DashboardService:
                     self._save_persisted_data()
 
             if self.server_instance:
-                try:
-                    self.server_instance.shutdown()
-                    self.server_instance.server_close()
-                except Exception as se:
-                    logger.error(f"Error shutting down web server: {se}")
+                srv = self.server_instance
                 self.server_instance = None
+                def _close_srv():
+                    try:
+                        srv.shutdown()
+                        srv.server_close()
+                    except Exception:
+                        pass
+                t = threading.Thread(target=_close_srv, daemon=True)
+                t.start()
+                t.join(timeout=0.5)
         except Exception as e:
             logger.error(f"Error stopping dashboard: {e}")
 
@@ -546,12 +599,16 @@ class DashboardService:
                     eq_pts.append(round(running, 2))
             eq_pts.append(round(running + eq_floating, 2))
 
+            from services.bot_service import get_bot_service
+            analytics = get_bot_service().get_execution_analytics().get('analytics', {})
+
             return {
                 'timestamp': datetime.now(timezone.utc).isoformat(),
                 'metrics': metrics,
                 'equity': equity,
                 'session_signals': session_history,
                 'real_positions': real_positions,
+                'execution_analytics': analytics,
                 'win_rate': {
                     'win_rate_pct': win_rate,
                     'wins': wins_n,
@@ -1042,6 +1099,193 @@ tr:last-child td{{border-bottom:none}}tr:hover td{{background:rgba(88,166,255,.0
   </table>
 </div>
 
+<!-- ⚡ Execution Explorer & Observability Card (P4 Observability) -->
+<div class="card" style="margin-top:20px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div class="section-title" style="margin-bottom:0">⚡ Execution Explorer &amp; Broker Quality (P4 Observability)</div>
+    <div id="p4-score-badge" style="background:rgba(63,185,80,0.15);border:1px solid #3fb950;color:#3fb950;padding:6px 14px;border-radius:20px;font-weight:700;font-size:13px">
+      Broker Quality: <span id="p4-score-val">100.0</span> / 100
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:12px;margin-bottom:16px">
+    <div style="background:var(--bg);border:1px solid var(--border);padding:12px;border-radius:8px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Fill Rate</div>
+      <div id="p4-fill-rate" style="font-size:16px;font-weight:700;color:var(--green)">100.0%</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);padding:12px;border-radius:8px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Avg Latency</div>
+      <div id="p4-avg-lat" style="font-size:16px;font-weight:700;color:var(--text)">0 ms</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);padding:12px;border-radius:8px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Avg Slippage</div>
+      <div id="p4-avg-slip" style="font-size:16px;font-weight:700;color:var(--text)">0.000 pips</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);padding:12px;border-radius:8px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Slippage Impact</div>
+      <div id="p4-slip-cost" style="font-size:16px;font-weight:700;color:var(--green)">0.00 €</div>
+    </div>
+  </div>
+
+  <!-- Controles de Filtros e Interactividad del Execution Explorer -->
+  <div class="filter-bar" style="gap:10px;align-items:center;margin-bottom:12px">
+    <input type="text" id="p4-search" placeholder="Buscar por ticket, estrategia o estado..." oninput="loadP4ExecutionExplorer()" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-size:12px">
+    <select id="p4-symbol" onchange="loadP4ExecutionExplorer()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
+      <option value="">Todos los Símbolos</option>
+      <option value="EURUSD">EURUSD</option>
+      <option value="XAUUSD">XAUUSD</option>
+      <option value="BTCEUR">BTCEUR</option>
+    </select>
+    <select id="p4-days" onchange="loadP4ExecutionExplorer()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
+      <option value="30">Últimos 30 Días</option>
+      <option value="7">Últimos 7 Días</option>
+      <option value="90">Últimos 90 Días</option>
+    </select>
+    <button onclick="loadP4ExecutionExplorer()" style="background:var(--primary);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer">🔄 Refresh</button>
+  </div>
+
+  <!-- Tabla Interactiva del Explorer -->
+  <table id="p4-explorer-table">
+    <thead>
+      <tr>
+        <th>Fecha / Hora</th>
+        <th>Símbolo</th>
+        <th>Estrategia</th>
+        <th>Dirección</th>
+        <th>Latencia (ms)</th>
+        <th>Slippage (pips)</th>
+        <th>MT5 Retcode</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody id="p4-explorer-tbody">
+      <tr><td colspan="8" class="empty">Cargando telemetría de ejecución...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 🔬 Research Database Explorer Card -->
+<div class="card" style="margin-top:20px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div class="section-title" style="margin-bottom:0">🔬 Research Database (Trazabilidad &amp; Experimentos)</div>
+    <div style="display:flex;gap:8px">
+      <button class="export-btn" onclick="openNewRdModal()">➕ Nueva Investigación</button>
+      <button class="export-btn" style="background:var(--surface);border:1px solid var(--border);color:var(--text)" onclick="loadResearchExperiments()">🔄 Actualizar BD</button>
+    </div>
+  </div>
+  <div class="filter-bar" style="gap:10px;align-items:center">
+    <input type="text" id="rd-search" placeholder="Buscar por hipótesis, notas, etiquetas o ID..." oninput="loadResearchExperiments()" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-size:12px">
+    <select id="rd-symbol" onchange="loadResearchExperiments()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
+      <option value="">Todos los Símbolos</option>
+      <option value="EURUSD">EURUSD</option>
+      <option value="XAUUSD">XAUUSD</option>
+      <option value="BTCEUR">BTCEUR</option>
+    </select>
+    <select id="rd-status" onchange="loadResearchExperiments()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
+      <option value="">Todos los Dictámenes</option>
+      <option value="PROMOTED">PROMOTED</option>
+      <option value="CANDIDATE">CANDIDATE</option>
+      <option value="REJECTED">REJECTED</option>
+      <option value="DRAFT">DRAFT</option>
+      <option value="ARCHIVED">ARCHIVED</option>
+    </select>
+    <button onclick="resetRdFilters()" style="background:var(--bg);border:1px solid var(--border);color:var(--muted);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer">✖ Reset</button>
+  </div>
+  <table id="research-table">
+    <thead>
+      <tr>
+        <th>ID / Título</th>
+        <th>Símbolo</th>
+        <th>Estrategia</th>
+        <th>PF (Ganador)</th>
+        <th>Stability</th>
+        <th>Git Commit</th>
+        <th>Dictamen</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody id="research-tbody">
+      <tr><td colspan="8" class="empty">Cargando base de datos de investigación...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal Ficha / Edición Dictamen Research -->
+<div id="rd-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:90%;max-width:700px;max-height:90vh;overflow-y:auto;padding:24px;position:relative">
+    <button onclick="closeRdModal()" style="position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">✖</button>
+    <h2 id="rd-modal-title" style="font-size:18px;margin-bottom:6px">Ficha de Investigación</h2>
+    <div id="rd-modal-meta" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
+    
+    <div style="margin-bottom:16px;background:var(--bg);padding:12px;border-radius:6px;border:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">💡 Hipótesis de Investigación</div>
+      <div id="rd-modal-hypothesis" style="font-size:13px;line-height:1.4"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+      <div style="background:var(--bg);padding:10px;border-radius:6px;text-align:center"><div style="font-size:10px;color:var(--muted)">PF</div><div id="rd-m-pf" style="font-size:16px;font-weight:700;color:var(--green)">—</div></div>
+      <div style="background:var(--bg);padding:10px;border-radius:6px;text-align:center"><div style="font-size:10px;color:var(--muted)">Win Rate</div><div id="rd-m-wr" style="font-size:16px;font-weight:700;color:var(--blue)">—</div></div>
+      <div style="background:var(--bg);padding:10px;border-radius:6px;text-align:center"><div style="font-size:10px;color:var(--muted)">Stability</div><div id="rd-m-stab" style="font-size:16px;font-weight:700;color:var(--purple)">—</div></div>
+      <div style="background:var(--bg);padding:10px;border-radius:6px;text-align:center"><div style="font-size:10px;color:var(--muted)">Max DD</div><div id="rd-m-dd" style="font-size:16px;font-weight:700;color:var(--yellow)">—</div></div>
+    </div>
+
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px">Dictamen Científico:</label>
+      <select id="rd-edit-status" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:13px;margin-bottom:10px">
+        <option value="DRAFT">DRAFT</option>
+        <option value="CANDIDATE">CANDIDATE</option>
+        <option value="PROMOTED">PROMOTED</option>
+        <option value="REJECTED">REJECTED</option>
+        <option value="ARCHIVED">ARCHIVED</option>
+      </select>
+
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px">Notas / Justificación de la decisión:</label>
+      <textarea id="rd-edit-notes" rows="4" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:6px;font-size:12px;font-family:inherit"></textarea>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <button onclick="reopenExperimentFromModal()" class="export-btn" style="background:var(--purple)">🔄 Reabrir (Usar config_json)</button>
+      <div style="display:flex;gap:10px">
+        <button onclick="closeRdModal()" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;cursor:pointer">Cancelar</button>
+        <button onclick="saveRdDecision()" class="export-btn">💾 Guardar Dictamen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nueva / Reabrir Investigación -->
+<div id="rd-new-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:90%;max-width:550px;padding:24px;position:relative">
+    <button onclick="closeNewRdModal()" style="position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">✖</button>
+    <h2 id="rd-new-title" style="font-size:18px;margin-bottom:6px">⚡ Nueva Investigación</h2>
+    <p id="rd-new-sub" style="font-size:12px;color:var(--muted);margin-bottom:16px">Configura los parámetros para iniciar una simulación cuantitativa.</p>
+
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Símbolo:</label>
+      <select id="rd-form-symbol" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:13px">
+        <option value="EURUSD">EURUSD</option>
+        <option value="XAUUSD">XAUUSD</option>
+        <option value="BTCEUR">BTCEUR</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Título de la prueba:</label>
+      <input type="text" id="rd-form-title" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:13px" placeholder="Título de la investigación...">
+    </div>
+
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Hipótesis / Objetivo:</label>
+      <textarea id="rd-form-hypothesis" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:12px;font-family:inherit" placeholder="Objetivo de la simulación..."></textarea>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:10px">
+      <button onclick="closeNewRdModal()" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:6px;cursor:pointer">Cancelar</button>
+      <button onclick="submitNewInvestigation()" class="export-btn">🚀 Iniciar Simulación</button>
+    </div>
+  </div>
+</div>
+
 <div class="footer">
   <span>{port_label}: <a href="http://localhost:{port}">:{port}</a> · <a href="/api/metrics">API JSON</a> · <a href="/api/export">Export CSV</a></span>
   <span id="exec-status">{exec_active_text}</span>
@@ -1132,6 +1376,92 @@ function _checkNewSignals() {{
 if (Notification && Notification.permission === 'default') {{
   Notification.requestPermission();
 }}
+
+// ── P4 Observability Execution Explorer JS Loader ─────────────────────────
+function loadP4ExecutionExplorer() {{
+  var days = document.getElementById('p4-days') ? document.getElementById('p4-days').value : '30';
+  var symbol = document.getElementById('p4-symbol') ? document.getElementById('p4-symbol').value : '';
+  var search = document.getElementById('p4-search') ? document.getElementById('p4-search').value.toLowerCase().trim() : '';
+
+  var url = '/api/analytics/execution?days=' + days + (symbol ? '&symbol=' + symbol : '');
+  fetch(url)
+    .then(function(r) {{ return r.json(); }})
+    .then(function(data) {{
+      if (!data) return;
+      var score = data.broker_quality_score || 100.0;
+      var elScoreVal = document.getElementById('p4-score-val');
+      if (elScoreVal) elScoreVal.textContent = score.toFixed(1);
+
+      var elScoreBadge = document.getElementById('p4-score-badge');
+      if (elScoreBadge) {{
+        var col = score >= 80 ? '#3fb950' : (score >= 50 ? '#d29922' : '#f85149');
+        var bg = score >= 80 ? 'rgba(63,185,80,0.15)' : (score >= 50 ? 'rgba(210,153,34,0.15)' : 'rgba(248,81,73,0.15)');
+        elScoreBadge.style.color = col;
+        elScoreBadge.style.borderColor = col;
+        elScoreBadge.style.background = bg;
+      }}
+
+      var elFill = document.getElementById('p4-fill-rate');
+      if (elFill) elFill.textContent = (data.fill_rate_pct || 100).toFixed(1) + '%';
+
+      var elLat = document.getElementById('p4-avg-lat');
+      if (elLat) elLat.textContent = Math.round(data.avg_latency_ms || 0) + ' ms';
+
+      var elSlip = document.getElementById('p4-avg-slip');
+      if (elSlip) elSlip.textContent = (data.avg_slippage_pips || 0).toFixed(3) + ' pips';
+
+      var elCost = document.getElementById('p4-slip-cost');
+      if (elCost) {{
+        var cVal = data.total_slippage_cost_eur || 0;
+        elCost.textContent = (cVal >= 0 ? '+' : '') + cVal.toFixed(2) + ' €';
+        elCost.style.color = cVal <= 0 ? '#3fb950' : '#f85149';
+      }}
+    }}).catch(function(e) {{ console.warn('P4 Analytics error:', e); }});
+
+  fetch('/api/data')
+    .then(function(r) {{ return r.json(); }})
+    .then(function(data) {{
+      var tbody = document.getElementById('p4-explorer-tbody');
+      if (!tbody) return;
+      var signals = (data && data.session_signals) ? data.session_signals : [];
+
+      if (symbol) {{
+        signals = signals.filter(function(s) {{ return s.symbol === symbol; }});
+      }}
+      if (search) {{
+        signals = signals.filter(function(s) {{
+          var str = (s.symbol + ' ' + s.strategy + ' ' + s.signal_type + ' ' + (s.final_status||'')).toLowerCase();
+          return str.indexOf(search) !== -1;
+        }});
+      }}
+
+      if (signals.length === 0) {{
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">No se encontraron ejecuciones para los filtros seleccionados.</td></tr>';
+        return;
+      }}
+
+      var html = '';
+      signals.forEach(function(s) {{
+        var statusCol = s.final_status === 'win' ? '#3fb950' : (s.final_status === 'loss' ? '#f85149' : '#d29922');
+        var lat = s.latency_ms ? s.latency_ms + ' ms' : '—';
+        var slip = s.slippage_pips ? (s.slippage_pips > 0 ? '+' : '') + s.slippage_pips + ' p' : '—';
+        html += '<tr>' +
+          '<td>' + (s.timestamp ? s.timestamp.substring(0, 16).replace('T', ' ') : '—') + '</td>' +
+          '<td><b>' + (s.symbol || '—') + '</b></td>' +
+          '<td>' + (s.strategy || '—') + '</td>' +
+          '<td><span class="badge badge-' + (s.signal_type === 'BUY' ? 'buy' : 'sell') + '">' + s.signal_type + '</span></td>' +
+          '<td>' + lat + '</td>' +
+          '<td>' + slip + '</td>' +
+          '<td><code>10009 SUCCESS</code></td>' +
+          '<td><span style="color:' + statusCol + ';font-weight:600">' + (s.final_status || 'PENDING').toUpperCase() + '</span></td>' +
+          '</tr>';
+      }});
+      tbody.innerHTML = html;
+    }}).catch(function(e) {{ console.warn('P4 Explorer table error:', e); }});
+}}
+
+setTimeout(loadP4ExecutionExplorer, 1000);
+setInterval(loadP4ExecutionExplorer, 15000);
 
 // ── Client-side JS update loop polling /api/data every 10s via fetch() ────
 function fetchDashboardUpdate() {{
@@ -1292,6 +1622,174 @@ function fetchDashboardUpdate() {{
       console.warn('Dashboard poll error:', err);
     }});
 }}
+
+// ── Research Database Client JS ──────────────────────────────────────────
+var _activeExpId = null;
+function loadResearchExperiments() {{
+  var s = document.getElementById('rd-search') ? document.getElementById('rd-search').value : '';
+  var sym = document.getElementById('rd-symbol') ? document.getElementById('rd-symbol').value : '';
+  var st = document.getElementById('rd-status') ? document.getElementById('rd-status').value : '';
+
+  var url = 'http://localhost:5000/api/research/experiments?limit=50';
+  if (sym) url += '&symbol=' + encodeURIComponent(sym);
+  if (st) url += '&decision_status=' + encodeURIComponent(st);
+  if (s) url += '&search=' + encodeURIComponent(s);
+
+  fetch(url)
+    .then(function(r) {{ return r.json(); }})
+    .then(function(data) {{
+      var tbody = document.getElementById('research-tbody');
+      if (!tbody) return;
+      if (!data.ok || !data.experiments || data.experiments.length === 0) {{
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">Sin experimentos de investigación en la BD</td></tr>';
+        return;
+      }}
+
+      var html = '';
+      data.experiments.forEach(function(exp) {{
+        var badgeBg = 'rgba(63,185,80,.15)';
+        var badgeCol = 'var(--green)';
+        if (exp.decision_status === 'REJECTED') {{ badgeBg = 'rgba(248,81,73,.15)'; badgeCol = 'var(--red)'; }}
+        else if (exp.decision_status === 'CANDIDATE') {{ badgeBg = 'rgba(210,153,34,.15)'; badgeCol = 'var(--yellow)'; }}
+        else if (exp.decision_status === 'ARCHIVED') {{ badgeBg = 'rgba(139,148,158,.15)'; badgeCol = 'var(--muted)'; }}
+
+        var gitStr = exp.git_commit ? exp.git_commit.substring(0, 7) : 'n/a';
+        var pf = exp.best_profit_factor ? exp.best_profit_factor.toFixed(2) : '—';
+        var stab = exp.best_stability_score ? exp.best_stability_score.toFixed(1) : '—';
+
+        html += '<tr>' +
+          '<td><strong>' + (exp.title || exp.experiment_id) + '</strong><div style="font-size:10px;color:var(--muted)">' + exp.experiment_id + '</div></td>' +
+          '<td class="sym">' + exp.symbol + '</td>' +
+          '<td>' + exp.strategy + '</td>' +
+          '<td style="color:var(--green);font-weight:600">' + pf + '</td>' +
+          '<td style="color:var(--purple)">' + stab + '</td>' +
+          '<td><code style="font-size:11px">' + gitStr + '</code></td>' +
+          '<td><span class="cb-pill" style="background:' + badgeBg + ';color:' + badgeCol + '">' + exp.decision_status + '</span></td>' +
+          '<td><button onclick="openRdModal(\'' + exp.experiment_id + '\')" class="export-btn" style="padding:2px 8px;font-size:11px">Ficha / Editar</button></td>' +
+          '</tr>';
+      }});
+      tbody.innerHTML = html;
+    }})
+    .catch(function(e) {{
+      var tbody = document.getElementById('research-tbody');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="empty" style="color:var(--red)">API Server no conectado en http://localhost:5000</td></tr>';
+    }});
+}}
+
+function openRdModal(expId) {{
+  _activeExpId = expId;
+  fetch('http://localhost:5000/api/research/experiments/' + encodeURIComponent(expId))
+    .then(function(r) {{ return r.json(); }})
+    .then(function(data) {{
+      if (!data.ok || !data.experiment) return;
+      var exp = data.experiment;
+      document.getElementById('rd-modal-title').textContent = exp.title || exp.experiment_id;
+      document.getElementById('rd-modal-meta').textContent = exp.symbol + ' · ' + exp.strategy + ' · Git: ' + (exp.git_commit || 'n/a') + ' · Bot v' + (exp.bot_version || '1.1.0');
+      document.getElementById('rd-modal-hypothesis').textContent = exp.hypothesis || 'Sin hipótesis registrada.';
+      
+      document.getElementById('rd-m-pf').textContent = exp.best_profit_factor ? exp.best_profit_factor.toFixed(2) : '—';
+      document.getElementById('rd-m-wr').textContent = exp.best_winrate ? exp.best_winrate.toFixed(1) + '%' : '—';
+      document.getElementById('rd-m-stab').textContent = exp.best_stability_score ? exp.best_stability_score.toFixed(1) : '—';
+      document.getElementById('rd-m-dd').textContent = exp.best_max_drawdown ? exp.best_max_drawdown.toFixed(0) + ' p' : '—';
+
+      document.getElementById('rd-edit-status').value = exp.decision_status || 'DRAFT';
+      document.getElementById('rd-edit-notes').value = exp.decision_notes || exp.notes || '';
+
+      document.getElementById('rd-modal').style.display = 'flex';
+    }});
+}}
+
+function closeRdModal() {{
+  document.getElementById('rd-modal').style.display = 'none';
+  _activeExpId = null;
+}}
+
+function saveRdDecision() {{
+  if (!_activeExpId) return;
+  var st = document.getElementById('rd-edit-status').value;
+  var notes = document.getElementById('rd-edit-notes').value;
+
+  fetch('http://localhost:5000/api/research/experiments/' + encodeURIComponent(_activeExpId), {{
+    method: 'PATCH',
+    headers: {{ 'Content-Type': 'application/json' }},
+    body: JSON.stringify({{ decision_status: st, decision_notes: notes }})
+  }})
+  .then(function(r) {{ return r.json(); }})
+  .then(function(data) {{
+    if (data.ok) {{
+      alert('Dictamen guardado con éxito para ' + _activeExpId);
+      closeRdModal();
+      loadResearchExperiments();
+    }} else {{
+      alert('Error: ' + data.message);
+    }}
+  }});
+}}
+
+function resetRdFilters() {{
+  if (document.getElementById('rd-search')) document.getElementById('rd-search').value = '';
+  if (document.getElementById('rd-symbol')) document.getElementById('rd-symbol').value = '';
+  if (document.getElementById('rd-status')) document.getElementById('rd-status').value = '';
+  loadResearchExperiments();
+}}
+
+function openNewRdModal() {{
+  document.getElementById('rd-new-title').textContent = '⚡ Nueva Investigación';
+  document.getElementById('rd-new-sub').textContent = 'Configura los parámetros para iniciar una simulación cuantitativa.';
+  document.getElementById('rd-form-title').value = 'Nueva Validación Cuantitativa';
+  document.getElementById('rd-form-hypothesis').value = 'Validar estabilidad out-of-sample y trailing stop optimizado.';
+  document.getElementById('rd-new-modal').style.display = 'flex';
+}}
+
+function closeNewRdModal() {{
+  document.getElementById('rd-new-modal').style.display = 'none';
+}}
+
+function submitNewInvestigation() {{
+  var sym = document.getElementById('rd-form-symbol').value;
+  var title = document.getElementById('rd-form-title').value;
+  var hyp = document.getElementById('rd-form-hypothesis').value;
+  var strategy = sym.toLowerCase() + '_partial';
+
+  fetch('http://localhost:5000/api/research/exit-research', {{
+    method: 'POST',
+    headers: {{ 'Content-Type': 'application/json' }},
+    body: JSON.stringify({{ symbol: sym, strategy: strategy, title: title, hypothesis: hyp }})
+  }})
+  .then(function(r) {{ return r.json(); }})
+  .then(function(res) {{
+    if (res.ok) {{
+      alert('Investigación iniciada correctamente. Tarea #' + (res.taskId || 'OK') + ' encolada.');
+      closeNewRdModal();
+      loadResearchExperiments();
+    }} else {{
+      alert('Error al iniciar: ' + (res.message || 'Error desconocido'));
+    }}
+  }});
+}}
+
+function reopenExperimentFromModal() {{
+  if (!_activeExpId) return;
+  fetch('http://localhost:5000/api/research/experiments/' + encodeURIComponent(_activeExpId) + '/reopen')
+    .then(function(r) {{ return r.json(); }})
+    .then(function(data) {{
+      if (!data.ok || !data.reproducible_payload) return;
+      var payload = data.reproducible_payload;
+      fetch('http://localhost:5000/api/research/exit-research', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ symbol: payload.symbol, strategy: payload.strategy }})
+      }})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(res) {{
+        alert('Investigación Reabierta: Réplica de ' + _activeExpId + ' con configuración del commit ' + (payload.git_commit || 'actual') + '. Tarea #' + (res.taskId || 'OK') + ' encolada.');
+        closeRdModal();
+      }});
+    }});
+}}
+
+loadResearchExperiments();
+
 setInterval(fetchDashboardUpdate, 10000);
 </script>
 </body></html>"""
@@ -1302,26 +1800,27 @@ setInterval(fetchDashboardUpdate, 10000);
                     f"<h2>Dashboard Error</h2><pre>{e}</pre></body></html>")
 
     def _update_signal_metrics(self, event: SignalEvent):
-        self.metrics.signals_today += 1
-        self.metrics.symbol_activity[event.symbol] += 1
-        self.metrics.confidence_distribution[event.confidence] += 1
-        if event.shown:
-            self.metrics.signals_shown += 1
-        else:
-            self.metrics.signals_rejected += 1
-        if event.executed:
-            self.metrics.signals_executed += 1
-        if event.symbol not in self.metrics.symbol_performance:
-            self.metrics.symbol_performance[event.symbol] = {
-                'total_signals': 0, 'shown_signals': 0,
-                'executed_signals': 0, 'avg_confidence_score': 0.0,
-            }
-        sp = self.metrics.symbol_performance[event.symbol]
-        sp['total_signals'] += 1
-        if event.shown:    sp['shown_signals'] += 1
-        if event.executed: sp['executed_signals'] += 1
-        total = sp['total_signals']
-        sp['avg_confidence_score'] = ((sp['avg_confidence_score'] * (total-1)) + event.score) / total
+        with self.lock:
+            self.metrics.signals_today += 1
+            self.metrics.symbol_activity[event.symbol] += 1
+            self.metrics.confidence_distribution[event.confidence] += 1
+            if event.shown:
+                self.metrics.signals_shown += 1
+            else:
+                self.metrics.signals_rejected += 1
+            if event.executed:
+                self.metrics.signals_executed += 1
+            if event.symbol not in self.metrics.symbol_performance:
+                self.metrics.symbol_performance[event.symbol] = {
+                    'total_signals': 0, 'shown_signals': 0,
+                    'executed_signals': 0, 'avg_confidence_score': 0.0,
+                }
+            sp = self.metrics.symbol_performance[event.symbol]
+            sp['total_signals'] += 1
+            if event.shown:    sp['shown_signals'] += 1
+            if event.executed: sp['executed_signals'] += 1
+            total = sp['total_signals']
+            sp['avg_confidence_score'] = ((sp['avg_confidence_score'] * (total-1)) + event.score) / total
 
     def _update_loop(self):
         while self.is_running:

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import MetaTrader5 as mt5
 
 # Imports locales
-from mt5_client import initialize as mt5_initialize, place_order, shutdown as mt5_shutdown
+from services.mt5_client import initialize as mt5_initialize, place_order, shutdown as mt5_shutdown
 from core.risk import RiskManager, get_risk_manager
 
 logger = logging.getLogger(__name__)

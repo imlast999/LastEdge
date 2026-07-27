@@ -124,20 +124,11 @@ class TradeJournal:
         self.db_path = db_path
         self._ensure_table()
 
-    # ── Contexto de conexión ──────────────────────────────────────────────────
-
     @contextmanager
     def _conn(self):
-        conn = sqlite3.connect(self.db_path, timeout=10)
-        conn.row_factory = sqlite3.Row
-        try:
+        from services.database import get_database_manager
+        with get_database_manager(self.db_path).get_connection() as conn:
             yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
 
     def _ensure_table(self):
         """Crea la tabla si no existe (migración idempotente sin romper esquemas)."""

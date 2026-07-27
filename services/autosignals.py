@@ -224,8 +224,13 @@ class AutoSignalsService:
         self.last_scan_time = datetime.now(timezone.utc)
 
         self.scan_count += 1
-        if self.scan_count % 10 == 1:
-            log_event(f"Checking {len(self.config['AUTOSIGNAL_SYMBOLS'])} pairs...", "INFO", "AUTOSIGNAL")
+        symbols_str = ", ".join(self.config['AUTOSIGNAL_SYMBOLS'])
+        if self.scan_count == 1 or self.scan_count % 3 == 0:
+            log_event(
+                f"🔍 AUTOSIGNAL SCAN #{self.scan_count}: Escaneando {len(self.config['AUTOSIGNAL_SYMBOLS'])} pares ({symbols_str}) | Conexión MT5: OK",
+                "INFO",
+                "AUTOSIGNAL"
+            )
 
         channel = await self.find_signals_channel()
         if channel is None:

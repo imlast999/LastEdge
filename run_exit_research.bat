@@ -14,7 +14,7 @@ echo ====================================================
 echo.
 
 :: -- Verificar que estamos en el directorio correcto --
-if not exist "run_exit_research_runner.py" (
+if not exist "run_exit_research.py" (
     echo [ERROR] Ejecutar desde el directorio raiz del proyecto.
     echo         cd c:\BOT-MT5
     echo         run_exit_research.bat
@@ -169,7 +169,7 @@ echo [1/1] Exit Research + WF + MC
 echo ======================================
 echo.
 
-python run_exit_research_runner.py --symbol !SYMBOL! --bars !BARS!
+python run_exit_research.py --symbol !SYMBOL! --bars !BARS!
 set "_EXIT_CODE=!errorlevel!"
 
 echo.
