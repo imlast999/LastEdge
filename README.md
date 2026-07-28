@@ -114,8 +114,8 @@ Follow these steps to set up and run the entire LastEdge stack on your local Win
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/imlast999/BOT-MT5.git
-cd BOT-MT5
+git clone https://github.com/imlast999/LastEdge.git
+cd LastEdge
 
 # 2. Create and activate virtual environment (optional but recommended)
 python -m venv venv
