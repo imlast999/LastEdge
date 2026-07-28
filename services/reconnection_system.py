@@ -76,6 +76,11 @@ class ReconnectionSystem:
             return True
             
         except Exception as e:
+            try:
+                from services.long_forward_validation import get_long_forward_validation_service
+                get_long_forward_validation_service().notify_mt5_disconnect()
+            except Exception:
+                pass
             self.log_reconnection_event(f"MT5 connection check failed: {e}", "ERROR")
             return False
     
@@ -132,6 +137,12 @@ class ReconnectionSystem:
                 self.mt5_retry_count = 0
                 self.log_reconnection_event("✅ MT5 reconnection successful")
                 
+                try:
+                    from services.long_forward_validation import get_long_forward_validation_service
+                    get_long_forward_validation_service().notify_mt5_reconnect()
+                except Exception:
+                    pass
+
                 if self.on_mt5_reconnect:
                     await self.on_mt5_reconnect()
                 

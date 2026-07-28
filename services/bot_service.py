@@ -429,6 +429,26 @@ class BotService:
             logger.error(f"Error stopping long forward session in BotService: {e}")
             return {"ok": False, "error": str(e)}
 
+    def list_long_forward_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Obtiene el historial de sesiones almacenadas en SQLite."""
+        try:
+            from services.long_forward_validation import get_long_forward_validation_service
+            service = get_long_forward_validation_service()
+            return service.list_sessions(limit=limit)
+        except Exception as e:
+            logger.error(f"Error listing long forward sessions in BotService: {e}")
+            return []
+
+    def get_long_forward_session(self, session_id: str) -> Dict[str, Any]:
+        """Obtiene los detalles completos de una sesión específica por ID."""
+        try:
+            from services.long_forward_validation import get_long_forward_validation_service
+            service = get_long_forward_validation_service()
+            return service.get_session(session_id=session_id)
+        except Exception as e:
+            logger.error(f"Error fetching long forward session {session_id} in BotService: {e}")
+            return {"ok": False, "error": str(e)}
+
 # Instancia global por defecto
 _bot_service_instance: Optional[BotService] = None
 
