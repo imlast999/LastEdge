@@ -1,28 +1,21 @@
-Antes de dar por cerrada definitivamente la subfase **P5.1 — Go Live Checklist**, quiero realizar una última auditoría técnica.
+P5.2 has been reviewed and is officially approved.
 
-No implementes nuevas funcionalidades ni modifiques código salvo que encuentres un problema real.
+You can now begin working on the next roadmap subphase (P5.3).
 
-Revisa la implementación completa de P5.1 como si fueras un revisor externo y verifica:
+Please follow the same workflow used throughout P3, P4 and P5:
 
-* Que las 17 comprobaciones utilizan datos reales del sistema y no valores simulados, placeholders o datos hardcodeados.
-* Que cada comprobación evalúa realmente aquello que afirma evaluar.
-* Que no existen falsos positivos (PASS cuando debería ser WARN o FAIL).
-* Que no existen falsos negativos.
-* Que los niveles PASS / WARN / FAIL son coherentes.
-* Que el checklist puede ejecutarse tanto desde BotService, como desde la CLI y desde la API REST obteniendo exactamente los mismos resultados.
-* Que no hay duplicación de lógica entre estas tres interfaces.
-* Que la implementación sigue la arquitectura actual del proyecto.
-* Que no introduce nueva deuda técnica.
-* Que los tests realmente validan el comportamiento y no únicamente la estructura de los datos devueltos.
+- Implement only the scope defined for P5.3.
+- Do not modify unrelated parts of the project.
+- Reuse the existing architecture (BotService, services, adapters, REST API, CLI) and avoid duplicate logic.
+- Every new feature must use real system data whenever possible. No placeholders, mocked values or hardcoded outputs unless explicitly required for testing.
+- Add or update unit tests covering the new functionality.
+- Run the complete test suite and ensure all tests pass.
+- Perform an honest self-audit of the implementation, including:
+  - what was implemented,
+  - what real data sources are used,
+  - tests executed,
+  - limitations or remaining work,
+  - whether the subphase is truly complete or only partially complete.
+- If the subphase is fully complete, create a descriptive Git commit and push it to GitHub.
 
-Además, realiza una revisión crítica del diseño y dime si añadirías alguna comprobación realmente importante antes de considerar LastEdge listo para producción. No quiero añadir comprobaciones "por añadir"; únicamente aquellas que aporten un valor claro.
-
-Al finalizar, genera un informe indicando:
-
-* Qué has verificado.
-* Qué pruebas has ejecutado.
-* Problemas encontrados (si existen).
-* Recomendaciones (si existen).
-* Si P5.1 puede darse por cerrada al 100% o no.
-
-Si todo está correcto, pasaremos directamente a la subfase **P5.2 — Automated Production Verification**.
+Do not start the following roadmap phase until P5.3 has been reviewed and approved.

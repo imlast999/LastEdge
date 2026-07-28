@@ -399,6 +399,36 @@ class BotService:
             logger.error(f"Error running production verification in BotService: {e}")
             return {"verification_passed": False, "error": str(e), "subsystems": []}
 
+    def get_long_forward_status(self) -> Dict[str, Any]:
+        """Obtiene la telemetría de estabilidad y salud a largo plazo (P5.3)."""
+        try:
+            from services.long_forward_validation import get_long_forward_validation_service
+            service = get_long_forward_validation_service()
+            return service.get_validation_report()
+        except Exception as e:
+            logger.error(f"Error getting long forward status in BotService: {e}")
+            return {"verdict": "UNKNOWN", "error": str(e)}
+
+    def start_long_forward_session(self, profile: str = "24h") -> Dict[str, Any]:
+        """Inicia una sesión continua de validación de estabilidad a largo plazo (24h, 72h, 7d)."""
+        try:
+            from services.long_forward_validation import get_long_forward_validation_service
+            service = get_long_forward_validation_service()
+            return service.start_session(profile=profile)
+        except Exception as e:
+            logger.error(f"Error starting long forward session in BotService: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def stop_long_forward_session(self) -> Dict[str, Any]:
+        """Detiene la sesión activa de validación de estabilidad a largo plazo."""
+        try:
+            from services.long_forward_validation import get_long_forward_validation_service
+            service = get_long_forward_validation_service()
+            return service.stop_session()
+        except Exception as e:
+            logger.error(f"Error stopping long forward session in BotService: {e}")
+            return {"ok": False, "error": str(e)}
+
 # Instancia global por defecto
 _bot_service_instance: Optional[BotService] = None
 
