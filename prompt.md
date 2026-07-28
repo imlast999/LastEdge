@@ -1,88 +1,68 @@
-The audit confirmed that P5.3 is very close to completion, but it is still a Process & Resource Health Monitor rather than a complete Long Forward Validation system.
+P5.3 is now officially CLOSED.
 
-I want to close P5.3 properly before moving to P5.4.
+We are now starting P5.4 — Broker Certification.
 
-Please implement ONLY the improvements identified by the audit.
+This phase is NOT about adding random features.
+Its objective is to prove that LastEdge is operationally safe and ready for real trading.
 
-Do not redesign the architecture.
-Do not introduce unnecessary complexity.
-Reuse the existing services wherever possible.
+Think like an independent auditor validating a quantitative trading platform before it is allowed to trade live capital.
 
-Required improvements:
+The implementation must always reuse the existing architecture whenever possible.
+Do not duplicate logic.
+Do not redesign working systems.
+Keep everything integrated through BotService.
 
-1. Session persistence
-- Create a persistent long_forward_sessions table.
-- Store:
-  - session_id
-  - profile (24h / 72h / 7d)
-  - status (ACTIVE, COMPLETED, ABORTED, INTERRUPTED)
-  - start_time
-  - end_time
-  - final_verdict
-  - summary_json
-- On startup, automatically detect abandoned ACTIVE sessions and mark them as INTERRUPTED.
+The goal of P5.4 is to verify the complete execution chain from signal generation to broker execution.
 
-2. Trading integration
-Extend LongForwardValidationService so each validation session automatically includes:
-- generated signals
-- executed trades
-- rejected orders
-- missed executions (when possible)
-- equity evolution
-- floating PnL evolution
-- maximum drawdown
-- execution statistics (reuse ExecutionAnalyticsService whenever possible)
+The certification should validate, at minimum:
 
-Do not duplicate logic that already exists elsewhere.
+• MT5 terminal stability
+• broker connectivity
+• account consistency
+• execution permissions
+• market data integrity
+• spread sanity checks
+• execution latency
+• slippage monitoring
+• order execution success rate
+• order rejection analysis
+• reconnection resilience
+• risk engine validation before execution
+• execution safeguards
+• emergency stop behaviour (Circuit Breaker)
+• recovery after failures
 
-3. MT5 downtime tracking
-Integrate LongForwardValidationService with reconnection_system.py.
+Every verification must use REAL data whenever available.
 
-Automatically record:
-- disconnect timestamp
-- reconnect timestamp
-- downtime duration
-- total reconnect count
+Never fabricate values.
+Never use placeholders.
+Never hardcode results.
 
-No manual calls should be required.
+Every certification check must clearly return:
 
-4. Historical session explorer
-Implement:
-- CLI:
-  python run_long_forward_validation.py --list
-  python run_long_forward_validation.py --session <id>
+- PASS
+- WARN
+- FAIL
 
-- REST API:
-  GET /api/system/long-forward-validation/history
-  GET /api/system/long-forward-validation/<session_id>
+with a detailed explanation.
 
-Allow previous sessions to be inspected after they have finished.
+If any critical certification fails, the system must clearly report that the platform is NOT certified for live trading.
 
-5. Forward Validation Score
-Implement a final quantitative score (0–100) summarizing the overall quality of the validation session.
+Integrate the certification into:
 
-The score should be calculated from real metrics such as:
-- uptime
-- MT5 disconnects
-- downtime
-- recovered failures
-- unrecovered failures
-- rejected orders
-- execution quality
-- drawdown
-- memory stability
-- anomaly severity
+- BotService
+- CLI
+- REST API
+- Dashboard
 
-The exact weights are up to you, but document the calculation clearly.
+Create all necessary unit tests.
+
+Run the complete test suite.
 
 After implementation:
 
-- execute the complete unit test suite;
-- add any new tests required;
-- verify that all data comes from real services (no placeholders or mocked values);
-- perform a final honest audit of P5.3;
-- if every roadmap requirement is now satisfied, explicitly declare P5.3 officially CLOSED.
-
-Finally:
-- create a git commit with a clear message;
-- push everything to GitHub.
+1. Perform a completely honest audit of P5.4.
+2. Identify anything that still prevents this phase from being considered complete.
+3. If every roadmap objective has been satisfied, officially declare P5.4 CLOSED.
+4. Create a git commit with a clear message.
+5. Push everything to GitHub.

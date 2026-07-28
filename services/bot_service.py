@@ -449,6 +449,16 @@ class BotService:
             logger.error(f"Error fetching long forward session {session_id} in BotService: {e}")
             return {"ok": False, "error": str(e)}
 
+    def run_broker_certification(self) -> Dict[str, Any]:
+        """Ejecuta la auditoría completa de certificación operativa del bróker (P5.4)."""
+        try:
+            from services.broker_certification import get_broker_certification_service
+            service = get_broker_certification_service()
+            return service.run_certification(mt5_client=self.mt5_client, bot_service=self)
+        except Exception as e:
+            logger.error(f"Error running broker certification in BotService: {e}")
+            return {"certification_status": "NOT_CERTIFIED_FOR_LIVE", "error": str(e), "checks": []}
+
 # Instancia global por defecto
 _bot_service_instance: Optional[BotService] = None
 
