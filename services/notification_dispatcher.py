@@ -38,7 +38,12 @@ class NotificationDispatcher:
     async def _get_session(self) -> aiohttp.ClientSession:
         """Obtiene o crea una sesión aiohttp persistente."""
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            import ssl
+            ssl_ctx = ssl.create_default_context()
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+            connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+            self._session = aiohttp.ClientSession(connector=connector)
         return self._session
 
     async def close(self) -> None:

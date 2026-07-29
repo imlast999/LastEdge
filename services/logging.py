@@ -131,12 +131,16 @@ class IntelligentLogger:
                     try:
                         self.terminal.write(message)
                         self.terminal.flush()
-                    except Exception:
+                    except BaseException:
                         pass
 
                     # 2. Escribir al archivo de log línea por línea con salto de línea garantizado
                     try:
                         if not message or not message.strip():
+                            return
+
+                        # Evitar guardar la traza de KeyboardInterrupt al pulsar Ctrl+C
+                        if "KeyboardInterrupt" in message or "Loop thread traceback" in message:
                             return
 
                         lines = message.splitlines()
@@ -151,13 +155,13 @@ class IntelligentLogger:
                                     f.write(f"{clean_line}\n")
                                 else:
                                     f.write(f"[{now_str}] {clean_line}\n")
-                    except Exception:
+                    except BaseException:
                         pass
 
                 def flush(self):
                     try:
                         self.terminal.flush()
-                    except Exception:
+                    except BaseException:
                         pass
 
             # Redirigir stdout y stderr

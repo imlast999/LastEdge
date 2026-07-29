@@ -55,7 +55,13 @@ class TelegramAdapter:
         self.is_running = True
         logger.info("[TelegramAdapter] 🚀 Iniciando polling del bot de Telegram...")
 
-        async with aiohttp.ClientSession() as session:
+        import ssl
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+
+        async with aiohttp.ClientSession(connector=connector) as session:
             while self.is_running:
                 try:
                     url = f"https://api.telegram.org/bot{self.token}/getUpdates"

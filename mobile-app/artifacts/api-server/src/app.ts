@@ -1,15 +1,15 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { pinoHttp } from "pino-http";
-import { logger } from "./lib/logger.js";
+import { logger, pinoInstance } from "./lib/logger.js";
 import routes from "./routes/index.js";
 
 const app = express();
 
-// ── Logging ───────────────────────────────────────────────────────────────────
+// ── Pino Logging Middleware ───────────────────────────────────────────────────
 app.use(
   pinoHttp({
-    logger,
+    logger: pinoInstance,
     serializers: {
       req(req) {
         return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
@@ -20,6 +20,26 @@ app.use(
     },
   })
 );
+
+// ── Custom Request & IP Logger ────────────────────────────────────────────────
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const clientIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown";
+  const startTime = Date.now();
+
+  res.on("finish", () => {
+    const duration = Date.now() - startTime;
+    const logLine = `${req.method} ${req.originalUrl} -> ${res.statusCode} (${duration}ms) | IP: ${clientIp}`;
+    if (res.statusCode >= 500) {
+      logger.error(`❌ [HTTP ${res.statusCode}] ${logLine}`);
+    } else if (res.statusCode >= 400) {
+      logger.warn(`⚠️ [HTTP ${res.statusCode}] ${logLine}`);
+    } else {
+      logger.info(`🌐 ${logLine}`);
+    }
+  });
+
+  next();
+});
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 // Restrict to origins listed in ALLOWED_ORIGINS (comma-separated).
@@ -49,4 +69,28 @@ app.use(express.urlencoded({ extended: true }));
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use("/api", routes);
 
+// ── Global Error Handler ──────────────────────────────────────────────────────
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  const clientIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown";
+  const errMessage = err?.message || String(err);
+  const errStack = err?.stack || "No stack trace available";
+
+  logger.error(
+    `❌ [500 INTERNAL SERVER ERROR] ${req.method} ${req.originalUrl} | Client IP: ${clientIp}\n` +
+    `  Error: ${errMessage}\n` +
+    `  Stack: ${errStack}`
+  );
+
+  if (!res.headersSent) {
+    res.status(500).json({
+      ok: false,
+      error: "Internal Server Error",
+      message: errMessage,
+      path: req.originalUrl,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 export default app;
+

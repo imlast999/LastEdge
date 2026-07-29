@@ -1,4 +1,3 @@
-@if not "%~1"=="am_child" (@cmd /c "%~f0" am_child %* <nul & @exit /b %errorlevel%)
 @echo off
 setlocal EnableDelayedExpansion
 

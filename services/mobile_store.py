@@ -80,25 +80,49 @@ class MobileStore:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS enhanced_signals (
                         id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id       TEXT,
                         timestamp        TEXT NOT NULL,
                         symbol           TEXT NOT NULL,
-                        signal_type      TEXT NOT NULL,
+                        direction        TEXT NOT NULL DEFAULT 'BUY',
+                        signal_type      TEXT DEFAULT 'BUY',
                         strategy         TEXT NOT NULL,
-                        entry_price      REAL NOT NULL,
-                        sl_price         REAL NOT NULL,
-                        tp_price         REAL NOT NULL,
+                        price            REAL DEFAULT 0,
+                        entry_price      REAL DEFAULT 0,
+                        sl_price         REAL DEFAULT 0,
+                        tp_price         REAL DEFAULT 0,
                         score            REAL DEFAULT 0,
                         confidence       TEXT,
+                        confidence_level TEXT,
+                        confidence_score INTEGER DEFAULT 0,
+                        status           TEXT DEFAULT 'PROPOSED',
                         executed         INTEGER DEFAULT 0,
+                        rejected         INTEGER DEFAULT 0,
+                        lot_size         REAL DEFAULT 0.01,
+                        created_at       TEXT,
                         mobile_processed INTEGER DEFAULT 0
                     )
                 """)
                 cols = {r[1] for r in conn.execute("PRAGMA table_info(enhanced_signals)")}
-                if cols and "mobile_processed" not in cols:
-                    conn.execute(
-                        "ALTER TABLE enhanced_signals "
-                        "ADD COLUMN mobile_processed INTEGER DEFAULT 0"
-                    )
+                for col_name, col_def in [
+                    ("session_id", "TEXT"),
+                    ("direction", "TEXT DEFAULT 'BUY'"),
+                    ("price", "REAL DEFAULT 0"),
+                    ("sl_price", "REAL DEFAULT 0"),
+                    ("tp_price", "REAL DEFAULT 0"),
+                    ("lot_size", "REAL DEFAULT 0.01"),
+                    ("confidence_score", "INTEGER DEFAULT 0"),
+                    ("confidence_level", "TEXT"),
+                    ("status", "TEXT DEFAULT 'PROPOSED'"),
+                    ("executed", "INTEGER DEFAULT 0"),
+                    ("rejected", "INTEGER DEFAULT 0"),
+                    ("created_at", "TEXT"),
+                    ("mobile_processed", "INTEGER DEFAULT 0"),
+                ]:
+                    if col_name not in cols:
+                        try:
+                            conn.execute(f"ALTER TABLE enhanced_signals ADD COLUMN {col_name} {col_def}")
+                        except Exception:
+                            pass
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS backtest_tasks (
                         id              INTEGER PRIMARY KEY AUTOINCREMENT,

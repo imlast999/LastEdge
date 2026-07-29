@@ -24,13 +24,19 @@ const server = app.listen(port, (err?: Error) => {
 });
 
 process.on("SIGINT", () => {
-  logger.info("API Server shutting down (SIGINT)...");
-  server.close(() => process.exit(0));
+  logger.info("🛑 [Ctrl+C] Interrupción recibida. Cerrando API Server de forma limpia...");
+  server.close(() => {
+    logger.info("✅ API Server cerrado exitosamente.");
+    process.exit(0);
+  });
   setTimeout(() => process.exit(0), 500).unref();
 });
 
 process.on("SIGTERM", () => {
-  logger.info("API Server shutting down (SIGTERM)...");
-  server.close(() => process.exit(0));
+  logger.info("🛑 [SIGTERM] Señal de terminación recibida. Cerrando API Server...");
+  server.close(() => {
+    logger.info("✅ API Server cerrado exitosamente.");
+    process.exit(0);
+  });
   setTimeout(() => process.exit(0), 500).unref();
 });

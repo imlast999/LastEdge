@@ -503,6 +503,25 @@ async def on_ready():
     init_risk_managers()
     log_event("Gestores de riesgo inicializados correctamente")
 
+    # ── Comprobar e Informar Conexión MT5 en la Terminal ──────────────────────
+    try:
+        def _init_and_check_mt5():
+            if mt5_initialize():
+                import MetaTrader5 as mt5
+                return mt5.account_info()
+            return None
+
+        acc_info = await asyncio.to_thread(_init_and_check_mt5)
+        if acc_info:
+            log_event(
+                f"📈 MetaTrader 5: CONECTADO | Cuenta #{acc_info.login} ({acc_info.name}) | "
+                f"Servidor: {acc_info.server} | Balance: ${acc_info.balance:.2f} {acc_info.currency}"
+            )
+        else:
+            log_event("⚠️ MetaTrader 5: No se pudo conectar al servidor del broker en el arranque", "WARNING")
+    except Exception as _mt5_err:
+        log_event(f"❌ MetaTrader 5: Error comprobando conexión ({_mt5_err})", "ERROR")
+
     # Validar configuración de BTCEUR (fail-safe)
     try:
         if not validate_btceur_strategy():
@@ -597,6 +616,10 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Error registrando handler de notificaciones: {e}")
     
+    # start terminal 10-min pulse verification task
+    bot.loop.create_task(_terminal_pulse_loop())
+    log_event("Terminal pulse loop iniciado (verificación cada 10 min: 'Escaneando...')")
+
     # start reconnection system — lightweight watchdog que no bloquea el event loop
     if RECONNECTION_AVAILABLE:
         bot.loop.create_task(_mt5_watchdog_loop())
@@ -798,7 +821,13 @@ async def _mt5_watchdog_loop():
                 try:
                     import MetaTrader5 as mt5
                     info = mt5.terminal_info()
-                    return info is not None
+                    if info is not None and info.connected and mt5.account_info() is not None:
+                        return True
+                    from services.mt5_client import initialize as mt5_init
+                    if mt5_init():
+                        info = mt5.terminal_info()
+                        return info is not None and info.connected and mt5.account_info() is not None
+                    return False
                 except Exception:
                     return False
 
@@ -813,15 +842,7 @@ async def _mt5_watchdog_loop():
 
                 def _reconnect():
                     try:
-                        from mt5_client import initialize as mt5_init
-                        creds = state.mt5_credentials
-                        if creds.get('login') and creds.get('password') and creds.get('server'):
-                            import MetaTrader5 as mt5
-                            return mt5.initialize(
-                                login=int(creds['login']),
-                                password=creds['password'],
-                                server=creds['server']
-                            )
+                        from services.mt5_client import initialize as mt5_init
                         return mt5_init()
                     except Exception as e:
                         logger.error(f"MT5 reconnect error: {e}")
@@ -858,6 +879,43 @@ async def _mt5_watchdog_loop():
             break
         except Exception as e:
             logger.error(f"MT5 watchdog error: {e}")
+            await asyncio.sleep(60)
+
+# ======================
+# TERMINAL PULSE LOOP (10-MIN HEARTBEAT)
+# ======================
+
+async def _terminal_pulse_loop():
+    """
+    Sistema de verificación cada 10 minutos en la terminal del bot de trading.
+    Muestra 'Escaneando...' con marca temporal e información de MT5 para confirmar que el bot está activo.
+    """
+    await bot.wait_until_ready()
+    log_event("Sistema de verificación de terminal (pulse 10-min) iniciado")
+
+    pulse_interval_seconds = 600  # 10 minutos (600 segundos)
+    while True:
+        try:
+            now_str = datetime.now().strftime('%H:%M:%S')
+
+            def _get_mt5_status_str():
+                try:
+                    import MetaTrader5 as mt5
+                    info = mt5.terminal_info()
+                    acc = mt5.account_info()
+                    if info and info.connected and acc:
+                        return f"MT5 CONECTADO | Cuenta #{acc.login} | ${acc.balance:.2f} {acc.currency}"
+                    return "MT5 DESCONECTADO"
+                except Exception:
+                    return "MT5 NO DISPONIBLE"
+
+            mt5_status_msg = await asyncio.to_thread(_get_mt5_status_str)
+            log_event(f"Escaneando... [{mt5_status_msg} | Bot activo | {now_str}]", "INFO", "SYSTEM")
+            await asyncio.sleep(pulse_interval_seconds)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error en terminal pulse loop: {e}")
             await asyncio.sleep(60)
 
 # ======================
@@ -1232,7 +1290,7 @@ if __name__ == '__main__':
         import ctypes
         def _win_ctrl_handler(ctrl_type):
             if ctrl_type in (0, 1, 2, 5, 6):
-                print("\n[Ctrl+C] Interrupción detectada. Cerrando bot...")
+                print("\n[Ctrl+C] Interrupción detectada. Cerrando bot de forma limpia...")
                 try:
                     stop_enhanced_dashboard()
                     mt5_shutdown()
@@ -1249,7 +1307,7 @@ if __name__ == '__main__':
     try:
         bot.run(DISCORD_TOKEN)
     except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot detenido por el usuario (Ctrl+C).")
+        print("\n[Ctrl+C] Bot finalizado correctamente.")
     except discord.errors.PrivilegedIntentsRequired as exc:
         logger.error("Privileged intents required: %s", exc)
         logger.error("Enable the required privileged intents (Message Content) in the Discord Developer Portal for your application: https://discord.com/developers/applications")

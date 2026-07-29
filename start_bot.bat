@@ -1,4 +1,3 @@
-@if not "%~1"=="am_child" (@cmd /c "%~f0" am_child %* <nul & @exit /b %errorlevel%)
 @echo off
 setlocal
 echo ========================================
@@ -67,7 +66,7 @@ echo.
 REM Ejecutar bot sin pipe para evitar bloqueos de buffer
 set PYTHONUNBUFFERED=1
 set PYTHONIOENCODING=utf-8
-%PYTHON_CMD% -u %BOT_SCRIPT% <nul
+%PYTHON_CMD% -u %BOT_SCRIPT%
 
 endlocal
 

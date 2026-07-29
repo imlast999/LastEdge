@@ -13,15 +13,19 @@ import { fileURLToPath } from "node:url";
 
 function findRepoRoot(startDir: string): string {
   let dir = startDir;
-  for (let i = 0; i < 10; i++) {
-    if (fs.existsSync(path.join(dir, "start_all.bat")) || fs.existsSync(path.join(dir, "requirements.txt"))) {
+  for (let i = 0; i < 15; i++) {
+    if (
+      fs.existsSync(path.join(dir, "start_all.bat")) ||
+      fs.existsSync(path.join(dir, "bot.py")) ||
+      fs.existsSync(path.join(dir, "requirements.txt"))
+    ) {
       return dir;
     }
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  return path.resolve(startDir, "..", "..", "..", "..", "..");
+  return path.resolve(startDir, "..", "..", "..", "..");
 }
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
