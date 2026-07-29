@@ -459,6 +459,16 @@ class BotService:
             logger.error(f"Error running broker certification in BotService: {e}")
             return {"certification_status": "NOT_CERTIFIED_FOR_LIVE", "error": str(e), "checks": []}
 
+    def run_stability_verification(self) -> Dict[str, Any]:
+        """Ejecuta la auditoría automatizada de los 9 factores de estabilidad del sistema (P5.5)."""
+        try:
+            from services.stability_verification import get_stability_verification_service
+            service = get_stability_verification_service()
+            return service.run_stability_audit(bot_service=self)
+        except Exception as e:
+            logger.error(f"Error running stability verification in BotService: {e}")
+            return {"stability_status": "CRITICAL_STABILITY_RISK", "error": str(e), "checks": []}
+
 # Instancia global por defecto
 _bot_service_instance: Optional[BotService] = None
 

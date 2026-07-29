@@ -1,68 +1,23 @@
-P5.3 is now officially CLOSED.
+We can now officially move on to **Phase P5.5 — Stability Verification**.
 
-We are now starting P5.4 — Broker Certification.
+As with the previous phases, I want this implementation to follow the same engineering standards we've established throughout LastEdge.
 
-This phase is NOT about adding random features.
-Its objective is to prove that LastEdge is operationally safe and ready for real trading.
+Requirements:
 
-Think like an independent auditor validating a quantitative trading platform before it is allowed to trade live capital.
+* Implement the complete P5.5 phase as defined in the roadmap.
+* Build it as a reusable service integrated into the existing architecture (BotService, Dashboard, CLI and REST API where appropriate).
+* Use only **real system data** (MT5, SQLite, psutil, operating system, existing services, etc.). Do not use placeholders, mocked values or hardcoded metrics.
+* Reuse existing infrastructure whenever possible instead of duplicating logic.
+* Keep the implementation modular, clean and maintainable.
+* Add comprehensive unit tests covering both normal and edge cases.
+* Run the full test suite and ensure every test passes before considering the phase complete.
+* Perform an honest self-audit at the end:
 
-The implementation must always reuse the existing architecture whenever possible.
-Do not duplicate logic.
-Do not redesign working systems.
-Keep everything integrated through BotService.
+  * What was implemented.
+  * Which real data sources are used.
+  * What tests were executed.
+  * Any limitations or future improvements.
+* If you discover technical debt or architectural improvements while implementing P5.5, document them separately instead of silently changing unrelated parts of the project.
+* Once everything is finished and verified, create a Git commit with a meaningful message and push it to the main branch.
 
-The goal of P5.4 is to verify the complete execution chain from signal generation to broker execution.
-
-The certification should validate, at minimum:
-
-• MT5 terminal stability
-• broker connectivity
-• account consistency
-• execution permissions
-• market data integrity
-• spread sanity checks
-• execution latency
-• slippage monitoring
-• order execution success rate
-• order rejection analysis
-• reconnection resilience
-• risk engine validation before execution
-• execution safeguards
-• emergency stop behaviour (Circuit Breaker)
-• recovery after failures
-
-Every verification must use REAL data whenever available.
-
-Never fabricate values.
-Never use placeholders.
-Never hardcode results.
-
-Every certification check must clearly return:
-
-- PASS
-- WARN
-- FAIL
-
-with a detailed explanation.
-
-If any critical certification fails, the system must clearly report that the platform is NOT certified for live trading.
-
-Integrate the certification into:
-
-- BotService
-- CLI
-- REST API
-- Dashboard
-
-Create all necessary unit tests.
-
-Run the complete test suite.
-
-After implementation:
-
-1. Perform a completely honest audit of P5.4.
-2. Identify anything that still prevents this phase from being considered complete.
-3. If every roadmap objective has been satisfied, officially declare P5.4 CLOSED.
-4. Create a git commit with a clear message.
-5. Push everything to GitHub.
+Our objective is not simply to "complete the roadmap", but to ensure that LastEdge v2.0 is genuinely production-grade, maintainable and reliable.
