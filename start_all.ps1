@@ -6,7 +6,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 $ROOT = $PSScriptRoot
-$API_DIR = Join-Path $ROOT "mobile-app\Pasted-Rol-Objective\artifacts\api-server"
+$API_DIR = Join-Path $ROOT "mobile-app\artifacts\api-server"
 
 # Compilar API
 Write-Host "[1/3] Compilando API server..." -ForegroundColor Green

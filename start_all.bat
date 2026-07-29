@@ -4,8 +4,8 @@ setlocal EnableDelayedExpansion
 
 set "ROOT=%~dp0"
 set "ROOT=%ROOT:~0,-1%"
-set "API_DIR=%ROOT%\mobile-app\Pasted-Rol-Objective\artifacts\api-server"
-set "WORKSPACE=%ROOT%\mobile-app\Pasted-Rol-Objective"
+set "API_DIR=%ROOT%\mobile-app\artifacts\api-server"
+set "WORKSPACE=%ROOT%\mobile-app"
 
 if exist "%APPDATA%\npm" set "PATH=%APPDATA%\npm;%PATH%"
 
@@ -112,7 +112,7 @@ echo    EXPO_PUBLIC_API_URL=http://%LOCAL_IP%:5000
 echo    EXPO_PUBLIC_API_SECRET = mismo que API_SECRET del servidor
 echo.
 echo  Si cambias IP o token, recompila el APK:
-echo    mobile-app\Pasted-Rol-Objective\scripts\build-apk.bat
+echo    mobile-app\scripts\build-apk.bat
 echo ========================================
 echo.
 pause

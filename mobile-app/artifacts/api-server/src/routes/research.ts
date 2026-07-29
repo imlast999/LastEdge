@@ -23,19 +23,30 @@ import * as path from "node:path";
 import { logger } from "../lib/logger.js";
 import { run, query, queryOne } from "../lib/db.js";
 
+import { fileURLToPath } from "node:url";
+
 export const researchRouter = Router();
 
+function findRepoRoot(startDir: string): string {
+  let dir = startDir;
+  for (let i = 0; i < 10; i++) {
+    if (fs.existsSync(path.join(dir, "start_all.bat")) || fs.existsSync(path.join(dir, "requirements.txt"))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.resolve(startDir, "..", "..", "..", "..", "..");
+}
+
 // ── Resolver ruta base de backtest_results ────────────────────────────────────
-// Va 7 niveles arriba desde src/routes/ hasta BOT-MT5/
 function resolveResultsBase(): string {
   if (process.env.BOT_RESULTS_PATH) {
     return process.env.BOT_RESULTS_PATH;
   }
-  return path.resolve(
-    path.dirname(new URL(import.meta.url).pathname),
-    "..", "..", "..", "..", "..", "..", "..",
-    "backtest_results"
-  );
+  const root = findRepoRoot(path.dirname(fileURLToPath(import.meta.url)));
+  return path.join(root, "backtest_results");
 }
 
 const RESULTS_BASE = resolveResultsBase();

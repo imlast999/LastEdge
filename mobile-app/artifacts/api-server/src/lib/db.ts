@@ -8,26 +8,31 @@
  */
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+
+function findRepoRoot(startDir: string): string {
+  let dir = startDir;
+  for (let i = 0; i < 10; i++) {
+    if (fs.existsSync(path.join(dir, "start_all.bat")) || fs.existsSync(path.join(dir, "requirements.txt"))) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.resolve(startDir, "..", "..", "..", "..", "..");
+}
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = findRepoRoot(currentDir);
 
 // ── Resolve path to bot_state.db ─────────────────────────────────────────────
-// Default: same directory as this repo root (c:\BOT-MT5\bot_state.db)
+// Default: same directory as this repo root (c:\LastEdge\bot_state.db)
 // Override with env var: BOT_DB_PATH=/absolute/path/to/bot_state.db
-const DEFAULT_DB_PATH = path.resolve(
-  process.env.BOT_DB_PATH ??
-    path.join(
-      // go up: src/lib -> src -> api-server -> artifacts -> Pasted-Rol-Objective
-      // -> mobile-app -> BOT-MT5  (6 levels)
-      path.dirname(new URL(import.meta.url).pathname),
-      "..",
-      "..",
-      "..",
-      "..",
-      "..",
-      "..",
-      "..",
-      "bot_state.db"
-    )
-);
+const DEFAULT_DB_PATH = process.env.BOT_DB_PATH
+  ? path.resolve(process.env.BOT_DB_PATH)
+  : path.join(repoRoot, "bot_state.db");
 
 let _db: DatabaseSync | null = null;
 
