@@ -514,6 +514,15 @@ class BotService:
             logger.error(f"Error rotating logs in BotService: {e}")
             return {"ok": False, "error": str(e)}
 
+    def run_production_monitoring_audit(self) -> Dict[str, Any]:
+        """Ejecuta la auditoría de observabilidad de los 6 canales de producción (P5.7)."""
+        try:
+            from services.production_monitoring import get_production_monitoring_service
+            return get_production_monitoring_service().run_monitoring_audit(bot_service=self)
+        except Exception as e:
+            logger.error(f"Error running production monitoring audit in BotService: {e}")
+            return {"monitoring_status": "CRITICAL_BLIND_SPOTS", "error": str(e)}
+
 # Instancia global por defecto
 _bot_service_instance: Optional[BotService] = None
 
