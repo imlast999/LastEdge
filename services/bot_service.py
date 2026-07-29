@@ -469,6 +469,51 @@ class BotService:
             logger.error(f"Error running stability verification in BotService: {e}")
             return {"stability_status": "CRITICAL_STABILITY_RISK", "error": str(e), "checks": []}
 
+    def run_operational_readiness_audit(self) -> Dict[str, Any]:
+        """Ejecuta la auditoría de preparación operativa de producción (P5.6)."""
+        try:
+            from services.operational_readiness import get_operational_readiness_service
+            return get_operational_readiness_service().run_operational_readiness_audit(bot_service=self)
+        except Exception as e:
+            logger.error(f"Error running operational readiness audit in BotService: {e}")
+            return {"readiness_status": "NOT_READY", "error": str(e)}
+
+    def create_backup(self, backup_name: Optional[str] = None) -> Dict[str, Any]:
+        """Crea una copia de seguridad online segura de la base de datos."""
+        try:
+            from services.operational_readiness import get_operational_readiness_service
+            return get_operational_readiness_service().create_backup(backup_name=backup_name)
+        except Exception as e:
+            logger.error(f"Error creating backup in BotService: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def list_backups(self) -> List[Dict[str, Any]]:
+        """Lista todas las copias de seguridad de base de datos disponibles."""
+        try:
+            from services.operational_readiness import get_operational_readiness_service
+            return get_operational_readiness_service().list_backups()
+        except Exception as e:
+            logger.error(f"Error listing backups in BotService: {e}")
+            return []
+
+    def restore_backup(self, backup_file: str) -> Dict[str, Any]:
+        """Restaura la base de datos desde una copia de seguridad verificando integridad."""
+        try:
+            from services.operational_readiness import get_operational_readiness_service
+            return get_operational_readiness_service().restore_backup(backup_file)
+        except Exception as e:
+            logger.error(f"Error restoring backup in BotService: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def rotate_logs(self) -> Dict[str, Any]:
+        """Ejecuta la rotación y purga de archivos de log de la plataforma."""
+        try:
+            from services.operational_readiness import get_operational_readiness_service
+            return get_operational_readiness_service().rotate_logs()
+        except Exception as e:
+            logger.error(f"Error rotating logs in BotService: {e}")
+            return {"ok": False, "error": str(e)}
+
 # Instancia global por defecto
 _bot_service_instance: Optional[BotService] = None
 

@@ -264,6 +264,30 @@ class DashboardService:
                                 self.wfile.write(body)
                             except (ConnectionAbortedError, BrokenPipeError, OSError):
                                 pass
+                        elif self.path.startswith('/api/system/operational-readiness'):
+                            from services.bot_service import get_bot_service
+                            data = get_bot_service().run_operational_readiness_audit()
+                            body = json.dumps(data, indent=2, default=str).encode('utf-8')
+                            self.send_response(200)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            try:
+                                self.wfile.write(body)
+                            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                pass
+                        elif self.path.startswith('/api/system/backup/list'):
+                            from services.bot_service import get_bot_service
+                            data = get_bot_service().list_backups()
+                            body = json.dumps({"ok": True, "backups": data}, indent=2, default=str).encode('utf-8')
+                            self.send_response(200)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header('Access-Control-Allow-Origin', '*')
+                            self.end_headers()
+                            try:
+                                self.wfile.write(body)
+                            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                pass
                         elif self.path.startswith('/api/system/stability-verification'):
                             from services.bot_service import get_bot_service
                             data = get_bot_service().run_stability_verification()
