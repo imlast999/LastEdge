@@ -42,7 +42,6 @@ if exist "%APPDATA%\npm" set "PATH=%APPDATA%\npm;%PATH%"
 
 set "NODE_ENV=production"
 if exist "C:\Windows\System32\cmd.exe" set "COMSPEC=C:\Windows\System32\cmd.exe"
-set "EXPO_USE_COMMUNITY_AUTOLINKING=1"
 
 
 :: Perfil: release por defecto, debug si se pasa argumento
