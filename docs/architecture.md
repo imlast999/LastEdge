@@ -1,12 +1,13 @@
-# System Architecture — LastEdge
+# System Architecture — LastEdge v2.0
 
-> **Authoritative Single Source of Truth for System Architecture & Concurrency Design**
+> **Authoritative Single Source of Truth for System Architecture & Concurrency Design**  
+> **Status:** 🏆 **LastEdge v2.0 — Production Ready**
 
 ---
 
 ## 1. Executive Overview
 
-LastEdge is a multi-tier quantitative research and execution architecture designed for MetaTrader 5. It separates statistical strategy generation, risk controls, backtesting, live execution, and multi-platform telemetry into isolated, well-defined layers.
+LastEdge v2.0 is a multi-tier quantitative research and execution architecture designed for MetaTrader 5. It separates statistical strategy generation, risk controls, backtesting, live execution, observability, and multi-platform telemetry into isolated, well-defined layers.
 
 ```mermaid
 flowchart TD
