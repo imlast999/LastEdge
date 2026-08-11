@@ -1,6 +1,6 @@
 <div align="center">
 
-![LastEdge banner](branding/banners/LastEdge%20banner.png)
+![LastEdge banner](branding/banners/LastEdge_Banner.png)
 
 # LastEdge v2.0
 
