@@ -39,6 +39,7 @@ _STRATEGY_REGISTRY: Dict[str, tuple[str, str]] = {
     "EURUSD"       : ("strategies.eurusd",          "EURUSDPartialStrategy"),
     "XAUUSD"       : ("strategies.xauusd_partial",  "XAUUSDPartialStrategy"),
     "BTCEUR"       : ("strategies.btceur_partial", "BTCEURPartialStrategy"),
+    "XAUUSD_GSRS"  : ("strategies.experimental.gold_newstrat", "XAUUSDGSRSStrategy"),
 }
 
 

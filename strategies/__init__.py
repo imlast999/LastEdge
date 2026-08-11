@@ -24,6 +24,14 @@ except ImportError as e:
     BTCEURPartialStrategy = None
     BTCEUR_AVAILABLE = False
 
+try:
+    from .experimental.gold_newstrat import XAUUSDGSRSStrategy
+    XAUUSD_GSRS_AVAILABLE = True
+except ImportError as e:
+    logger.warning("XAUUSDGSRSStrategy not available: %s", e)
+    XAUUSDGSRSStrategy = None
+    XAUUSD_GSRS_AVAILABLE = False
+
 # Strategy registry
 STRATEGY_REGISTRY = {
     'EURUSD': EURUSDPartialStrategy,   # v1.1 — partial_close validado (jul 2026)
@@ -31,6 +39,9 @@ STRATEGY_REGISTRY = {
     'XAUUSD': XAUUSDPartialStrategy,   # v1.1 — partial_close validado (jul 2026)
     'XAUUSD_LEGACY': XAUUSDStrategy,  # referencia histórica — no activo en producción
 }
+
+if XAUUSD_GSRS_AVAILABLE:
+    STRATEGY_REGISTRY['XAUUSD_GSRS'] = XAUUSDGSRSStrategy
 
 # Add BTCEUR only if available
 if BTCEUR_AVAILABLE:

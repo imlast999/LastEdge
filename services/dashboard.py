@@ -170,8 +170,19 @@ class DashboardService:
                             return
 
                         if self.path in ('/', '/dashboard'):
-                            lang = self._get_lang_from_cookie()
-                            body = dashboard_service.get_dashboard_html(lang=lang).encode('utf-8')
+                            base_dir = os.path.dirname(__file__)
+                            dashboard_dir = os.path.join(os.path.dirname(base_dir), 'dashboard')
+                            idx_path = os.path.join(dashboard_dir, 'index.html')
+                            if not os.path.exists(idx_path):
+                                idx_path = os.path.join(base_dir, 'index.html')
+
+                            if os.path.exists(idx_path):
+                                with open(idx_path, 'rb') as f:
+                                    body = f.read()
+                            else:
+                                lang = self._get_lang_from_cookie()
+                                body = dashboard_service.get_dashboard_html(lang=lang).encode('utf-8')
+
                             self.send_response(200)
                             self.send_header('Content-type', 'text/html; charset=utf-8')
                             self.end_headers()
@@ -179,6 +190,40 @@ class DashboardService:
                                 self.wfile.write(body)
                             except (ConnectionAbortedError, BrokenPipeError, OSError):
                                 pass  # navegador cerró la conexión — no es un error real
+                        elif self.path in ('/style.css', '/styles.css'):
+                            base_dir = os.path.dirname(__file__)
+                            dashboard_dir = os.path.join(os.path.dirname(base_dir), 'dashboard')
+                            css_path = os.path.join(dashboard_dir, 'style.css')
+                            if not os.path.exists(css_path):
+                                css_path = os.path.join(base_dir, 'style.css')
+
+                            if os.path.exists(css_path):
+                                with open(css_path, 'rb') as f:
+                                    body = f.read()
+                                self.send_response(200)
+                                self.send_header('Content-type', 'text/css; charset=utf-8')
+                                self.end_headers()
+                                try:
+                                    self.wfile.write(body)
+                                except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                    pass
+                        elif self.path == '/script.js':
+                            base_dir = os.path.dirname(__file__)
+                            dashboard_dir = os.path.join(os.path.dirname(base_dir), 'dashboard')
+                            js_path = os.path.join(dashboard_dir, 'script.js')
+                            if not os.path.exists(js_path):
+                                js_path = os.path.join(base_dir, 'script.js')
+
+                            if os.path.exists(js_path):
+                                with open(js_path, 'rb') as f:
+                                    body = f.read()
+                                self.send_response(200)
+                                self.send_header('Content-type', 'application/javascript; charset=utf-8')
+                                self.end_headers()
+                                try:
+                                    self.wfile.write(body)
+                                except (ConnectionAbortedError, BrokenPipeError, OSError):
+                                    pass
                         elif self.path.startswith('/api/analytics/execution'):
                             from services.bot_service import get_bot_service
                             data = get_bot_service().get_execution_analytics()

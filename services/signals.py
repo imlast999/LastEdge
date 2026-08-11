@@ -22,7 +22,7 @@ from strategies import get_strategy
 logger = logging.getLogger(__name__)
 
 # Estrategias con estado interno (1 señal/día, 1/semana, etc.) — una instancia por sesión de replay
-STATEFUL_STRATEGIES = frozenset({'eurusd_asian_breakout', 'btceur_weekly_breakout'})
+STATEFUL_STRATEGIES = frozenset({'eurusd_asian_breakout', 'btceur_weekly_breakout', 'xauusd_gsrs'})
 _strategy_instances: Dict[str, object] = {}
 
 
@@ -53,6 +53,7 @@ STRATEGY_REGISTRY = {
     'xauusd_reversal':  lambda: _get_xauusd_reversal(),    # descartada (1 señal/5000v)
     'xauusd_momentum':  lambda: _get_xauusd_momentum(),
     'xauusd_psychological': lambda: _get_xauusd_psychological(),  # descartada (PF max 0.94)
+    'xauusd_gsrs':      lambda: _get_xauusd_gsrs(),         # GSRS experimental (oro, M1)
 
     # BTCEUR: todos los alias apuntan a la misma estrategia específica
     'btceur':                lambda: get_strategy('BTCEUR'),
@@ -91,6 +92,14 @@ def _get_xauusd_psychological():
         return XAUUSDPsychologicalStrategy()
     except Exception as e:
         logger.warning(f"XAUUSDPsychologicalStrategy no disponible: {e}")
+        return get_strategy('XAUUSD')
+
+def _get_xauusd_gsrs():
+    try:
+        from strategies.experimental.gold_newstrat import XAUUSDGSRSStrategy
+        return XAUUSDGSRSStrategy()
+    except Exception as e:
+        logger.warning(f"XAUUSDGSRSStrategy no disponible: {e}")
         return get_strategy('XAUUSD')
 
 def _get_btceur_weekly_breakout():
