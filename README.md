@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="branding/LastEdge_Banner.png" alt="LastEdge Banner" width="100%">
+
 # LastEdge
 
 **Decoupled Quantitative Trading Ecosystem & Strategy Research Framework**
