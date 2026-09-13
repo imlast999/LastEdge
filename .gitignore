@@ -3,6 +3,9 @@
 /LastEdge Strategy Lab/
 /LastEdge App/
 
+# ── Local Agent Rules & Specs (Conservado localmente, no versionar) ───────────
+AGENTS.md
+
 # ── Credenciales y datos sensibles ───────────────────────────────────────────
 .env
 *.env
