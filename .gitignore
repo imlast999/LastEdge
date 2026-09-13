@@ -1,3 +1,8 @@
+# ── Sub-repositorios independientes (cada uno gestiona su propio git) ────────
+/LastEdge Trading Engine/
+/LastEdge Strategy Lab/
+/LastEdge App/
+
 # ── Credenciales y datos sensibles ───────────────────────────────────────────
 .env
 *.env
