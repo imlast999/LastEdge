@@ -6,10 +6,10 @@
 
 Research · Optimization · Exit Research · MT5 Execution · Risk Engine v2 · Observability · Discord & Telegram · Web & Mobile UI
 
-![Python](https://img.shields.io/badge/Python-3.10%2B%20%7C%203.13-blue?logo=python&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?logo=nodedotjs&logoColor=white)
+[![Trading Engine](https://img.shields.io/badge/GitHub-Trading--Engine-blue?logo=github)](https://github.com/imlast999/lastedge-trading-engine)
+[![Strategy Lab](https://img.shields.io/badge/GitHub-Strategy--Lab-purple?logo=github)](https://github.com/imlast999/lastedge-strategy-lab)
+[![App](https://img.shields.io/badge/GitHub-App-green?logo=github)](https://github.com/imlast999/lastedge-app)
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
-![Architecture](https://img.shields.io/badge/Architecture-3%20Independent%20Repos-purple)
 ![Tests](https://img.shields.io/badge/Tests-146%2F146%20Passed-success)
 
 </div>
@@ -18,7 +18,7 @@ Research · Optimization · Exit Research · MT5 Execution · Risk Engine v2 · 
 
 ## Ecosystem Overview
 
-**LastEdge** is organized into **three independent, decoupled systems**, each with its own repository, continuous integration pipeline, and dedicated documentation:
+**LastEdge** is structured as an ecosystem of **three independent, decoupled repositories**, each with its own continuous integration pipeline, tests, and dedicated technical documentation:
 
 ```text
                                  ┌─────────────────────────────────────────┐
@@ -50,20 +50,28 @@ Research · Optimization · Exit Research · MT5 Execution · Risk Engine v2 · 
 
 ## Repositories & Quick Access
 
-1. **LastEdge Trading Engine** (`imlast999/lastedge-trading-engine`):
-   - Execution core, MT5 driver, Risk Engine v2, Strategy Loader, and operational verification tools.
-   - Test Suite: **89 / 89 passed** | Located in `LastEdge Trading Engine/`
-2. **LastEdge Strategy Lab** (`imlast999/lastedge-strategy-lab`):
-   - Offline quantitative laboratory, DataLoader, WFA, Monte Carlo, and Promotion security gates.
-   - Test Suite: **46 / 46 passed** | Located in `LastEdge Strategy Lab/`
-3. **LastEdge App** (`imlast999/lastedge-app`):
-   - Web Dashboard, mobile application, Discord slash commands, and Telegram bot.
-   - Test Suite: **11 / 11 passed** | Located in `LastEdge App/`
+The ecosystem consists of the following 3 standalone repositories:
+
+| Repository | GitHub Link | Role | Test Suite |
+| :--- | :--- | :--- | :---: |
+| ⚡ **LastEdge Trading Engine** | [**`imlast999/lastedge-trading-engine`**](https://github.com/imlast999/lastedge-trading-engine) | Execution core, MetaTrader 5 driver, Risk Engine v2, dynamic strategy loader, and operational verification tools. | **89 / 89 PASSED** ✅ |
+| 🔬 **LastEdge Strategy Lab** | [**`imlast999/lastedge-strategy-lab`**](https://github.com/imlast999/lastedge-strategy-lab) | Offline quantitative research laboratory, DataLoader, WFA, Monte Carlo, Exit Research, and promotion security gates. | **46 / 46 PASSED** ✅ |
+| 📱 **LastEdge App** | [**`imlast999/lastedge-app`**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo mobile application, Discord slash commands, and Telegram bot. | **11 / 11 PASSED** ✅ |
 
 ---
 
-## Global System Architecture
+## Inter-Service Communication & Architecture
 
-For complete details on inter-service communication, security gates, and architectural boundaries, see:
+1. **Strategy Promotion (Lab ➔ Engine)**:
+   * Strategy Lab validates candidate strategies through empirical quantitative gates (Walk Forward WES $\ge 0.60$, Monte Carlo Ruin $\le 5\%$).
+   * Promoted strategies are frozen and exported as verified packages (`.py` + `.json` sidecar) containing `code_sha256` and `config_hash`.
+   * Trading Engine verifies cryptographic integrity upon startup via `services/strategy_loader.py` and dynamically registers them into production without manual code copying.
+
+2. **Telemetry & Control (Engine & Lab ➔ App)**:
+   * Trading Engine exposes a local REST API on port `8081` (`/health`, `/positions`, `/account`, `/risk`).
+   * Strategy Lab exposes a local REST API on port `8082` (`/health`, `/candidates`, `/experiments`).
+   * LastEdge App queries both services using decoupled HTTP clients (`trading_client.py`, `research_client.py`) with automatic offline fallbacks and graceful degradation.
+
+For detailed architectural specifications and data flow diagrams, refer to:
 - 🏛️ [**Global System Architecture Specification**](docs/SYSTEM_ARCHITECTURE.md)
-- 🤖 [**AI Agent Team Guidelines**](AGENTS.md)
+- 🧹 [**Documentation Consolidation Report**](docs/DOCUMENTATION_CLEANUP.md)
