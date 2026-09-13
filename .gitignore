@@ -68,6 +68,7 @@ temp/
 tmp/
 *.bat
 lastedge_cli.bat
+cli.py
 chart_*.png
 repo_*.txt
 structure_inspect.txt
