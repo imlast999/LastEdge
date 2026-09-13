@@ -72,6 +72,7 @@ The ecosystem consists of the following 3 standalone repositories:
    * Strategy Lab exposes a local REST API on port `8082` (`/health`, `/candidates`, `/experiments`).
    * LastEdge App queries both services using decoupled HTTP clients (`trading_client.py`, `research_client.py`) with automatic offline fallbacks and graceful degradation.
 
-For detailed architectural specifications and data flow diagrams, refer to:
-- 🏛️ [**Global System Architecture Specification**](docs/SYSTEM_ARCHITECTURE.md)
-- 🧹 [**Documentation Consolidation Report**](docs/DOCUMENTATION_CLEANUP.md)
+For detailed technical documentation, specifications, and guides, refer directly to each repository's docs:
+- ⚡ [**Trading Engine Documentation**](https://github.com/imlast999/lastedge-trading-engine/tree/main/docs)
+- 🔬 [**Strategy Lab Documentation**](https://github.com/imlast999/lastedge-strategy-lab/tree/main/docs)
+- 📱 [**App Documentation**](https://github.com/imlast999/lastedge-app/tree/main/docs)
