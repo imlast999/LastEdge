@@ -66,6 +66,8 @@ env/
 *.temp
 temp/
 tmp/
+*.bat
+lastedge_cli.bat
 chart_*.png
 repo_*.txt
 structure_inspect.txt
