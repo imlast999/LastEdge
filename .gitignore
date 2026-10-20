@@ -67,8 +67,11 @@ env/
 temp/
 tmp/
 *.bat
+!clone_repos.bat
+!setup.bat
+!lastedge.bat
 lastedge_cli.bat
-cli.py
+*.tsx
 chart_*.png
 repo_*.txt
 structure_inspect.txt

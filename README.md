@@ -58,9 +58,35 @@ The ecosystem consists of the following 3 standalone repositories:
 | :--- | :--- | :--- | :---: |
 | ⚡ **LastEdge Trading Engine** | [**`imlast999/lastedge-trading-engine`**](https://github.com/imlast999/lastedge-trading-engine) | Execution core, MetaTrader 5 driver, Risk Engine v2, dynamic strategy loader, and operational verification tools. | **89 / 89 PASSED** ✅ |
 | 🔬 **LastEdge Strategy Lab** | [**`imlast999/lastedge-strategy-lab`**](https://github.com/imlast999/lastedge-strategy-lab) | Offline quantitative research laboratory, DataLoader, WFA, Monte Carlo, Exit Research, and promotion security gates. | **46 / 46 PASSED** ✅ |
-| 📱 **LastEdge App** | [**`imlast999/lastedge-app`**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo mobile application, Discord slash commands, and Telegram bot. | **11 / 11 PASSED** ✅ |
+| 📱 **LastEdge App** | [**`imlast999/lastedge-app`**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo mobile application, Discord slash commands, and Telegram bot. | **14 / 14 PASSED** ✅ |
 
 ---
+
+## 🚀 Quick Start & Workspace Synchronization
+
+If you clone this root repository (`LastEdge`), you can instantly pull down and set up the entire ecosystem in this directory:
+
+### 1. Clone this root orchestrator
+```bash
+git clone https://github.com/imlast999/LastEdge.git
+cd LastEdge
+```
+
+### 2. Run the automated clone script
+Execute `clone_repos.bat` (or `setup.bat`):
+```cmd
+.\clone_repos.bat
+```
+What this does automatically:
+- Checks that `git` is available.
+- Clones all three sub-repositories (`LastEdge Trading Engine`, `LastEdge Strategy Lab`, `LastEdge App`). If they are already present, it executes `git pull --ff-only` to bring them up to date.
+- Creates initial configuration `.env` files from `.env.example` templates if missing.
+
+### 3. Launch the unified CLI environment
+```cmd
+.\lastedge.bat
+```
+*(Or use option `[12] Sincronizar / Clonar Repositorios` directly inside the interactive CLI menu).*
 
 ## Inter-Service Communication & Architecture
 
