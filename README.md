@@ -64,6 +64,9 @@ The ecosystem consists of the following 3 standalone repositories:
 
 ## 🚀 Quick Start & Workspace Synchronization
 
+> [!TIP]
+> **Strongly Recommended Setup:** Although each of the three LastEdge subsystems is fully decoupled and can be run completely standalone, **we strongly recommend using the automated clone script (`clone_repos.bat` or `setup.bat`)** to download and manage all three repositories together within this workspace. Running the complete suite simultaneously provides the full end-to-end trading experience: live MetaTrader 5 execution, scientific research and automated strategy promotion, and real-time Web, Mobile, Discord, and Telegram monitoring.
+
 If you clone this root repository (`LastEdge`), you can instantly pull down and set up the entire ecosystem in this directory:
 
 ### 1. Clone this root orchestrator
