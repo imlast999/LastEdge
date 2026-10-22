@@ -12,7 +12,7 @@ Research · Optimization · Exit Research · MT5 Execution · Risk Engine v2 · 
 [![Strategy Lab](https://img.shields.io/badge/GitHub-Strategy--Lab-purple?logo=github)](https://github.com/imlast999/lastedge-strategy-lab)
 [![App](https://img.shields.io/badge/GitHub-App-green?logo=github)](https://github.com/imlast999/lastedge-app)
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
-![Tests](https://img.shields.io/badge/Tests-146%2F146%20Passed-success)
+![Tests](https://img.shields.io/badge/Tests-162%2F162%20Passed-success)
 
 </div>
 
@@ -56,7 +56,7 @@ The ecosystem consists of the following 3 standalone repositories:
 
 | Repository | GitHub Link | Role | Test Suite |
 | :--- | :--- | :--- | :---: |
-| ⚡ **LastEdge Trading Engine** | [**`imlast999/lastedge-trading-engine`**](https://github.com/imlast999/lastedge-trading-engine) | Execution core, MetaTrader 5 driver, Risk Engine v2, dynamic strategy loader, and operational verification tools. | **89 / 89 PASSED** ✅ |
+| ⚡ **LastEdge Trading Engine** | [**`imlast999/lastedge-trading-engine`**](https://github.com/imlast999/lastedge-trading-engine) | Execution core, MetaTrader 5 driver, Risk Engine v2, dynamic strategy loader, and operational verification tools. | **102 / 102 PASSED** ✅ |
 | 🔬 **LastEdge Strategy Lab** | [**`imlast999/lastedge-strategy-lab`**](https://github.com/imlast999/lastedge-strategy-lab) | Offline quantitative research laboratory, DataLoader, WFA, Monte Carlo, Exit Research, and promotion security gates. | **46 / 46 PASSED** ✅ |
 | 📱 **LastEdge App** | [**`imlast999/lastedge-app`**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo mobile application, Discord slash commands, and Telegram bot. | **14 / 14 PASSED** ✅ |
 
