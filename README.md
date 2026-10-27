@@ -6,67 +6,137 @@
 
 **Decoupled Quantitative Trading Ecosystem & Strategy Research Framework**
 
-Research · Optimization · Exit Research · MT5 Execution · Risk Engine v2 · Observability · Discord & Telegram · Web & Mobile UI
+Research • Walk-Forward Analysis • Monte Carlo • MT5 Execution • Risk Engine v2 • Circuit Breakers • Web Dashboard • Mobile App (React Native/Expo) • Discord & Telegram Bots
 
 [![Trading Engine](https://img.shields.io/badge/GitHub-Trading--Engine-blue?logo=github)](https://github.com/imlast999/lastedge-trading-engine)
 [![Strategy Lab](https://img.shields.io/badge/GitHub-Strategy--Lab-purple?logo=github)](https://github.com/imlast999/lastedge-strategy-lab)
 [![App](https://img.shields.io/badge/GitHub-App-green?logo=github)](https://github.com/imlast999/lastedge-app)
-![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
-![Tests](https://img.shields.io/badge/Tests-146%2F146%20Passed-success)
+[![Android APK](https://img.shields.io/badge/Download%20APK-v1.1.41-brightgreen?logo=android)](https://github.com/imlast999/lastedge-app/releases/download/v1.1.41/LastEdge-v1.1.41.apk)
+[![Tests](https://img.shields.io/badge/Tests-171%2F171%20Passed-success)](https://github.com/imlast999/LastEdge)
+[![Architecture](https://img.shields.io/badge/Architecture-Decoupled%20REST%20Microservices-orange)](https://github.com/imlast999/LastEdge)
 
 </div>
 
 ---
 
-## Ecosystem Overview
+## 🧭 Ecosystem Overview
 
-**LastEdge** is structured as an ecosystem of **three independent, decoupled repositories**, each with its own continuous integration pipeline, tests, and dedicated technical documentation:
+**LastEdge** is structured as an ecosystem of **three independent, decoupled repositories**, each with its own continuous integration pipeline, automated tests, and dedicated documentation:
 
 ```text
-                                 ┌─────────────────────────────────────────┐
-                                 │              LastEdge App               │
-                                 │       imlast999/lastedge-app            │
-                                 │  • Web Dashboard (:8080)                │
-                                 │  • Mobile App (React Native/Expo)       │
-                                 │  • Discord & Telegram Bot Adapters      │
-                                 └────────────────────┬────────────────────┘
-                                                      │
-                                           HTTP REST Communication
-                                                      │
-                                 ┌────────────────────┴────────────────────┐
-                                 ▼                                         ▼
-     ┌─────────────────────────────────────────┐   ┌─────────────────────────────────────────┐
-     │         LastEdge Trading Engine         │   │          LastEdge Strategy Lab          │
-     │    imlast999/lastedge-trading-engine    │   │      imlast999/lastedge-strategy-lab    │
-     │  • MT5 Execution Client & Reconnect     │   │  • Historical Data Pipeline (Parquet)   │
-     │  • Risk Engine v2 (Sizing, Margin)      │   │  • Backtesting & Realistic Trade Costs  │
-     │  • Circuit Breaker & Daily Drawdown     │   │  • Walk Forward Analysis (WFA) Engine   │
-     │  • Production REST API (:8081)          │   │  • Monte Carlo Risk-of-Ruin Engine      │
-     │  • Trade Journal SQLite (trading.db)    │   │  • Promotion Security Gates (SHA-256)   │
-     │  • Ingestion & Verifier (SignalIntent)  │   │  • Research REST API (:8082)            │
-     │  • Approved Production Strategies       │   │  • Unified Research CLI (run_pipeline)  │
-     └─────────────────────────────────────────┘   └─────────────────────────────────────────┘
+                                 ┌──────────────────────────────────────────┐
+                                 │               LastEdge App               │
+                                 │          imlast999/lastedge-app          │
+                                 │  • Web Dashboard Bento Grid (:8080)      │
+                                 │  • Mobile App (React Native / Expo 54)   │
+                                 │  • Discord & Telegram Bot Adapters       │
+                                 └─────────────────────┬────────────────────┘
+                                                       │
+                                            HTTP REST Communication
+                                                       │
+                                 ┌─────────────────────┴────────────────────┐
+                                 ▼                                          ▼
+     ┌──────────────────────────────────────────┐   ┌──────────────────────────────────────────┐
+     │         LastEdge Trading Engine          │   │          LastEdge Strategy Lab           │
+     │    imlast999/lastedge-trading-engine     │   │      imlast999/lastedge-strategy-lab     │
+     │  • MetaTrader 5 Execution Client & Reconnect │  • Historical Data Pipeline (Parquet)    │
+     │  • Risk Engine v2 (Adaptive Sizing, Margin)  │  • Backtesting & Realistic Cost Slippage │
+     │  • Circuit Breakers & Daily Drawdown Guards  │  • Walk Forward Analysis (WFA) Engine    │
+     │  • Production REST API (:8081)               │  • Monte Carlo Risk-of-Ruin Engine       │
+     │  • Trade Journal SQLite (bot_state.db)       │  • Deflated Sharpe & 6 Quantitative Gates│
+     │  • Cryptographic Ingestion (SHA-256 Hash)    │  • Strategy Lab REST API (:8082)         │
+     │  • Approved Production Strategies Vault      │  • Unified Research CLI (run_pipeline)   │
+     └──────────────────────────────────────────┘   └──────────────────────────────────────────┘
 ```
 
 ---
 
-## Repositories & Quick Access
+## 📦 Repositories & Quick Access
 
-The ecosystem consists of the following 3 standalone repositories:
+The ecosystem consists of the following 3 standalone sub-repositories orchestrated by this master repository:
 
-| Repository | GitHub Link | Role | Test Suite |
-| :--- | :--- | :--- | :---: |
-| ⚡ **LastEdge Trading Engine** | [**`imlast999/lastedge-trading-engine`**](https://github.com/imlast999/lastedge-trading-engine) | Execution core, MetaTrader 5 driver, Risk Engine v2, dynamic strategy loader, and operational verification tools. | **89 / 89 PASSED** ✅ |
-| 🔬 **LastEdge Strategy Lab** | [**`imlast999/lastedge-strategy-lab`**](https://github.com/imlast999/lastedge-strategy-lab) | Offline quantitative research laboratory, DataLoader, WFA, Monte Carlo, Exit Research, and promotion security gates. | **46 / 46 PASSED** ✅ |
-| 📱 **LastEdge App** | [**`imlast999/lastedge-app`**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo mobile application, Discord slash commands, and Telegram bot. | **14 / 14 PASSED** ✅ |
+| Repository | GitHub Link | Role | Ports | Test Suite |
+| :--- | :--- | :--- | :---: | :---: |
+| ⚡ **LastEdge Trading Engine** | [**`imlast999/lastedge-trading-engine`**](https://github.com/imlast999/lastedge-trading-engine) | Execution core, MetaTrader 5 driver, Risk Engine v2, dynamic strategy loader, Circuit Breakers. | `:8081` | **89 / 89 PASSED** ✅ |
+| 🧪 **LastEdge Strategy Lab** | [**`imlast999/lastedge-strategy-lab`**](https://github.com/imlast999/lastedge-strategy-lab) | Offline quantitative laboratory, WFA, 1,000 Monte Carlo runs, Deflated Sharpe, 6 quantitative gates. | `:8082` | **54 / 54 PASSED** ✅ |
+| 📱 **LastEdge App** | [**`imlast999/lastedge-app`**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo Android APK, Discord slash commands, and Telegram bot. | `:8080` | **28 / 28 PASSED** ✅ |
+
+> **Overall Test Suite**: **171 / 171 automated unit & integration tests passing** across the monorepo.
+
+---
+
+## 📱 Mobile Native Client (Android APK)
+
+The mobile client is built on **React Native (Expo SDK 54, Hermes Engine)**, designed to provide institutional oversight from any smartphone or tablet:
+
+* 📥 **Direct APK Download**: [**`LastEdge-v1.1.41.apk`**](https://github.com/imlast999/lastedge-app/releases/download/v1.1.41/LastEdge-v1.1.41.apk)
+* ⚡ **1-Tap MT5 Execution**: Pending signals generated by the scanner can be reviewed, accepted, or rejected directly from the phone.
+* ⏳ **Reactive 1-Second Live Ticker**: Signal cards update their arrival timestamp (`HH:mm:ss`), relative elapsed time (`hace Xs / min`), and auto-expiration countdown in real time.
+* 🛡️ **Session & Biometric Security**: Native Biometric Auth (Fingerprint / Face ID) and numeric PIN protection.
+* 📊 **Broker Execution Quality**: Real-time monitoring of average latency (ms), fill rate (%), and broker slippage (pips).
+* 🧪 **Strategy Lab Dual Sub-Navigation**:
+  - `[ 🧪 Simulador de Tests ]`: Visual strategy selector in plain language, parameter depth toggles, visual score hero card (0-100), and the 6 quantitative pillars.
+  - `[ 📚 Historial Guardado ]`: Real-time search and filter engine for past experiments with technical JSON inspect modals.
+
+---
+
+## 🧪 Strategy Lab 2.0: The 6 Quantitative Pillars Suite
+
+Before any algorithmic strategy is allowed to trade real capital in the Trading Engine, it must pass the **6 Institutional Quantitative Pillars**:
+
+```
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                   THE 6 QUANTITATIVE PILLARS SUITE                     │
+ ├────────────────────────────────┬───────────────────────────────────────┤
+ │ 1. Monte Carlo (1,000 Runs)    │ Ruin Probability < 1.0% (DD 20% limit)│
+ │ 2. Walk-Forward Analysis (WFA) │ Walk-Forward Efficiency (WFE) ≥ 60%   │
+ │ 3. Overfitting & Deflated DSR  │ DSR ≥ 1.00 & p-value < 0.05           │
+ │ 4. Mathematical Payoff         │ Profit Factor ≥ 1.30, Expectancy > 0  │
+ │ 5. Market Regime Stress Test   │ Robustness in Bull, Bear, Chop & Vol  │
+ │ 6. Cryptographic Graduation    │ Signed SHA-256 package promotion      │
+ └────────────────────────────────┴───────────────────────────────────────┘
+```
+
+1. **Robustness & Monte Carlo (Pillar 1)**: Simulates 1,000 alternative futures by randomly reordering trade sequences to certify survival against streak volatility.
+2. **Walk-Forward Analysis (Pillar 2)**: Rolling train/test windows across historical data to ensure the strategy learns persistent market inefficiencies instead of curve-fitting.
+3. **Deflated Sharpe Ratio (Pillar 3)**: Applies the Bailey & López de Prado formula to discount selection bias and backtest trial counts.
+4. **Payoff & Execution (Pillar 4)**: Mathematical edge per trade with strict Circuit Breaker thresholds (< 4 consecutive losses).
+5. **Regime Stress Testing (Pillar 5)**: Evaluates performance across 4 distinct macroeconomic regimes (Bull, Bear, Chop / Lateral, Volatility Shock).
+6. **Cryptographic Ingestion (Pillar 6)**: Approved strategies generate a signed `.json` sidecar with cryptographic checksums (`code_sha256` + `config_hash`). The Trading Engine rejects any strategy whose hash does not match.
+
+---
+
+## 💻 Web Dashboard: Bento Grid 2.0
+
+* **Glassmorphism UI**: High-contrast financial palette with responsive Bento Grid architecture.
+* **Real-Time Interactive Equity Curves**: Powered by Chart.js with dynamic time horizons (`1D`, `1W`, `1M`, `ALL`) and balance/equity tracking.
+* **Educational Tooltips**: Interactive contextual guides explaining advanced quant metrics (Profit Factor, Sortino, Drawdown, Ruin Probability) in plain language.
+* **Signal Audit Feed**: Live visual feed of incoming market signals with one-click manual approval.
+
+---
+
+## 🔐 Open-Core Framework vs. Private Strategy Model
+
+LastEdge separates **software engineering** from **proprietary quantitative edge**:
+
+* **Public / Open Source**:
+  - The decoupled microservices architecture, IPC communication, and REST endpoints.
+  - The MetaTrader 5 execution engine, order router, and risk calculation algorithms.
+  - The complete 6 Pillars scientific laboratory, Monte Carlo simulator, and WFA framework.
+  - The React Native mobile application, Bento Grid web dashboard, and CI/CD pipelines.
+  - Baseline benchmark strategies (`BaseStrategy`, `eurusd_simple`).
+* **Private / User-Owned (Never Committed)**:
+  - Broker accounts, server names, and passwords (configured strictly via `.env`).
+  - Private Telegram / Discord bot tokens.
+  - **Proprietary Alpha Strategies**: Your personal, highly-optimized trading strategies reside safely in `strategies/private/` (enforced via `.gitignore`). The engine dynamically loads them without requiring code modification.
 
 ---
 
 ## 🚀 Quick Start & Workspace Synchronization
 
-If you clone this root repository (`LastEdge`), you can instantly pull down and set up the entire ecosystem in this directory:
+Clone this orchestrator repository to set up and manage the entire ecosystem with a single command:
 
-### 1. Clone this root orchestrator
+### 1. Clone this orchestrator
 ```bash
 git clone https://github.com/imlast999/LastEdge.git
 cd LastEdge
@@ -77,30 +147,28 @@ Execute `clone_repos.bat` (or `setup.bat`):
 ```cmd
 .\clone_repos.bat
 ```
-What this does automatically:
-- Checks that `git` is available.
-- Clones all three sub-repositories (`LastEdge Trading Engine`, `LastEdge Strategy Lab`, `LastEdge App`). If they are already present, it executes `git pull --ff-only` to bring them up to date.
-- Creates initial configuration `.env` files from `.env.example` templates if missing.
+This automatically:
+- Clones all three sub-repositories (`LastEdge Trading Engine`, `LastEdge Strategy Lab`, `LastEdge App`).
+- Executes `git pull --ff-only` if repositories are already present.
+- Generates initial configuration `.env` files from `.env.example` templates if missing.
 
 ### 3. Launch the unified CLI environment
 ```cmd
 .\lastedge.bat
 ```
-*(Or use option `[12] Sincronizar / Clonar Repositorios` directly inside the interactive CLI menu).*
+*(Or launch individual microservices in background using `pm2 start ecosystem.config.js`).*
 
-## Inter-Service Communication & Architecture
+---
 
-1. **Strategy Promotion (Lab ➔ Engine)**:
-   * Strategy Lab validates candidate strategies through empirical quantitative gates (Walk Forward WES $\ge 0.60$, Monte Carlo Ruin $\le 5\%$).
-   * Promoted strategies are frozen and exported as verified packages (`.py` + `.json` sidecar) containing `code_sha256` and `config_hash`.
-   * Trading Engine verifies cryptographic integrity upon startup via `services/strategy_loader.py` and dynamically registers them into production without manual code copying.
+## 📚 Technical Documentation Index
 
-2. **Telemetry & Control (Engine & Lab ➔ App)**:
-   * Trading Engine exposes a local REST API on port `8081` (`/health`, `/positions`, `/account`, `/risk`).
-   * Strategy Lab exposes a local REST API on port `8082` (`/health`, `/candidates`, `/experiments`).
-   * LastEdge App queries both services using decoupled HTTP clients (`trading_client.py`, `research_client.py`) with automatic offline fallbacks and graceful degradation.
+For exhaustive technical documentation, API specifications, and architectural diagrams, visit each sub-repository's docs:
+- ⚡ [**Trading Engine Technical Documentation**](https://github.com/imlast999/lastedge-trading-engine/tree/main/docs)
+- 🧪 [**Strategy Lab Research Documentation**](https://github.com/imlast999/lastedge-strategy-lab/tree/main/docs)
+- 📱 [**App & Mobile Architecture Documentation**](https://github.com/imlast999/lastedge-app/tree/main/docs)
 
-For detailed technical documentation, specifications, and guides, refer directly to each repository's docs:
-- ⚡ [**Trading Engine Documentation**](https://github.com/imlast999/lastedge-trading-engine/tree/main/docs)
-- 🔬 [**Strategy Lab Documentation**](https://github.com/imlast999/lastedge-strategy-lab/tree/main/docs)
-- 📱 [**App Documentation**](https://github.com/imlast999/lastedge-app/tree/main/docs)
+---
+
+<div align="center">
+<sub>Built with precision for quantitative systems traders and algorithmic portfolio managers.</sub>
+</div>

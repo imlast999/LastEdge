@@ -98,3 +98,17 @@ top_level_dirs.txt
 ._*
 Thumbs.db
 ehthumbs.db
+
+# -- Acceso Remoto Personal & Tuneles Locales (NO VERSIONAR) --
+*tunnel*
+bore.exe
+bore.zip
+run_ssh_tunnel.bat
+dashboard_tunnel.py
+ssh_tunnel.py
+
+# -- Estrategias & Parametros Privados --
+strategies/private/
+*.private.py
+*.private.json
+strategy_params.private.json
