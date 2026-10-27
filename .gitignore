@@ -112,3 +112,7 @@ strategies/private/
 *.private.py
 *.private.json
 strategy_params.private.json
+
+# VPS Backups
+backups/
+*.zip
