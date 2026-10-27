@@ -12,7 +12,7 @@ Research • Walk-Forward Analysis • Monte Carlo • MT5 Execution • Risk En
 [![Strategy Lab](https://img.shields.io/badge/GitHub-Strategy--Lab-purple?logo=github)](https://github.com/imlast999/lastedge-strategy-lab)
 [![App](https://img.shields.io/badge/GitHub-App-green?logo=github)](https://github.com/imlast999/lastedge-app)
 [![Android APK](https://img.shields.io/badge/Download%20APK-v1.1.41-brightgreen?logo=android)](https://github.com/imlast999/lastedge-app/releases/download/v1.1.41/LastEdge-v1.1.41.apk)
-[![Tests](https://img.shields.io/badge/Tests-197%2F197%20Passed-success)](https://github.com/imlast999/LastEdge)
+[![Tests](https://img.shields.io/badge/Tests-199%2F199%20Passed-success)](https://github.com/imlast999/LastEdge)
 [![Architecture](https://img.shields.io/badge/Architecture-Decoupled%20REST%20Microservices-orange)](https://github.com/imlast999/LastEdge)
 
 </div>
@@ -59,9 +59,9 @@ The ecosystem consists of the following 3 standalone sub-repositories orchestrat
 | :--- | :--- | :--- | :---: | :---: |
 | ⚡ **LastEdge Trading Engine** | [**`imlast999/lastedge-trading-engine`**](https://github.com/imlast999/lastedge-trading-engine) | Execution core, MetaTrader 5 driver, Risk Engine v2, dynamic strategy loader, Circuit Breakers. | `:8081` | **108 / 108 PASSED** ✅ |
 | 🧪 **LastEdge Strategy Lab** | [**`imlast999/lastedge-strategy-lab`**](https://github.com/imlast999/lastedge-strategy-lab) | Offline quantitative laboratory, WFA, 1,000 Monte Carlo runs, Deflated Sharpe, 6 quantitative gates. | `:8082` | **54 / 54 PASSED** ✅ |
-| 📱 **LastEdge App** | [**`imlast999/lastedge-app`**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo Android APK, Discord slash commands, and Telegram bot. | `:8080` | **35 / 35 PASSED** ✅ |
+| 📱 **LastEdge App** | [**`imlast999/lastedge-app`**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo Android APK, Discord slash commands, and Telegram bot. | `:8080` | **37 / 37 PASSED** ✅ |
 
-> **Overall Test Suite**: **197 / 197 automated unit & integration tests passing** across the monorepo.
+> **Overall Test Suite**: **199 / 199 automated unit & integration tests passing** across the monorepo.
 
 ---
 
