@@ -11,7 +11,7 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   [████████████████████] 100% — Phase 2: Quantitative Laboratory & 6 Pillars Suite
   [████████████████████] 100% — Phase 3: Web Dashboard Bento Grid & Android Mobile App
   [████████████████████] 100% — Phase 4: Multi-Device Remote Access & Security
-  [████████████░░░░░░░░]  60% — Phase 5: Consolidation, Global i18n & Audited Track Record
+  [███████████████░░░░░]  75% — Phase 5: Consolidation, Global i18n & Audited Track Record
   [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 6: Monetization Route 1 (Recurring VIP Signals)
   [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 7: Monetization Route 3 (Prop Firm Funded Accounts)
 ```
@@ -51,7 +51,7 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   - Biometric authentication (Fingerprint / FaceID) and security PIN protection.
   - Mobile Strategy Lab featuring dual subtabs: `[Simulator]` & `[History]`.
 - [x] Automated GitHub Actions CI/CD pipeline compiling signed release APKs (`v1.1.41`).
-- [x] **28 / 28 control plane and graceful degradation tests passed.**
+- [x] **35 / 35 control plane, chart engine, and telegram adapter tests passed.**
 
 ### Phase 4: Remote Station & Multi-Device Accessibility
 - [x] Continuous 24/7 PM2 tunnel for Web Dashboard remote access (`http://bore.pub:54780`).
@@ -76,6 +76,15 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   - [x] Signal cards with dynamic TTL countdowns and actions localized.
   - [x] Strategy Lab simulator, score cards, and 6 Pillars suite localized.
 - [ ] **Core Engine Logs & Errors**: Complete migration of runtime log strings and API errors to standard English.
+
+### 📱 Visual Telegram Control Center & Chart Delivery System
+- [x] **Technical Chart Generation Engine**: Dedicated dark-mode (`#090d16`) chart generator powered by `mplfinance` with candlestick volume, EMA50 / EMA200 overlays, and dynamic Risk/Reward zone boxes.
+- [x] **Intelligent Y-Axis Scaling**: Explicit `ylim` calculations including Entry, Stop Loss, and Take Profit with +8% safety padding, eliminating off-screen targets.
+- [x] **80-Candle Extended Context**: Expanded H1 timeframe sample window for clear swing structure and market trend orientation.
+- [x] **Bilingual Interactive Control Center**: Complete `/start` interactive dashboard with inline buttons in English and Spanish, persistent language toggle stored in `data/telegram_prefs.json`.
+- [x] **Deep Linking & On-Demand Position Charts**: Direct bot link triggers (`t.me/LastEdgeBot?start=chart_{ticket}`) and instant `/chart_{ticket}` commands from position cards.
+- [x] **Native Slash Command Autocomplete (`setMyCommands`)**: Telegram API command palette suggestions registered for both English (`default`) and Spanish (`es`).
+- [x] **Web Dashboard Modal Integration**: Added `/api/positions/{ticket}/chart` endpoint and interactive visual chart viewer button (`📊 Chart`) directly in the Bento Grid positions table.
 
 ### 🛡️ VPS Resilience & Hardening
 - [x] **MT5 Disconnect Watchdog**: Real-time heartbeat checking MT5 terminal state & process health every 30s; triggers emergency alerts to admin Telegram with auto-restart recovery (`lastedge-watchdog` active in PM2).
