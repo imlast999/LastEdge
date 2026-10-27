@@ -78,14 +78,14 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [ ] **Core Engine Logs & Errors**: Complete migration of runtime log strings and API errors to standard English.
 
 ### 🛡️ VPS Resilience & Hardening
-- [ ] **MT5 Disconnect Watchdog**: Real-time heartbeat checking MT5 terminal state every 15s; triggers emergency alerts to admin Telegram/Discord if disconnected during market hours.
-- [ ] **Automated Database Backups**: Scheduled daily cron backups of `bot_state.db` and `research.db` with rotation.
-- [ ] **OS Reboot Persistence**: Auto-startup configuration (PM2 save + Windows Startup Task) guaranteeing uninterrupted service recovery after Windows Updates.
+- [x] **MT5 Disconnect Watchdog**: Real-time heartbeat checking MT5 terminal state & process health every 30s; triggers emergency alerts to admin Telegram with auto-restart recovery (`lastedge-watchdog` active in PM2).
+- [x] **Automated Database Backups**: Scheduled daily cron backups (`0 4 * * *`) of `bot_state.db`, `research.db`, configs, and vault alpha with 14-day rolling retention and Telegram notifications (`scripts/backup_vps.py`).
+- [x] **OS Reboot Persistence**: Auto-startup configuration (PM2 dump saved) guaranteeing uninterrupted service recovery across VPS updates.
 
 ### 📈 Verified Forward Testing & Track Record
-- [ ] **14-30 Day Live Incubation**: Unattended continuous execution on MT5 demo/live raw spread account to build verified performance history.
-- [ ] **Third-Party Public Audit**: Integration with **Myfxbook** or **FXBlue** demonstrating verified equity growth with < 5% maximum drawdown.
-- [ ] **Vault Strategy Graduation**: Complete multi-year 6-pillar graduation reports for all proprietary algorithms prior to capital deployment.
+- [⏳] **14-30 Day Live Incubation**: Unattended continuous execution on MT5 demo/live raw spread account to build verified performance history (Week 1 underway).
+- [ ] **Third-Party Public Audit ($10,000 Demo Account)**: New $10k demo account to be launched following the 2-3 week incubation period, connected directly to **Myfxbook** for institutional public verification.
+- [x] **Vault Strategy Graduation & Audit**: Complete 10,000-candle multi-pillar audit executed on all private strategies; eliminated inactive/substandard models and consolidated the institutional alpha portfolio.
 
 ---
 
