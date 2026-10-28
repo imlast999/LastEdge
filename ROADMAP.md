@@ -86,6 +86,14 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [x] **Native Slash Command Autocomplete (`setMyCommands`)**: Telegram API command palette suggestions registered for both English (`default`) and Spanish (`es`).
 - [x] **Web Dashboard Modal Integration**: Added `/api/positions/{ticket}/chart` endpoint and interactive visual chart viewer button (`📊 Chart`) directly in the Bento Grid positions table.
 
+### 🎯 Signal Scoring & Auto-Execution Matrix
+- [x] **Unified 4-Tier Confluence Matrix**:
+  - `VERY_HIGH` (Score $\ge 0.85$): Auto-execution in MT5 (maximum confluency).
+  - `HIGH` (Score $0.67 - 0.84$): Auto-execution in MT5 (optimized threshold $\ge 0.67$ for higher trade capture).
+  - `MEDIUM` (Score $0.60 - 0.66$): Discretionary manual 1-click approval via Web Dashboard / Mobile App.
+  - `LOW` (Score $< 0.60$): Absolute discard filter, eliminating all sub-par setups and market noise.
+- [x] **Cross-Repository Parity**: Synchronized configuration across `rules_config.json`, `engine.py`, `scoring.py`, and ecosystem documentation.
+
 ### 🛡️ VPS Resilience & Hardening
 - [x] **MT5 Disconnect Watchdog**: Real-time heartbeat checking MT5 terminal state & process health every 30s; triggers emergency alerts to admin Telegram with auto-restart recovery (`lastedge-watchdog` active in PM2).
 - [x] **Automated Database Backups**: Scheduled daily cron backups (`0 4 * * *`) of `bot_state.db`, `research.db`, configs, and vault alpha with 14-day rolling retention and Telegram notifications (`scripts/backup_vps.py`).
