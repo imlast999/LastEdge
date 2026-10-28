@@ -90,8 +90,13 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [x] **Unified 4-Tier Confluence Matrix**:
   - `VERY_HIGH` (Score $\ge 0.85$): Auto-execution in MT5 (maximum confluency).
   - `HIGH` (Score $0.67 - 0.84$): Auto-execution in MT5 (optimized threshold $\ge 0.67$ for higher trade capture).
-  - `MEDIUM` (Score $0.60 - 0.66$): Discretionary manual 1-click approval via Web Dashboard / Mobile App.
+  - `MEDIUM` (Score $0.60 - 0.66$): Discretionary manual 1-click approval via Web Dashboard / Mobile App (active in Hybrid Mode).
   - `LOW` (Score $< 0.60$): Absolute discard filter, eliminating all sub-par setups and market noise.
+- [x] **Dual-Mode Autonomous Operation Switch (100% Hands-Free vs. Hybrid Gate)**:
+  - Interactive on-the-fly mode toggle implemented across Web Dashboard header pill, Signal Stream card toggle, Telegram bot commands (`/autonomous`, `/autonomo`, `/modo`, `/handsfree`), and REST API (`/api/trading/autonomous-mode`).
+  - **100% Autonomous Mode (`ON` — Hands-Free)**: The system operates completely unattended. All `MEDIUM` signals ($0.60 - 0.66$) are automatically and silently filtered out to eliminate emotional second-guessing; only high-conviction signals ($\ge 0.67$) execute straight into MT5 without manual confirmation prompts.
+  - **Hybrid Mode (`OFF` — Discretionary Review)**: Enables the manual gate, queuing `MEDIUM` signals for 1-tap review and approval in Dashboard and Telegram.
+  - Full disk persistence across `rules_config.json` (`GLOBAL_SETTINGS.autonomous_mode`) and `autosignals_state.json`.
 - [x] **Cross-Repository Parity**: Synchronized configuration across `rules_config.json`, `engine.py`, `scoring.py`, and ecosystem documentation.
 
 ### 🛡️ VPS Resilience & Hardening

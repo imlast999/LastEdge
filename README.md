@@ -73,8 +73,16 @@ Every trading signal emitted across the ecosystem (`EURUSD`, `XAUUSD`, `BTCEUR`)
 | :--- | :---: | :--- | :--- |
 | **`VERY_HIGH`** | **`0.85 – 1.00`** | **Automated (Direct MT5)** | Order is executed immediately in MT5 with IOC filling. Broadcast as `AUTO-APROBADA ✅` to Discord, Telegram & Web Dashboard. |
 | **`HIGH`** | **`0.67 – 0.84`** | **Automated (Direct MT5)** | Order is executed immediately in MT5 (optimized $\ge 0.67$ threshold). Captures high-conviction trades without manual delay. |
-| **`MEDIUM`** | **`0.60 – 0.66`** | **Manual 1-Click Approval** | Stored in SQLite as `PROPOSED`. Sent to Web Dashboard & Mobile App for human oversight with live candlestick chart modal. |
+| **`MEDIUM`** | **`0.60 – 0.66`** | **Manual 1-Click Approval** | Stored in SQLite as `PROPOSED`. Sent to Web Dashboard & Mobile App for human oversight (filtered automatically when Autonomous Mode is ON). |
 | **`LOW`** | **`< 0.60`** | **Automatic Rejection** | Discarded at pre-filter. Zero alert noise, preventing execution in choppy or sub-optimal market conditions. |
+
+### 🤖 Dual-Mode Autonomous Operation (Hands-Free vs. Hybrid Review)
+
+To eliminate emotional friction, psychological fatigue, and decision regret, LastEdge features an institutional **Autonomous Mode Switch** accessible via the Web Dashboard, Telegram Bot, and REST API:
+
+* **🟢 100% Autonomous Mode (`ON` — Hands-Free)**: The system operates completely unattended. All `MEDIUM` signals ($0.60 - 0.66$) are automatically and silently filtered out, ensuring **only high-conviction trades ($\ge 0.67$)** execute directly into MT5 without requiring manual approvals or generating notification clutter.
+* **🟡 Hybrid Mode (`OFF` — Discretionary Review)**: Enables the manual gate. `MEDIUM` signals are routed to the Web Dashboard and Telegram Bot with 1-click `[Approve]` / `[Reject]` actions for traders actively analyzing the market.
+* **Full Persistence**: Toggle states are automatically saved to `rules_config.json` (`GLOBAL_SETTINGS.autonomous_mode`) and `autosignals_state.json`, surviving full VPS reboots.
 
 ---
 
