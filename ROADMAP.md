@@ -50,8 +50,13 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   - Live broker execution telemetry (latency, slippage, fill rate).
   - Biometric authentication (Fingerprint / FaceID) and security PIN protection.
   - Mobile Strategy Lab featuring dual subtabs: `[Simulator]` & `[History]`.
-- [x] Automated GitHub Actions CI/CD pipeline compiling signed release APKs (`v1.1.41`).
-- [x] **35 / 35 control plane, chart engine, and telegram adapter tests passed.**
+- [x] Automated GitHub Actions CI/CD pipeline compiling signed release APKs (`v1.1.54`).
+- [x] **Ecosystem Onboarding Wizard & Modular Architecture**:
+  - First-run setup modal in Web & Mobile prompting active components (`Trading Engine`, `Strategy Lab`).
+  - Minimum 1 selection invariant (prohibits 0-selection state).
+  - Cross-version persistence via `AsyncStorage` (`@lastedge_ecosystem_modules_v1`) and `localStorage`.
+  - Adaptive UI: auto-hiding inactive tabs and suppressing false offline alerts.
+- [x] **39 / 39 control plane, chart engine, and telegram adapter tests passed.**
 
 ### Phase 4: Remote Station & Multi-Device Accessibility
 - [x] Continuous 24/7 PM2 tunnel for Web Dashboard remote access (`http://bore.pub:54780`).
