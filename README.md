@@ -12,7 +12,7 @@ Research • Walk-Forward Analysis • Monte Carlo • MT5 Execution • Risk En
 [![Strategy Lab](https://img.shields.io/badge/GitHub-Strategy--Lab-purple?logo=github)](https://github.com/imlast999/lastedge-strategy-lab)
 [![App](https://img.shields.io/badge/GitHub-App-green?logo=github)](https://github.com/imlast999/lastedge-app)
 [![Android APK](https://img.shields.io/badge/Download%20APK-v1.1.55-brightgreen?logo=android)](https://github.com/imlast999/lastedge-app/releases/download/v1.1.55/LastEdge-v1.1.55.apk)
-[![Tests](https://img.shields.io/badge/Tests-205%2F205%20Passed-success)](https://github.com/imlast999/LastEdge)
+[![Tests](https://img.shields.io/badge/Tests-211%2F211%20Passed-success)](https://github.com/imlast999/LastEdge)
 [![Architecture](https://img.shields.io/badge/Architecture-Decoupled%20REST%20Microservices-orange)](https://github.com/imlast999/LastEdge)
 
 </div>
@@ -61,7 +61,7 @@ The ecosystem consists of the following 3 standalone sub-repositories orchestrat
 | 🧪 **LastEdge Strategy Lab** | [**`imlast999/lastedge-strategy-lab`**](https://github.com/imlast999/lastedge-strategy-lab) | Offline quantitative laboratory, WFA, 1,000 Monte Carlo runs, Deflated Sharpe, 6 quantitative gates. | `:8082` | **54 / 54 PASSED** ✅ |
 | 📱 **LastEdge App** | [**`imlast999/lastedge-app`**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo Android APK, Discord & Telegram bots with granular toggles. | `:8080` | **43 / 43 PASSED** ✅ |
 
-> **Overall Test Suite**: **205 / 205 automated unit & integration tests passing** across the monorepo.
+> **Overall Test Suite**: **211 / 211 automated unit & integration tests passing** across the monorepo.
 
 ---
 
