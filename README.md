@@ -12,7 +12,8 @@ Research • Walk-Forward Analysis • Monte Carlo • MT5 Execution • Risk En
 [![Strategy Lab](https://img.shields.io/badge/GitHub-Strategy--Lab-purple?logo=github)](https://github.com/imlast999/lastedge-strategy-lab)
 [![App](https://img.shields.io/badge/GitHub-App-green?logo=github)](https://github.com/imlast999/lastedge-app)
 [![Android APK](https://img.shields.io/badge/Download%20APK-Latest%20Release-brightgreen?logo=android)](https://github.com/imlast999/lastedge-app/releases/latest)
-[![Tests](https://img.shields.io/badge/Tests-212%2F212%20Passed-success)](https://github.com/imlast999/LastEdge)
+[![Ecosystem Orchestrator CI](https://github.com/imlast999/LastEdge/actions/workflows/ecosystem-ci.yml/badge.svg?branch=main)](https://github.com/imlast999/LastEdge/actions/workflows/ecosystem-ci.yml)
+[![Tests](https://img.shields.io/badge/Tests-225%2F225%20Passed-success)](https://github.com/imlast999/LastEdge)
 [![Architecture](https://img.shields.io/badge/Architecture-Decoupled%20REST%20Microservices-orange)](https://github.com/imlast999/LastEdge)
 
 </div>
