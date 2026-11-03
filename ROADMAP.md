@@ -106,6 +106,14 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   - Full disk persistence across `rules_config.json` (`GLOBAL_SETTINGS.autonomous_mode`) and `autosignals_state.json`.
 - [x] **Cross-Repository Parity**: Synchronized configuration across `rules_config.json`, `engine.py`, `scoring.py`, and ecosystem documentation.
 
+### 🤖 Institutional CI/CD & Automated Ecosystem Pipelines
+- [x] **Ecosystem Orchestrator CI (imlast999/LastEdge)**: Lightweight root CI validating ecosystem CLI, batch setup scripts, and repository boundaries without submodule/tree pollution.
+- [x] **Semantic Release Notes & Changelog Drafter (LastEdge App)**: Automated git log parser classifying commits into 5 semantic categories (🚀 Features, 🛡️ Risk Safeguards, 🐛 Fixes, 🎨 UI & Fonts, ⚡ Infrastructure) and generating GitHub Releases with direct APK links.
+- [x] **Multi-Channel CI/CD Broadcast (Telegram + Discord)**: Zero-dependency notification engine (scripts/notify_bots.py) broadcasting APK release announcements and instant CI failure alerts across all repositories.
+- [x] **Private Strategy Vault CI (LastEdge-Private-Strategies)**: Headless multi-python test runner verifying contract compliance, synthetic OHLCV indicator execution, and institutional risk bounds (RR >= 1.0, SL > 0) without exposing proprietary alpha.
+- [x] **Weekend Exposure Guard & Gap Protection**: Institutional safeguard closing traditional market positions prior to Friday market close, featuring granular strategy-level toggle (weekend_exposure_guard: bool = True|False).
+- [x] **Strict Pre-Push Git Hooks**: Active hooks across all ecosystem repositories enforcing 100% test pass rate prior to any remote push.
+
 ### 🛡️ VPS Resilience & Hardening
 - [x] **MT5 Disconnect Watchdog**: Real-time heartbeat checking MT5 terminal state & process health every 30s; triggers emergency alerts to admin Telegram with auto-restart recovery (`lastedge-watchdog` active in PM2).
 - [x] **Automated Database Backups**: Scheduled daily cron backups (`0 4 * * *`) of `bot_state.db`, `research.db`, configs, and vault alpha with 14-day rolling retention and Telegram notifications (`scripts/backup_vps.py`).
