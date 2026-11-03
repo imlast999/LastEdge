@@ -11,7 +11,7 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   [████████████████████] 100% — Phase 2: Quantitative Laboratory & 6 Pillars Suite
   [████████████████████] 100% — Phase 3: Web Dashboard Bento Grid & Android Mobile App
   [████████████████████] 100% — Phase 4: Multi-Device Remote Access & Security
-  [███████████████░░░░░]  75% — Phase 5: Consolidation, Global i18n & Audited Track Record
+  [████████████████░░░░]  80% — Phase 5: Consolidation, Global i18n & Audited Track Record
   [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 6: Monetization Route 1 (Recurring VIP Signals)
   [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 7: Monetization Route 3 (Prop Firm Funded Accounts)
 ```
@@ -26,7 +26,9 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [x] Automated **Circuit Breakers**: Execution halt on loss streaks or maximum daily drawdown.
 - [x] Dynamic Trailing Stops and multi-stage partial take-profit automation in MT5.
 - [x] High-integrity SQLite trade journal and persistent state store (`bot_state.db`).
-- [x] **108 / 108 unit and integration tests passed.**
+- [x] **Weekend Exposure Guard**: Automated Friday position liquidation with per-strategy switch (`weekend_exposure_guard: bool`).
+- [x] **FXLiveCapital 10% Margin Cap**: Hard broker protection preventing account blowout on floating margin spikes.
+- [x] **117 / 117 unit and integration tests passed (100% Green).**
 
 ### Phase 2: Scientific Audit & Strategy Lab 2.0 (`Strategy Lab`)
 - [x] High-fidelity historical data pipeline in Parquet and CSV.
@@ -39,24 +41,26 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   5. *Macro Regime Stress Testing*: Multi-scenario performance in Bull, Bear, Chop, and Volatility Shocks.
   6. *Institutional Verdict & Graduation*: Cryptographic SHA-256 package verification.
 - [x] Dynamic strategy loader auto-discovering strategies from `strategies/`, `vault/`, `private/`, and `public/`.
-- [x] **54 / 54 unit and mathematical tests passed.**
+- [x] Research runner and backtest validation engine for proprietary alpha models.
+- [x] **54 / 54 unit and mathematical tests passed (100% Green).**
 
 ### Phase 3: Monitoring & Mobile Control Plane (`LastEdge App`)
 - [x] Modern Bento Grid 2.0 Glassmorphism Web Dashboard on port `8080`.
-- [x] Real-time equity and balance tracking charts powered by Chart.js.
+- [x] Real-time equity and balance tracking charts powered by Chart.js & Lightweight Charts.
 - [x] **Production Mobile Client (React Native Expo 54 / Hermes)**:
   - 1-second live countdown tickers on pending signals (`HH:mm:ss`).
   - 1-tap MT5 signal approval, rejection, and price drift safeguards.
   - Live broker execution telemetry (latency, slippage, fill rate).
   - Biometric authentication (Fingerprint / FaceID) and security PIN protection.
   - Mobile Strategy Lab featuring dual subtabs: `[Simulator]` & `[History]`.
-- [x] Automated GitHub Actions CI/CD pipeline compiling signed release APKs (`v1.1.55`).
+  - Typography System: Nexa (Titles & Display) + Plus Jakarta Sans (Fintech Metrics & Body).
+- [x] Automated GitHub Actions CI/CD pipeline compiling signed release APKs (`v1.1.69`).
 - [x] **Ecosystem Onboarding Wizard & Modular Architecture**:
   - First-run setup modal in Web & Mobile prompting active components (`Trading Engine`, `Strategy Lab`).
   - Minimum 1 selection invariant (prohibits 0-selection state).
   - Cross-version persistence via `AsyncStorage` (`@lastedge_ecosystem_modules_v1`) and `localStorage`.
   - Adaptive UI: auto-hiding inactive tabs and suppressing false offline alerts.
-- [x] **39 / 39 control plane, chart engine, and telegram adapter tests passed.**
+- [x] **50 / 50 control plane, chart engine, and telegram adapter tests passed (100% Green).**
 
 ### Phase 4: Remote Station & Multi-Device Accessibility
 - [x] Continuous 24/7 PM2 tunnel for Web Dashboard remote access (`http://bore.pub:54780`).
@@ -84,7 +88,7 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [ ] **Core Engine Logs & Errors**: Complete migration of runtime log strings and API errors to standard English.
 - [x] **Account Milestone ($2,800 USD Cash Balance Broken)**: Net realized overnight profit of +$32.23 USD and +$48.67 USD total equity expansion under 100% autonomous hands-free execution.
 
-### 📱 Visual Telegram Control Center & Chart Delivery System
+### 📱 Visual Telegram & Discord Control Center
 - [x] **Technical Chart Generation Engine**: Dedicated dark-mode (`#090d16`) chart generator powered by `mplfinance` with candlestick volume, EMA50 / EMA200 overlays, and dynamic Risk/Reward zone boxes.
 - [x] **Intelligent Y-Axis Scaling**: Explicit `ylim` calculations including Entry, Stop Loss, and Take Profit with +8% safety padding, eliminating off-screen targets.
 - [x] **80-Candle Extended Context**: Expanded H1 timeframe sample window for clear swing structure and market trend orientation.
@@ -92,6 +96,7 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [x] **Deep Linking & On-Demand Position Charts**: Direct bot link triggers (`t.me/LastEdgeBot?start=chart_{ticket}`) and instant `/chart_{ticket}` commands from position cards.
 - [x] **Native Slash Command Autocomplete (`setMyCommands`)**: Telegram API command palette suggestions registered for both English (`default`) and Spanish (`es`).
 - [x] **Web Dashboard Modal Integration**: Added `/api/positions/{ticket}/chart` endpoint and interactive visual chart viewer button (`📊 Chart`) directly in the Bento Grid positions table.
+- [x] **Independent Bot Switches**: Granular `.env` toggles (`ACTIVATE_DISCORD_BOT=on|off`, `ACTIVATE_TELEGRAM_BOT=on|off`) enabling decoupled deployment.
 
 ### 🎯 Signal Scoring & Auto-Execution Matrix
 - [x] **Unified 4-Tier Confluence Matrix**:
@@ -107,11 +112,12 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [x] **Cross-Repository Parity**: Synchronized configuration across `rules_config.json`, `engine.py`, `scoring.py`, and ecosystem documentation.
 
 ### 🤖 Institutional CI/CD & Automated Ecosystem Pipelines
-- [x] **Ecosystem Orchestrator CI (imlast999/LastEdge)**: Lightweight root CI validating ecosystem CLI, batch setup scripts, and repository boundaries without submodule/tree pollution.
-- [x] **Semantic Release Notes & Changelog Drafter (LastEdge App)**: Automated git log parser classifying commits into 5 semantic categories (🚀 Features, 🛡️ Risk Safeguards, 🐛 Fixes, 🎨 UI & Fonts, ⚡ Infrastructure) and generating GitHub Releases with direct APK links.
-- [x] **Multi-Channel CI/CD Broadcast (Telegram + Discord)**: Zero-dependency notification engine (scripts/notify_bots.py) broadcasting APK release announcements and instant CI failure alerts across all repositories.
-- [x] **Private Strategy Vault CI (LastEdge-Private-Strategies)**: Headless multi-python test runner verifying contract compliance, synthetic OHLCV indicator execution, and institutional risk bounds (RR >= 1.0, SL > 0) without exposing proprietary alpha.
-- [x] **Weekend Exposure Guard & Gap Protection**: Institutional safeguard closing traditional market positions prior to Friday market close, featuring granular strategy-level toggle (weekend_exposure_guard: bool = True|False).
+- [x] **Ecosystem Orchestrator CI (`imlast999/LastEdge`)**: Lightweight root CI validating ecosystem CLI, batch setup scripts, and repository boundaries without submodule/tree pollution.
+- [x] **Semantic Release Notes & Changelog Drafter (`LastEdge App`)**: Automated git log parser classifying commits into 5 semantic categories (🚀 Features, 🛡️ Risk Safeguards, 🐛 Fixes, 🎨 UI & Fonts, ⚡ Infrastructure) and generating GitHub Releases with direct APK links.
+- [x] **Dynamic Version Sync & README Direct Download**: Automatic synchronizer updating `package.json`, `build.gradle`, `VERSION`, and direct `.apk` install links in `README.md`.
+- [x] **Multi-Channel CI/CD Broadcast (Telegram + Discord)**: Zero-dependency notification engine (`scripts/notify_bots.py`) broadcasting APK release announcements and instant CI failure alerts across all repositories.
+- [x] **Private Strategy Vault CI (`LastEdge-Private-Strategies`)**: Headless multi-python test runner verifying contract compliance, synthetic OHLCV indicator execution, and institutional risk bounds (RR >= 1.0, SL > 0) across all private strategies (52 automated checks).
+- [x] **Weekend Exposure Guard & Gap Protection**: Institutional safeguard closing traditional market positions prior to Friday market close, featuring granular strategy-level toggle (`weekend_exposure_guard: bool = True|False`).
 - [x] **Strict Pre-Push Git Hooks**: Active hooks across all ecosystem repositories enforcing 100% test pass rate prior to any remote push.
 
 ### 🛡️ VPS Resilience & Hardening
@@ -119,10 +125,37 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [x] **Automated Database Backups**: Scheduled daily cron backups (`0 4 * * *`) of `bot_state.db`, `research.db`, configs, and vault alpha with 14-day rolling retention and Telegram notifications (`scripts/backup_vps.py`).
 - [x] **OS Reboot Persistence**: Auto-startup configuration (PM2 dump saved) guaranteeing uninterrupted service recovery across VPS updates.
 
+---
+
+## ⏳ Pending & Upcoming Tasks (In Progress / Next Sprints)
+
 ### 📈 Verified Forward Testing & Track Record
 - [⏳] **14-30 Day Live Incubation**: Unattended continuous execution on MT5 demo/live raw spread account to build verified performance history (Week 1 underway).
-- [ ] **Third-Party Public Audit ($10,000 Demo Account)**: New $10k demo account to be launched following the 2-3 week incubation period, connected directly to **Myfxbook** for institutional public verification.
+- [ ] **Gold (XAUUSD) Stop-Loss Multiplier Calibration**:
+  - Review weekend and weekly Gold volatility performance.
+  - Evaluate broadening Stop Loss ATR multiplier from $1.5\times$ to $2.0\times$ or dynamic volatility padding if drawdown approaches challenge thresholds, ensuring setups breathe during Asian/London liquidity surges without premature stop-outs.
+- [ ] **Third-Party Public Audit ($10,000 Demo Account)**:
+  - Launch dedicated $10k raw-spread demo account following incubation period.
+  - Connect directly to **Myfxbook** and **FXBlue** for third-party institutional performance verification.
 - [x] **Vault Strategy Graduation & Audit**: Complete 10,000-candle multi-pillar audit executed on all private strategies; eliminated inactive/substandard models and consolidated the institutional alpha portfolio.
+
+### 🔍 Advanced CI/CD & Quality Automations (Future Roadmap)
+- [ ] **Nightly Market Data & Spread Quality Audit**:
+  - Scheduled GitHub Actions workflow downloading daily tick and M1 spread metrics from broker servers.
+  - Detects spread widening patterns, broker execution degradation, and slippage spikes before Monday market opens.
+- [ ] **Automated Dependency Vulnerability & Security Scanner**:
+  - Scheduled scanning workflow using Trivy, Bandit, and Dependabot across Python requirements and Node monorepo packages.
+  - Auto-flags outdated libraries or CVE security disclosures without manual intervention.
+- [ ] **Multi-Repository Semantic Tagging & Coordinated Releases**:
+  - Centralized orchestration workflow dispatching synchronized semantic tags (`vX.Y.Z`) across `Trading Engine` and `Strategy Lab` when a major ecosystem release is published.
+
+### 🖥️ Web Dashboard & Mobile Next-Gen Controls
+- [ ] **Weekend Guard Countdown Banner**:
+  - Visual status pill and real-time countdown widget in Bento Grid and Mobile App showing exact time remaining before Friday market liquidation window ($21:45\text{ UTC}$).
+- [ ] **Native Mobile Push Notifications (Expo / Firebase)**:
+  - Direct push notifications on iOS and Android when a trade is approved, trailing stop is modified, or position is liquidated.
+- [ ] **Telegram Interactive SL/TP Parameter Sliders**:
+  - Remote fine-tuning of trailing stop distances and risk percentages directly via inline keyboard buttons in the `/start` menu.
 
 ---
 
@@ -149,7 +182,7 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   - Calibrate *Risk Engine v2* with conservative limits:
     - Maximum daily loss capped at 3.5% (safety buffer below the 5% firm limit).
     - Maximum total drawdown capped at 8.0% (safety buffer below the 10% firm limit).
-    - Automatic weekend position squaring (gap risk protection).
+    - Automatic weekend position squaring via *Weekend Exposure Guard*.
 - [ ] **Evaluation Challenge Execution**:
   - Run validated vault strategies on firm demo challenge servers.
   - Verify execution slippage and spread behavior under institutional server conditions.
