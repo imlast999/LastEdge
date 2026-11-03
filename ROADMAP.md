@@ -54,6 +54,14 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   - Biometric authentication (Fingerprint / FaceID) and security PIN protection.
   - Mobile Strategy Lab featuring dual subtabs: `[Simulator]` & `[History]`.
   - Typography System: Nexa (Titles & Display) + Plus Jakarta Sans (Fintech Metrics & Body).
+- [x] **Granular Mobile Notification Center (15 Alert Types & 5 Android Channels)**:
+  - ⚡ *Señales & Ejecución*: 1.1 Señal Discrecional (TTL 10m), 1.2 Señal Auto-Ejecutada (Tier HIGH/VERY_HIGH $\ge 0.67$), 1.3 Alerta de Señal Expirada.
+  - 📊 *Órdenes & Beneficios*: 2.1 Break-Even Asegurado (Riesgo Cero), 2.2 Take Profit Parcial (50% volumen), 2.3 Cierre en Ganancia (TP), 2.4 Cierre en Stop Loss.
+  - 🛡️ *Salvaguardas de Riesgo*: 3.1 Aviso Previo Weekend Guard (viernes tarde), 3.2 Liquidación Weekend Guard (21:45 UTC), 3.4 Circuit Breaker Activado.
+  - 🔬 *Strategy Lab*: 4.2 Fin de Backtest / Optimización Monte Carlo en Lab.
+  - 🔌 *Broker & Conectividad*: 5.1 Desconexión / Reconexión MT5 y VPS, 5.2 Alerta de Spread Anormal (>4.0 pips).
+  - 📱 *Rutina & Mantenimiento*: 6.1 Resumen Diario de Sesión (22:00 UTC), 6.2 Nueva Versión de App APK (1-tap update).
+  - Configuración granular e independiente con toggles agrupados por categoría e i18n bilingüe (ES / EN).
 - [x] Automated GitHub Actions CI/CD pipeline compiling signed release APKs (`v1.1.69`).
 - [x] **Ecosystem Onboarding Wizard & Modular Architecture**:
   - First-run setup modal in Web & Mobile prompting active components (`Trading Engine`, `Strategy Lab`).
