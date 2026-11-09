@@ -116,3 +116,8 @@ strategy_params.private.json
 # VPS Backups
 backups/
 *.zip
+
+# Android Binaries & App Bundles (Google Play)
+*.apk
+*.aab
+*.apks
