@@ -84,6 +84,14 @@ top_level_dirs.txt
 !mobile-app/**/*.webp
 !images/*.png
 !branding/**
+!docs/**/*.png
+!docs/**/*.jpg
+!docs/**/*.jpeg
+!docs/**/*.webp
+!docs/**/*.svg
+!docs/**/*.ttf
+!docs/**/*.woff
+!docs/**/*.woff2
 *.jpg
 !images/*.jpg
 *.jpeg
