@@ -11,8 +11,8 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   [████████████████████] 100% — Phase 2: Quantitative Laboratory & 6 Pillars Suite
   [████████████████████] 100% — Phase 3: Web Dashboard Bento Grid & Android Mobile App
   [████████████████████] 100% — Phase 4: Multi-Device Remote Access & Security
-  [████████████████░░░░]  80% — Phase 5: Consolidation, Global i18n & Audited Track Record
-  [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 6: Monetization Route 1 (Recurring VIP Signals)
+  [███████████████████░]  95% — Phase 5: Consolidation, Global i18n & Audited Track Record
+  [██████████░░░░░░░░░░]  50% — Phase 6: Monetization Route 1 (Recurring VIP Signals & Community)
   [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 7: Monetization Route 3 (Prop Firm Funded Accounts)
 ```
 
@@ -62,7 +62,16 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   - 🔌 *Broker & Conectividad*: 5.1 Desconexión / Reconexión MT5 y VPS, 5.2 Alerta de Spread Anormal (>4.0 pips).
   - 📱 *Rutina & Mantenimiento*: 6.1 Resumen Diario de Sesión (22:00 UTC), 6.2 Nueva Versión de App APK (1-tap update).
   - Configuración granular e independiente con toggles agrupados por categoría e i18n bilingüe (ES / EN).
-- [x] Automated GitHub Actions CI/CD pipeline compiling signed release APKs (`v1.1.69`).
+- [x] Automated GitHub Actions CI/CD pipeline compiling signed release APKs (`v1.1.94`).
+- [x] **Google Play Store Deployment & Protection**:
+  - Private `.aab` compilation workflow (`.github/workflows/build-playstore-bundle.yml`) with manual `workflow_dispatch` trigger and 7-day private artifact retention, completely isolating `.aab` bundles from public releases.
+  - Local bundle tooling via `build_bundle.bat` and `build_apk.py --bundle`.
+  - Production graphic creatives: 512x512 PNG app icon (32-bit RGBA) & 1024x500 PNG feature graphic (24-bit RGB).
+  - Responsive dark-mode Privacy Policy ([`docs/privacy.html`](file:///C:/LastEdge/LastEdge%20App/docs/privacy.html) & `PRIVACY_POLICY.md`) with in-app settings link.
+  - Direct founder contact strategy (`@imlast999`) complying with Google Play in-app billing rules.
+- [x] **Mobile Community Hub & Direct VIP Channel Access**:
+  - Bento card in Home Dashboard (`COMUNIDAD & SEÑALES VIP` / `COMMUNITY & VIP SIGNALS`) with 3 direct links: Public Telegram Journal, Instagram broadcast, and featured VIP access button linking directly to `@imlast999`.
+  - Dedicated Community section in Settings modal with 100% bilingual reactivity (ES / EN).
 - [x] **Ecosystem Onboarding Wizard & Modular Architecture**:
   - First-run setup modal in Web & Mobile prompting active components (`Trading Engine`, `Strategy Lab`).
   - Minimum 1 selection invariant (prohibits 0-selection state).
@@ -98,7 +107,12 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 
 ### 📱 Visual Telegram & Discord Control Center
 - [x] **Technical Chart Generation Engine**: Dedicated dark-mode (`#090d16`) chart generator powered by `mplfinance` with candlestick volume, EMA50 / EMA200 overlays, and dynamic Risk/Reward zone boxes.
-- [x] **Intelligent Y-Axis Scaling**: Explicit `ylim` calculations including Entry, Stop Loss, and Take Profit with +8% safety padding, eliminating off-screen targets.
+- [x] **Unobstructed Live Candle Visibility**: Technical price level badges (`ENTRY`, `SL`, `TP`) anchored to the left flank (`ha='left'`), keeping right-side live price action 100% clean and visible.
+- [x] **Intelligent Break-Even Alignment**: Sub-millimeter horizontal contiguous badge placement (`[ SL ]` in red followed immediately by `[ ENTRY ]` in blue) rendered via canvas bounding box calculations, preventing overlapping text on Break-Even trades.
+- [x] **Dual Chart Modality**:
+  - *On-Demand Position Charts* (`/chart`, `/positions`, interactive buttons): Renders candles all the way to the right border without artificial empty space.
+  - *New Signal Execution Charts* (`autosignals` dispatch): Adds a ~10-12 bar right margin and TradingView-style projected Risk/Reward position box into the future.
+- [x] **Intelligent Y-Axis Scaling & Headroom**: Dynamic Y-axis limits with +18% top headroom, eliminating collisions between high Take Profit targets and header title / indicator legends.
 - [x] **80-Candle Extended Context**: Expanded H1 timeframe sample window for clear swing structure and market trend orientation.
 - [x] **Bilingual Interactive Control Center**: Complete `/start` interactive dashboard with inline buttons in English and Spanish, persistent language toggle stored in `data/telegram_prefs.json`.
 - [x] **Deep Linking & On-Demand Position Charts**: Direct bot link triggers (`t.me/LastEdgeBot?start=chart_{ticket}`) and instant `/chart_{ticket}` commands from position cards.
@@ -169,17 +183,22 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 
 ## 🚀 Future Milestones: Monetization & Capital Scaling
 
-### 🎯 Phase 6: Monetization Route 1 — Recurring VIP Signals Channel (Telegram & Discord)
-> **Model**: Generate recurring subscription revenue ($35 - $80 / month per user) by sharing real-time algorithmic alerts generated by the Trading Engine scanner, **without exposing source code or underlying parameters**.
+### 🎯 Phase 6: Monetization Route 1 — Recurring VIP Signals Channel & Community (Active)
+> **Model**: Real-time algorithmic signal broadcast generated by the Trading Engine scanner to private VIP subscribers, **without exposing proprietary code, weights, or model architectures**.
 
-- [ ] **Automated Membership Billing**:
-  - Integration with subscription platforms (Whop.com or LaunchPass with Stripe).
-  - Automated member onboarding and role revocation upon subscription cancellation.
-- [ ] **Rich Visual Trading Alerts**:
-  - Standardized institutional alert templates with Symbol, Type, Entry, SL, TP, and R:R (minimum 1:2).
-  - Automated clean chart screenshots attached to each signal displaying setup structure.
-- [ ] **Public Transparency & Audit Channel**:
-  - Free channel broadcasting weekly/monthly performance summaries verified by Strategy Lab data.
+- [x] **Private VIP Signals Channel Infrastructure**:
+  - Dedicated private channel created and connected: `LastEdge VIP Signals` (`-1004414507559`).
+  - Dual broadcast dispatch engine in [`autosignals.py`](file:///C:/LastEdge/LastEdge%20Trading%20Engine/services/autosignals.py) and [`notification_dispatcher.py`](file:///C:/LastEdge/LastEdge%20Trading%20Engine/services/notification_dispatcher.py) replicating every trade to both founder private chat (`5721222937`) and the VIP channel simultaneously.
+  - Strict institutional English alert formatting (`ENTRY`, `STOP LOSS`, `TAKE PROFIT`, `R:R RATIO`, `STATUS: EXECUTED IN MT5 / AUTO-APPROVED`).
+- [x] **Unauthorized Visitor Landing on Bot**:
+  - Inbound messages from external users to `@LastEdgeBot` receive an institutional gate message with direct interactive buttons to the Public Trading Journal ([`@LastEdgeJournal`](https://t.me/LastEdgeJournal)) and founder direct VIP contact ([`@imlast999`](https://t.me/imlast999)).
+- [x] **Rich Visual Trading Alerts**:
+  - Automated high-definition technical chart generation attached to every executed signal with entry, SL, TP, and forward projection box.
+- [x] **Public Transparency & Audit Channels**:
+  - Public Telegram Journal active: [`t.me/LastEdgeJournal`](https://t.me/LastEdgeJournal).
+  - Instagram Broadcast Channel: [`https://ig.me/j/AbZrLKLRbIHnU-xw/`](https://ig.me/j/AbZrLKLRbIHnU-xw/).
+- [ ] **Automated Subscription Billing & Stripe Integration**:
+  - Dedicated checkout gateway for recurring automated membership access.
 
 ---
 

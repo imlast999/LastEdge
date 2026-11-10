@@ -13,7 +13,7 @@ Research • Walk-Forward Analysis • Monte Carlo • MT5 Execution • Risk En
 [![App](https://img.shields.io/badge/GitHub-App-green?logo=github)](https://github.com/imlast999/lastedge-app)
 [![Android APK](https://img.shields.io/badge/Download%20APK-Latest%20Release-brightgreen?logo=android)](https://github.com/imlast999/lastedge-app/releases/latest)
 [![Ecosystem Orchestrator CI](https://github.com/imlast999/LastEdge/actions/workflows/ecosystem-ci.yml/badge.svg?branch=main)](https://github.com/imlast999/LastEdge/actions/workflows/ecosystem-ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-225%2F225%20Passed-success)](https://github.com/imlast999/LastEdge)
+[![Tests](https://img.shields.io/badge/Tests-236%2F236%20Passed-success)](https://github.com/imlast999/LastEdge)
 [![Architecture](https://img.shields.io/badge/Architecture-Decoupled%20REST%20Microservices-orange)](https://github.com/imlast999/LastEdge)
 
 </div>
@@ -58,11 +58,11 @@ The ecosystem consists of the following 3 standalone sub-repositories orchestrat
 
 | Repository | GitHub Link | Role | Ports | Test Suite |
 | :--- | :--- | :--- | :---: | :---: |
-| ⚡ **LastEdge Trading Engine** | [**`imlast999/lastedge-trading-engine`**](https://github.com/imlast999/lastedge-trading-engine) | Execution core, MetaTrader 5 driver, Risk Engine v2, dynamic strategy loader, Circuit Breakers. | `:8081` | **108 / 108 PASSED** ✅ |
+| ⚡ **LastEdge Trading Engine** | [**`imlast999/lastedge-trading-engine`**](https://github.com/imlast999/lastedge-trading-engine) | Execution core, MetaTrader 5 driver, Risk Engine v2, dynamic strategy loader, Circuit Breakers. | `:8081` | **132 / 132 PASSED** ✅ |
 | 🧪 **LastEdge Strategy Lab** | [**`imlast999/lastedge-strategy-lab`**](https://github.com/imlast999/lastedge-strategy-lab) | Offline quantitative laboratory, WFA, 1,000 Monte Carlo runs, Deflated Sharpe, 6 quantitative gates. | `:8082` | **54 / 54 PASSED** ✅ |
 | 📱 **LastEdge App** | [**imlast999/lastedge-app**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo Android APK, Discord & Telegram bots with granular toggles. | :8080 | **50 / 50 PASSED** ✅ |
 
-> **Overall Test Suite**: **212 / 212 automated unit & integration tests passing** across the monorepo.
+> **Overall Test Suite**: **236 / 236 automated unit & integration tests passing** across the monorepo.
 
 ---
 
@@ -105,14 +105,30 @@ The mobile client is built on **React Native (Expo SDK 54, Hermes Engine)**, des
 
 ## 📈 Visual Chart Engine & Telegram Control Center
 
-LastEdge App integrates an institutional-grade technical chart generator and interactive Telegram bot gateway:
+LastEdge integrates an institutional-grade technical chart generator and interactive Telegram bot gateway:
 
 * 🎨 **TradingView Dark Theme (`#090d16`)**: Native candlestick rendering powered by `mplfinance` with volume bars, EMA50 / EMA200 dynamic curves, and shaded Risk/Reward zone boxes.
-* 📐 **Intelligent Dynamic Scaling**: Y-axis range automatically calculates Entry, Stop Loss, and Take Profit with +8% safety padding so targets are never off-screen.
+* 📐 **Unobstructed Live Candle Visibility**: Price level badges (`ENTRY`, `SL`, `TP`) anchored to the left flank (`ha='left'`), keeping right-side live price action 100% visible and unblocked.
+* ⚖️ **Break-Even Contiguous Alignment**: Sub-millimeter horizontal contiguous badge placement (`[ SL ]` in red followed immediately by `[ ENTRY ]` in blue) rendered via canvas bounding box calculations, preventing overlapping text on Break-Even trades.
+* 🎯 **Dual Chart Modalities**:
+  - **On-Demand Position Charts** (`/chart`, `/positions`, interactive buttons): Fills candles all the way to the right edge with zero artificial empty space.
+  - **New Signal Execution Charts** (`autosignals` dispatch): Adds a ~10-12 bar right margin and TradingView-style projected Risk/Reward position box extending into the future.
+* 🛡️ **Intelligent Dynamic Scaling & Headroom**: Y-axis range automatically calculates Entry, Stop Loss, and Take Profit with +18% top headroom so targets never collide with header titles or EMA legends.
 * 🌐 **Bilingual Control Center**: Complete `/start` control matrix supporting real-time toggling between English (default) and Spanish with persistent preferences.
 * ⌨️ **Slash Command Palette (`setMyCommands`)**: Instant autocomplete suggestions when typing `/` in Telegram registered with the Telegram Bot API in English and Spanish.
 * 🔗 **Deep Linking & On-Demand Position Charts**: Direct bot triggers (`t.me/LastEdgeBot?start=chart_{ticket}`) and `/chart_{ticket}` commands for instant visual chart generation from open MT5 positions.
 * 📊 **Web Dashboard Modal Integration**: Added `/api/positions/{ticket}/chart` endpoint and interactive `📊 Chart` modal viewer directly inside the Bento Grid positions table.
+
+---
+
+## ⚡ VIP Signals Channel & Community Ecosystem
+
+LastEdge features an automated dual-broadcasting pipeline connecting the live quantitative engine directly to private VIP members and public channels:
+
+* 💎 **Private VIP Signals Channel (`LastEdge VIP Signals`)**: Real-time signal replication dispatched simultaneously to founder chat (`5721222937`) and the private VIP channel (`-1004414507559`).
+* 🌐 **Standardized Institutional Formatting**: All VIP signals are broadcast strictly in English with technical chart attachments, entry, SL, TP, R:R ratios, and MT5 execution statuses (`EXECUTED IN MT5` / `AUTO-APPROVED`).
+* 🔒 **Unauthorized Visitor Landing Gate**: External users messaging `@LastEdgeBot` receive an institutional welcome gate with 1-tap interactive inline buttons leading to the public journal and founder direct VIP contact.
+* 📢 **Community Hub**: Direct integration across the Mobile App (Bento Grid & Settings) linking to the Public Telegram Journal ([`@LastEdgeJournal`](https://t.me/LastEdgeJournal)), Instagram Broadcast, and direct VIP founder contact ([`@imlast999`](https://t.me/imlast999)).
 
 ---
 
