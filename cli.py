@@ -162,6 +162,8 @@ def stop_services():
 
 
 def main():
+    if not sys.stdin.isatty():
+        sys.exit(0)
     while True:
         try:
             print_banner()

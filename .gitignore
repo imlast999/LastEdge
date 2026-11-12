@@ -14,6 +14,9 @@ mt5_key.key
 prompt.md
 
 # ── Datos de sesión (locales, no compartir) ───────────────────────────────────
+*.db
+*.db-wal
+*.db-shm
 bot_state.db
 dashboard_data.json
 backtest_data.json

@@ -125,7 +125,7 @@ LastEdge integrates an institutional-grade technical chart generator and interac
 
 LastEdge features an automated dual-broadcasting pipeline connecting the live quantitative engine directly to private VIP members and public channels:
 
-* 💎 **Private VIP Signals Channel (`LastEdge VIP Signals`)**: Real-time signal replication dispatched simultaneously to founder chat (`5721222937`) and the private VIP channel (`-1004414507559`).
+* 💎 **Private VIP Signals Channel**: Real-time signal replication dispatched simultaneously to authorized operator chat (`TELEGRAM_CHAT_ID`) and optional VIP channel (`TELEGRAM_VIP_CHANNEL_ID`).
 * 🌐 **Standardized Institutional Formatting**: All VIP signals are broadcast strictly in English with technical chart attachments, entry, SL, TP, R:R ratios, and MT5 execution statuses (`EXECUTED IN MT5` / `AUTO-APPROVED`).
 * 🔒 **Unauthorized Visitor Landing Gate**: External users messaging `@LastEdgeBot` receive an institutional welcome gate with 1-tap interactive inline buttons leading to the public journal and founder direct VIP contact.
 * 📢 **Community Hub**: Direct integration across the Mobile App (Bento Grid & Settings) linking to the Public Telegram Journal ([`@LastEdgeJournal`](https://t.me/LastEdgeJournal)), Instagram Broadcast, and direct VIP founder contact ([`@imlast999`](https://t.me/imlast999)).
