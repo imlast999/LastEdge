@@ -2,6 +2,8 @@
 /LastEdge Trading Engine/
 /LastEdge Strategy Lab/
 /LastEdge App/
+/LastEdge-Private-Strategies/
+/tmp_pytest/
 
 # ── Local Agent Rules & Specs (Conservado localmente, no versionar) ───────────
 AGENTS.md
