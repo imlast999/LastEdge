@@ -12,11 +12,11 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 
 ```
   [████████████████████] 100% — Phase 1: Infrastructure & MT5 Execution Engine
-  [████████████████████] 100% — Phase 2: Quantitative Laboratory & 6 Pillars Suite
+  [████████████████░░░░]  80% — Phase 2: Quantitative Laboratory & 6 Pillars Suite (real pillar engine being rebuilt)
   [████████████████████] 100% — Phase 3: Web Dashboard Bento Grid & Android Mobile App
   [████████████████████] 100% — Phase 4: Multi-Device Remote Access (being superseded by Phase 6)
   [██████████████████░░]  90% — Phase 5: Consolidation, Global i18n & Audited Track Record
-  [███████░░░░░░░░░░░░░]  35% — Phase 6: Linux Migration & Dual-Platform Execution (MT5 + cTrader)  ← ACTIVE
+  [█████████████░░░░░░░]  65% — Phase 6: Linux Migration & Dual-Platform Execution (MT5 + cTrader)  ← ACTIVE
   [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 7: Dual 60-Day Verified Challenge ($10k MT5 + $10k cTrader)
   [██████████░░░░░░░░░░]  50% — Phase 8: Monetization Route 1 (Recurring VIP Signals & Community)
   [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 9: Monetization Route 2 (Prop Firm Funded Accounts)
@@ -63,6 +63,8 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [x] Dynamic strategy loader auto-discovering strategies from `strategies/`, `vault/`, `private/`, and `public/`.
 - [x] Research runner and backtest validation engine for proprietary alpha models.
 - [x] **54 / 54 unit and mathematical tests passed (100% Green).**
+- [⏳] **Six Pillars v2 — real computation suite (Nov 2026 audit)**: the pillar metrics previously displayed in the App were static placeholders and the legacy replay modeled fixed TP/SL only. Being rebuilt as an event-driven backtester mirroring live execution (spread, commission, slippage, partial close, breakeven, trailing, position overlap, round-down sizing) with all six pillars computed for real (equity-based Monte Carlo ruin + prop-limit breach probability, true walk-forward/WFE, Deflated Sharpe + PBO, cost sensitivity, regime and out-of-period stress, hashed verdicts). The App will show only computed results or an explicit "not computed" state.
+- [x] **Historical data time-base audit**: Lab datasets mixed true UTC (≤2024-10) with broker time (UTC+2/+3 afterwards). UTC-converted datasets generated; the 5 challenge strategies re-validated on UTC (see Lab `docs/DATA_UTC_AUDIT.md`).
 
 ### Phase 3: Monitoring & Mobile Control Plane (`LastEdge App`)
 - [x] Modern Bento Grid 2.0 Glassmorphism Web Dashboard on port `8080`.
@@ -154,6 +156,7 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [x] **Broker access incident (Nov 2026)**: after a weekend-long platform/dashboard migration by the demo broker, Google sign-in stopped working and previously created accounts no longer appeared under the same email. New-account creation and Myfxbook linking on that broker are therefore blocked.
 - [x] **Alternative broker search** (requirements below) did not produce a suitable MT5 option yet.
 - [⏸️] **60-Day $10k Verified Challenge** → **paused** and moved to **Phase 7** (dual-platform launch after the Linux migration).
+- [🔧] **Maintenance mode (since 2026-11-16)**: all LastEdge services stopped on the Windows host; no trading on any server until the Linux cut-over.
 - [ ] **Gold (XAUUSD) Stop-Loss Multiplier Calibration**: evaluate ATR multiplier $1.5\times \rightarrow 2.0\times$ or dynamic volatility padding.
 - [x] **Vault Strategy Graduation & Audit**: 10,000-candle multi-pillar audit; consolidated 5-strategy challenge portfolio.
 
@@ -184,13 +187,13 @@ Debian 13 (headless, SSH via private mesh only)
 ### Workstream A — MT5 Headless on Linux *(owner: Last)*
 - [x] Linux server provisioned and verified (Debian 13, 4 vCPU / 8 GB, x86_64).
 - [x] Python 3.12 environment; Engine, Lab and App deployed (secrets excluded) — **test suites green on Linux**.
-- [x] Wine 10 prefix with **MetaTrader 5 installed** and Windows-side Python 3.12.
-- [x] `mt5linux` bridge installed on both sides; drop-in `MetaTrader5` shim so the Engine runs **unchanged** on Linux.
+- [x] **MetaTrader 5 installed under Wine 11** (Debian's Wine 10 fails with MT5's "debugger found" check — Wine bug fixed in 11.6) and Windows-side Python 3.12 (numpy 1.26).
+- [x] RPyC bridge (localhost only) + drop-in `MetaTrader5` shim speaking RPyC directly (mt5linux 1.x client requires Docker), so the Engine runs **unchanged** on Linux.
 - [x] **Cross-platform watchdog** (Wine process detection, supervised mode, Telegram alerts preserved).
-- [x] **supervisord configuration** with ordered startup (display → terminal → bridge → engine) and helper scripts.
-- [x] MT5 startup config template (`mt5.ini`) for unattended login with Algo Trading enabled.
-- [⏳] End-to-end bridge validation (terminal + bridge + Engine connectivity).
-- [ ] Dedicated **$10k MT5 demo account** (broker meeting the Phase 7 requirements) and unattended auto-login. Until then, stack validation can use a disposable demo account.
+- [x] **supervisord configuration** with ordered startup (display → terminal → bridge → engines → lab/app → watchdog) and helper scripts.
+- [x] Unattended login via `/config` startup file (path without spaces; broker server list imported).
+- [x] **End-to-end validation on the existing demo account**: login, account, symbols, live ticks, 300 H1 bars per symbol, positions and pandas frames from Linux. Broker offset measured: UTC+2. Algo Trading intentionally disabled during validation.
+- [ ] Dedicated **$10k MT5 demo account** (broker meeting the Phase 7 requirements).
 - [ ] Boot persistence hook (start `supervisord` on host container restart).
 - [ ] 24–72 h stability soak test.
 
@@ -198,46 +201,50 @@ Debian 13 (headless, SSH via private mesh only)
 - [x] Platform research completed:
   - Recommended demo broker: **Pepperstone (EU entity)** — only broker found with **EURUSD + XAUUSD + BTCEUR** on cTrader. Note: EU crypto leverage is 1:2 (affects BTCEUR sizing). Fallback: IC Markets (London LD5) with synthetic BTCEUR (BTCUSD ÷ EURUSD).
   - Open API facts: demo/live endpoints (`*.ctraderapi.com:5035/5036`), 50 req/s general & 5 req/s historical limits, OAuth2 tokens (~30 days, refresh token rotation).
-- [x] `CTraderAdapter` skeleton with Open API message mapping (verified against official docs) and tested price/volume conversion helpers.
+- [x] **Full cTrader connector (offline-tested)**: own asyncio client (no Twisted) over TLS with vendored official protobuf messages; application/account auth, symbols, spot subscriptions, trendbars, market orders with SL/TP, amend, partial close, reconcile, deal history; heartbeat, auto-reconnect with re-auth/re-subscribe, rate limiting (45/4 req/s), OAuth token refresh with rotation persisted atomically; demo by default (live requires two explicit flags); onboarding CLI `scripts/ctrader_oauth.py`; fake cTrader server test harness (`docs/CTRADER_CONNECTOR.md`).
 - [ ] Register LastEdge application at `openapi.ctrader.com` (approval time not published — start early).
 - [ ] Open **$10k cTrader demo account** and verify BTCEUR availability via `ProtoOASymbolsListReq`.
-- [ ] Choose client: official `ctrader-open-api` (Twisted, stable but slow-moving) vs. community `ctrader-api-client` (asyncio, early-stage).
-- [ ] Full adapter implementation: auth, spot subscriptions, trendbars, orders, SL/TP amend, partial close, reconcile, heartbeat, token refresh, reconnection.
+- [ ] First real demo session: read-only check, then a 0.01-lot cycle; verify the 10 open points listed in the connector docs.
 - [ ] 24–72 h stability soak test.
 
 ### Workstream C — Shared Core *(both)*
 - [x] **Broker abstraction layer (`core/broker/`)**: `BrokerAdapter` base with neutral data models, unified order path, symbol-precision rounding, `NO_CHANGE` short-circuit; `Mt5Adapter`, deterministic `SimBroker` (Parquet replay, intrabar SL/TP, partial closes, commissions, slippage) and factory `BROKER_BACKEND = mt5 | sim | ctrader`. **+92 tests.**
 - [x] Broker usage inventory and step-by-step migration plan (`docs/broker_adapter_inventory.md`, `docs/broker_adapter_migration.md`).
-- [ ] Migrate the 22 Engine modules from direct `MetaTrader5` calls to the adapter (risk modules first, trailing stops coordinated last).
-- [ ] Portable paths and configuration (`pathlib`, env-based), lockfile, `python-dotenv` added to requirements.
+- [⏳] Migrate the 22 Engine modules from direct `MetaTrader5` calls to the adapter (risk modules first, trailing stops coordinated last) — **required for the cTrader stack to trade**.
+- [x] **12-factor instances**: one code folder, two stacks differing only by environment (`BROKER_BACKEND`, `LASTEDGE_DATA_DIR`, ports); per-stack state (DB, logs, backups, caches); runtime config overrides written to the data dir, never to the shipped `rules_config.json`.
+- [x] **Native UTC**: dynamic broker offset (`BrokerClock`: measured from fresh ticks, BTCEUR on weekends, periodic re-measure with change confirmation, persisted fallback); strategies receive true UTC bars (`STRATEGY_BAR_TIME=utc`, legacy `broker` mode kept as fallback).
+- [x] **Round-down position sizing** (Decimal) — trades below the broker minimum are skipped, never bumped up; partial closes round down too.
+- [x] `python-dotenv` and pinned bridge dependencies added to requirements.
 - [ ] Off-site encrypted backups and structured (JSON) logs.
-- [ ] Freeze strategy/config release **`reto-v1`** (git tag) used by both stacks.
+- [ ] Dashboard support for two engine stacks.
+- [ ] Freeze strategy/config release **`reto-v1`** (git tag) used by both stacks — after the Six Pillars v2 verdicts.
 
 ### 🛡️ Security Hardening *(prerequisite for cut-over)*
-- [x] Control plane hardening implemented on `linux-support` (App + Engine API): localhost-only binding by default, real session authentication with expiring random tokens and login rate limiting, authentication enforced on all API routes, restricted CORS, request size limits, internal service token between App and Engine, input path validation. **App 61/61 tests green.**
-- [ ] Apply equivalent hardening to the Strategy Lab API.
-- [ ] Retire all public relay tunnels; private mesh access only.
+- [x] Control plane hardening implemented on `linux-support` (App + Engine API): localhost-only binding by default, real session authentication with expiring random tokens and login rate limiting, authentication enforced on all API routes, restricted CORS, request size limits, internal service token between App and Engine, input path validation.
+- [x] Equivalent hardening applied to the Strategy Lab API (internal token, localhost binding, CORS allow-list, input validation, resource limits on research jobs).
+- [x] Public SSH relay tunnel retired on the Windows host; private mesh access only.
 - [ ] Rotate operational secrets at cut-over.
 - [ ] Mobile app: send session token, remove offline PIN fallback, handle 401/429/503.
 
 ### 🔧 Execution Correctness Fixes *(found during migration audit)*
 - [x] **Trailing-stop ratchet loop**: persisted SL with excess decimals vs. broker-rounded SL triggered endless modify requests → fixed (symbol-digit rounding + half-point tolerance) with regression test.
 - [x] Portable pytest temp directory (Windows/Linux).
-- [ ] Trailing minimum stop distance reads the wrong symbol field (`stops_level` vs `trade_stops_level`).
-- [ ] Hard-coded IOC filling in 5 modules (must follow symbol filling mode for broker portability).
-- [ ] SL/TP sent unrounded in order execution.
-- [ ] Lot size rounded to nearest instead of **down** (can exceed sized risk).
-- [ ] MT5 server time treated as UTC (impacts session-based strategies such as Asian/London windows).
-- [ ] MT5 `None` responses treated as "no positions" during micro-disconnects.
-- [ ] Candle fetch reconnects to MT5 on every call.
-- [ ] Align `rules_config.json` active strategies with the frozen 5-strategy challenge portfolio.
+- [x] Trailing minimum stop distance now reads `trade_stops_level` (with fallback).
+- [x] Filling mode follows the symbol (IOC → FOK → RETURN) with one retry on unsupported filling.
+- [x] SL/TP rounded to symbol digits before sending.
+- [x] Lot size rounded **down** (owner decision) — never exceeds the sized risk.
+- [x] Broker server time converted to UTC at the boundary (owner decision).
+- [x] MT5 `None` responses no longer treated as "no positions" during micro-disconnects.
+- [x] Candle fetch only reconnects when the terminal is disconnected.
+- [x] `rules_config.json` aligned with the 5-strategy challenge portfolio (eurusd_flow, btceur_trend_surge, btceur_volatility_breakout, xauusd_partial, xauusd_asian_london) and its risk/score settings.
+- [x] `xauusd_asian_london` session windows re-expressed in UTC (Asia 00–04, London 05–10) after UTC re-validation.
 
 ### ✅ Test Status (linux-support)
 | Repository | Result |
 | :--- | :---: |
-| Trading Engine (incl. broker layer & Linux watchdog) | **231 / 231** ✅ |
-| LastEdge App (incl. security hardening) | **61 / 61** ✅ |
-| Strategy Lab | **56 / 56** ✅ |
+| Trading Engine (broker layer, cTrader connector, UTC clock, Linux watchdog) | **382 / 382** ✅ |
+| LastEdge App (incl. security hardening) | **62 / 62** ✅ |
+| Strategy Lab (incl. security hardening & UTC audit) | **68 / 68** ✅ |
 
 ---
 

@@ -134,3 +134,7 @@ backups/
 *.apk
 *.aab
 *.apks
+
+# Notas/prompts locales (contienen datos personales)
+prompt.txt
+prompt.md
