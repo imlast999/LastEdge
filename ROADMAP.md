@@ -12,12 +12,12 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 
 ```
   [████████████████████] 100% — Phase 1: Infrastructure & MT5 Execution Engine
-  [████████████████░░░░]  80% — Phase 2: Quantitative Laboratory & 6 Pillars Suite (real pillar engine being rebuilt)
+  [█████████████████░░░]  85% — Phase 2: Quantitative Laboratory & Six Pillars v2 (real suite built; Lab v2 live-parity in progress)  ← ACTIVE
   [████████████████████] 100% — Phase 3: Web Dashboard Bento Grid & Android Mobile App
   [████████████████████] 100% — Phase 4: Multi-Device Remote Access (being superseded by Phase 6)
   [██████████████████░░]  90% — Phase 5: Consolidation, Global i18n & Audited Track Record
-  [█████████████░░░░░░░]  65% — Phase 6: Linux Migration & Dual-Platform Execution (MT5 + cTrader)  ← ACTIVE
-  [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 7: Dual 60-Day Verified Challenge ($10k MT5 + $10k cTrader)
+  [███████████████░░░░░]  75% — Phase 6: Linux Migration & Dual-Platform Execution (MT5 + cTrader)  ← ACTIVE
+  [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 7: Dual 60-Day Verified Challenge ($10k MT5 + $10k cTrader) — blocked until a strategy passes Six Pillars v2
   [██████████░░░░░░░░░░]  50% — Phase 8: Monetization Route 1 (Recurring VIP Signals & Community)
   [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 9: Monetization Route 2 (Prop Firm Funded Accounts)
 ```
@@ -32,7 +32,7 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 | Does Linux allow more trades? | **No.** Trade count is bounded by risk rules (max 3 open positions, 2.5% total risk, daily direction caps), not by hardware. |
 | What does Linux unlock? | **Scale and platform independence**: many accounts in parallel on cheap hardware; access to prop firms on cTrader, DXtrade, Match-Trader and TradeLocker (reduced dependency on MetaQuotes after its 2024 prop-firm license cut-off); copy-trading / SaaS at near-zero cost per client. |
 | Is MT5 a bad platform? | **No.** It is the industry standard and fully adequate for one or two accounts. It becomes the bottleneck only for multi-account, multi-client scaling (one terminal per account, Windows-bound Python API). |
-| Main prerequisite before scaling | A **verified edge**: current evidence (≈4 weeks of bot trading on demo, profit factor ≈3.0 on ~45 closing deals) is promising but statistically insufficient. |
+| Main prerequisite before scaling | A **verified edge**. The demo run (22/10–15/11: 60 trades, +$391.89, PF 2.02, +20.2R) was reproduced by a live-faithful backtest (PF 2.01), but the **same logic loses on the preceding months (PF 0.90, −5.7R)** → the demo was most likely a favourable stretch, not proof of edge (see Phase 2 · Lab v2). |
 
 **Decision:** keep MT5 (headless on Linux) **and** add cTrader Open API, both behind a common broker abstraction, so strategies and risk logic stay identical across platforms.
 
@@ -63,7 +63,26 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [x] Dynamic strategy loader auto-discovering strategies from `strategies/`, `vault/`, `private/`, and `public/`.
 - [x] Research runner and backtest validation engine for proprietary alpha models.
 - [x] **54 / 54 unit and mathematical tests passed (100% Green).**
-- [⏳] **Six Pillars v2 — real computation suite (Nov 2026 audit)**: the pillar metrics previously displayed in the App were static placeholders and the legacy replay modeled fixed TP/SL only. Being rebuilt as an event-driven backtester mirroring live execution (spread, commission, slippage, partial close, breakeven, trailing, position overlap, round-down sizing) with all six pillars computed for real (equity-based Monte Carlo ruin + prop-limit breach probability, true walk-forward/WFE, Deflated Sharpe + PBO, cost sensitivity, regime and out-of-period stress, hashed verdicts). The App will show only computed results or an explicit "not computed" state.
+- [x] **Six Pillars v2 — real computation suite (Nov 2026 audit)**: the pillar metrics previously displayed in the App were static placeholders, and the legacy replay had a **lookahead in its circuit breaker** that inflated the README figures (reported DSR values > 1 are mathematically impossible). Rebuilt as an event-driven backtester mirroring live execution (spread, commission, slippage, partial close, breakeven, trailing, position overlap, round-down sizing) with every pillar computed for real (equity-based Monte Carlo ruin + prop-limit breach probability, walk-forward/WFE, Deflated Sharpe + PBO with trial counting, cost sensitivity, regime and out-of-period stress, SHA-256 hashed verdicts). The App shows only computed results or an explicit "not computed" state (`lab/docs/SIX_PILLARS.md`).
+- [x] **First verdicts (5 challenge strategies, 10,000 H1 bars, UTC)**: **all REJECTED** — eurusd_flow PF 0.81, btceur_trend_surge PF 0.92, btceur_volatility_breakout PF 1.04, xauusd_partial PF 1.17 (85 trades), xauusd_asian_london PF 1.08. To be re-run under Lab v2 (below).
+- [x] **Backtester verification**: blind code review, ablation study and **trade-by-trade reconciliation against the real demo** (56/60 trades matched, mostly to the minute; feeding the real entries through the backtester reproduces the exits: +20.4R vs +20.2R real) → the exit engine is validated.
+
+### 🔬 Lab v2 — Live Parity & Honest Research (ACTIVE)
+> **Goal**: the Lab and the live Engine must be the *same machine*, so a Lab verdict says exactly what live will do. No `reto-v1` until a strategy passes under these conditions.
+
+**Root causes found for the Lab vs. live gap (demo period):** forming-bar evaluation every 60 s in live (+8.4R in that period, negative before it), Lab scoring gate ≠ Engine gate (Engine scoring changed 12/11; Lab had no ConfidenceSystem) (+7.1R), different cooldowns/limits (+3.5R), costs (+0.3R).
+
+- [x] **One signal gate for both**: new pure module `engine/core/signal_gate.py` (scoring, ConfidenceSystem, thresholds, duplicate filter, per-symbol cooldown in minutes, 3 signals per direction/day, 1 position per symbol, weekend guard, auto-execute tier). The Engine delegates to it with **zero behaviour change** (4,000-case old-vs-new check); the Lab imports it instead of its own copies (parity tests: 250 candidate cases + 400 dispatch events, all identical).
+- [x] Lab fixes: XAUUSD point 0.01 → **0.001** (spread was ×10), Lab-only `min_score` filter removed, Lab now reads the Engine's `rules_config.json`, best-candidate-per-symbol selection like live, full weekend rules.
+- [⏳] **Closed-bar policy in live** (owner decision): evaluate only closed H1 bars, once per new bar, 1,000 bars for every symbol; configurable `signal_bar_policy` (`closed` default, `forming` legacy).
+- [⏳] **Unified strategy config**: the Lab builds each strategy's config with the same merge as live (rules_config symbol block over strategy defaults).
+- [⏳] Lab backtester mirrors the new Engine breakeven (R-only trigger, cost-covering buffer).
+- [⏳] **Six Pillars re-run on all 16 strategies** (not only the 5 challenge ones) under Lab v2.
+- [ ] **Exit policies inside the suite**: Exit Research variants (fixed RR, ATR/EMA/Donchian trailing, breakeven, partials, time exit) ported to the Six Pillars backtester as pluggable exit policies (R-based, real costs, Engine gate, position lock). Every policy tried counts as a trial in DSR/PBO. A policy that wins must also be implemented in the Engine. The standalone Exit Research runner stays as an exploration tool only (pip-based metrics, flat 1.5-pip cost, TP-first same-bar bias, no position lock, dropped open trades, best-of-N selection without trial counting).
+- [ ] **New Pillar 6 — Edge Origin & Robustness** (the verdict becomes step 7): entries vs. random entries with the same exits and trade count; robustness to neighbouring exit parameters (plateau, not a spike); MFE capture (are exits wasting a good entry?).
+- [ ] **Re-validate the 4 leads** with fresh walk-forward and trial counting: btceur_volatility_breakout with 3×ATR stop + 24-bar time exit (PF 1.43 / 1.22, positive every year), btceur_trend_surge with 48-bar exit, xauusd_asian_london entries (significant entry edge 2022–24 destroyed by its exits), xauusd_partial with the pre-12/11 scoring (PF 1.69 over 2 years, 247 trades).
+- [ ] **New strategy research protocol** (`lab/docs/STRATEGY_RESEARCH_PROTOCOL.md`): written hypothesis first → fast **vectorbt screening** (trial budget fixed in advance, every screened combination counted) → Six Pillars v2 → locked final hold-out (last 6 months untouched until the verdict). `backtesting.py` used as an independent second opinion on 1–2 simple strategies.
+- [ ] Define **`reto-v1`** only if at least one strategy passes; otherwise keep researching before any challenge.
 - [x] **Historical data time-base audit**: Lab datasets mixed true UTC (≤2024-10) with broker time (UTC+2/+3 afterwards). UTC-converted datasets generated; the 5 challenge strategies re-validated on UTC (see Lab `docs/DATA_UTC_AUDIT.md`).
 
 ### Phase 3: Monitoring & Mobile Control Plane (`LastEdge App`)
@@ -152,7 +171,7 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 - [ ] → All three are being re-implemented for Linux in Phase 6 (supervisord, off-site backups).
 
 ### 📈 Verified Forward Testing & Track Record
-- [x] **Sandbox / incubation MT5 demo account** ($5,000 start): used as a zero-cost test bed while building and debugging LastEdge, including manual test trades. After testing it sat at ≈$2,700; it was then left **3 weeks fully autonomous** to see whether the bot could recover to $3,000 — it went beyond that (≈$3,100). Bot-only results since 2026-10-20 ≈ +$329 net over ~45 closing deals (PF ≈ 3.0). **Positive signal, but not enough evidence to justify a prop firm evaluation** → origin of the $10k / 2-month challenge.
+- [x] **Sandbox / incubation MT5 demo account** ($5,000 start): used as a zero-cost test bed while building and debugging LastEdge, including manual test trades. After testing it sat at ≈$2,700; it was then left **3 weeks fully autonomous** to see whether the bot could recover to $3,000 — it went beyond that (≈$3,100). Reconciled bot-only result 22/10–15/11: **60 trades, +$391.89, PF 2.02, +20.2R** (btceur_trend_surge +8.0R, eurusd_partial +8.2R, xauusd_partial +3.8R, btceur_partial +0.3R). The same logic loses on the preceding months (PF 0.90) → favourable stretch, not proof of edge → origin of the $10k / 2-month challenge and of Lab v2.
 - [x] **Broker access incident (Nov 2026)**: after a weekend-long platform/dashboard migration by the demo broker, Google sign-in stopped working and previously created accounts no longer appeared under the same email. New-account creation and Myfxbook linking on that broker are therefore blocked.
 - [x] **Alternative broker search** (requirements below) did not produce a suitable MT5 option yet.
 - [⏸️] **60-Day $10k Verified Challenge** → **paused** and moved to **Phase 7** (dual-platform launch after the Linux migration).
@@ -210,14 +229,16 @@ Debian 13 (headless, SSH via private mesh only)
 ### Workstream C — Shared Core *(both)*
 - [x] **Broker abstraction layer (`core/broker/`)**: `BrokerAdapter` base with neutral data models, unified order path, symbol-precision rounding, `NO_CHANGE` short-circuit; `Mt5Adapter`, deterministic `SimBroker` (Parquet replay, intrabar SL/TP, partial closes, commissions, slippage) and factory `BROKER_BACKEND = mt5 | sim | ctrader`. **+92 tests.**
 - [x] Broker usage inventory and step-by-step migration plan (`docs/broker_adapter_inventory.md`, `docs/broker_adapter_migration.md`).
-- [⏳] Migrate the 22 Engine modules from direct `MetaTrader5` calls to the adapter (risk modules first, trailing stops coordinated last) — **required for the cTrader stack to trade**.
+- [x] **All 22 Engine modules migrated** from direct `MetaTrader5` calls to the adapter; a guard test forbids `MetaTrader5` imports outside `core/broker/`.
+- [x] **Portfolio risk fail-closed** (owner decision): if the broker cannot report open positions, new trades are rejected (exposure unknown).
 - [x] **12-factor instances**: one code folder, two stacks differing only by environment (`BROKER_BACKEND`, `LASTEDGE_DATA_DIR`, ports); per-stack state (DB, logs, backups, caches); runtime config overrides written to the data dir, never to the shipped `rules_config.json`.
 - [x] **Native UTC**: dynamic broker offset (`BrokerClock`: measured from fresh ticks, BTCEUR on weekends, periodic re-measure with change confirmation, persisted fallback); strategies receive true UTC bars (`STRATEGY_BAR_TIME=utc`, legacy `broker` mode kept as fallback).
 - [x] **Round-down position sizing** (Decimal) — trades below the broker minimum are skipped, never bumped up; partial closes round down too.
 - [x] `python-dotenv` and pinned bridge dependencies added to requirements.
 - [ ] Off-site encrypted backups and structured (JSON) logs.
 - [ ] Dashboard support for two engine stacks.
-- [ ] Freeze strategy/config release **`reto-v1`** (git tag) used by both stacks — after the Six Pillars v2 verdicts.
+- [ ] Freeze strategy/config release **`reto-v1`** (git tag) used by both stacks — only after a strategy passes Six Pillars v2 under Lab v2.
+- [ ] Mobile app: remove remaining fabricated pillar numbers (`DEMO_PILLARS_ANALYSIS`, Lab screen defaults) and stop reporting an offline promotion as success.
 
 ### 🛡️ Security Hardening *(prerequisite for cut-over)*
 - [x] Control plane hardening implemented on `linux-support` (App + Engine API): localhost-only binding by default, real session authentication with expiring random tokens and login rate limiting, authentication enforced on all API routes, restricted CORS, request size limits, internal service token between App and Engine, input path validation.
@@ -238,13 +259,21 @@ Debian 13 (headless, SSH via private mesh only)
 - [x] Candle fetch only reconnects when the terminal is disconnected.
 - [x] `rules_config.json` aligned with the 5-strategy challenge portfolio (eurusd_flow, btceur_trend_surge, btceur_volatility_breakout, xauusd_partial, xauusd_asian_london) and its risk/score settings.
 - [x] `xauusd_asian_london` session windows re-expressed in UTC (Asia 00–04, London 05–10) after UTC re-validation.
+- [x] **UTC is the default** for strategy bars (`STRATEGY_BAR_TIME=utc`) on both MT5 and cTrader adapters.
+- [x] **Breakeven fixed**: it fired at ≈0.53–0.8R (min of R and TP-% thresholds) with a spread-only buffer, so breakeven exits lost money after costs. Now R-only trigger (0.8R; TP-% only without SL) and buffer = spread + round-turn commission + slippage, tick-rounded in the trade's favour; waits instead of pulling the stop back when inside `trade_stops_level`.
+- [x] **Trailing config bug**: trailing read a non-existent top-level key and always used hard-coded values; now reads `GLOBAL_SETTINGS.trailing_stops` (per-symbol overrides supported).
+- [x] **Trade journal records closes** (previously everything stayed `PENDING`): exit price, UTC time, net P&L with commission/swap, R, exit reason (TP/SL/BE/TRAIL/MANUAL/WEEKEND/STOP_OUT), partial closes; 90-day backfill on first run.
+- [x] **Clock-skew guard**: host clock vs. broker tick time (the Windows host ran 1 h behind from 28/10 to 14/11); warning > 30 s, new entries blocked > 5 min, shown in health status. Note: an exact 1 h error is only detectable once `expected_broker_utc_offset_hours` is set.
+- [ ] Trailing start still uses min(R, TP-%) thresholds — review together with exit policies.
+- [ ] cTrader: trailing registration probably uses the order id instead of the position id — fix before trading on cTrader.
+- [ ] Mobile store can close journal rows by price match without exit reason — unify with the journal sync.
 
 ### ✅ Test Status (linux-support)
 | Repository | Result |
 | :--- | :---: |
-| Trading Engine (broker layer, cTrader connector, UTC clock, Linux watchdog) | **382 / 382** ✅ |
-| LastEdge App (incl. security hardening) | **62 / 62** ✅ |
-| Strategy Lab (incl. security hardening & UTC audit) | **68 / 68** ✅ |
+| Trading Engine (broker layer, cTrader connector, UTC clock, signal gate, breakeven/journal/clock fixes) | **470 / 470** ✅ |
+| LastEdge App (incl. security hardening, no fabricated pillar numbers) | **71 / 71** ✅ |
+| Strategy Lab (incl. security hardening, UTC audit, Six Pillars v2, Engine-gate parity) | **111 / 111** ✅ |
 
 ---
 
