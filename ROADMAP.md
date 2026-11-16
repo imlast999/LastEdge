@@ -2,6 +2,10 @@
 
 Central evolution, development phases, and monetization roadmap for the **LastEdge** quantitative ecosystem.
 
+> **Strategic direction (November 2026):** LastEdge is migrating to a **Linux-first, multi-platform architecture**. A single headless Linux server will host both execution stacks side by side: **MetaTrader 5** (headless under Wine) and **cTrader Open API** (native). The 60-day verified challenge is **paused** until both stacks pass stability testing, and will then launch on both platforms at the same time from the same frozen code.
+
+**Team:** **Last** (founder, strategy and MT5 stack) · **co-dev** (infrastructure and cTrader stack).
+
 ---
 
 ## 📌 Phase Execution Overview
@@ -10,11 +14,27 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   [████████████████████] 100% — Phase 1: Infrastructure & MT5 Execution Engine
   [████████████████████] 100% — Phase 2: Quantitative Laboratory & 6 Pillars Suite
   [████████████████████] 100% — Phase 3: Web Dashboard Bento Grid & Android Mobile App
-  [████████████████████] 100% — Phase 4: Multi-Device Remote Access & Security
-  [███████████████████░]  95% — Phase 5: Consolidation, Global i18n & Audited Track Record
-  [██████████░░░░░░░░░░]  50% — Phase 6: Monetization Route 1 (Recurring VIP Signals & Community)
-  [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 7: Monetization Route 3 (Prop Firm Funded Accounts)
+  [████████████████████] 100% — Phase 4: Multi-Device Remote Access (being superseded by Phase 6)
+  [██████████████████░░]  90% — Phase 5: Consolidation, Global i18n & Audited Track Record
+  [███████░░░░░░░░░░░░░]  35% — Phase 6: Linux Migration & Dual-Platform Execution (MT5 + cTrader)  ← ACTIVE
+  [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 7: Dual 60-Day Verified Challenge ($10k MT5 + $10k cTrader)
+  [██████████░░░░░░░░░░]  50% — Phase 8: Monetization Route 1 (Recurring VIP Signals & Community)
+  [░░░░░░░░░░░░░░░░░░░░]   0% — Phase 9: Monetization Route 2 (Prop Firm Funded Accounts)
 ```
+
+---
+
+## 🧭 Why Linux (Cold Assessment)
+
+| Question | Conclusion |
+| :--- | :--- |
+| Does Linux improve strategy returns? | **No.** Edge depends on strategies and broker execution, not on the OS. |
+| Does Linux allow more trades? | **No.** Trade count is bounded by risk rules (max 3 open positions, 2.5% total risk, daily direction caps), not by hardware. |
+| What does Linux unlock? | **Scale and platform independence**: many accounts in parallel on cheap hardware; access to prop firms on cTrader, DXtrade, Match-Trader and TradeLocker (reduced dependency on MetaQuotes after its 2024 prop-firm license cut-off); copy-trading / SaaS at near-zero cost per client. |
+| Is MT5 a bad platform? | **No.** It is the industry standard and fully adequate for one or two accounts. It becomes the bottleneck only for multi-account, multi-client scaling (one terminal per account, Windows-bound Python API). |
+| Main prerequisite before scaling | A **verified edge**: current evidence (≈4 weeks of bot trading on demo, profit factor ≈3.0 on ~45 closing deals) is promising but statistically insufficient. |
+
+**Decision:** keep MT5 (headless on Linux) **and** add cTrader Open API, both behind a common broker abstraction, so strategies and risk logic stay identical across platforms.
 
 ---
 
@@ -67,7 +87,7 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   - Private `.aab` compilation workflow (`.github/workflows/build-playstore-bundle.yml`) with manual `workflow_dispatch` trigger and 7-day private artifact retention, completely isolating `.aab` bundles from public releases.
   - Local bundle tooling via `build_bundle.bat` and `build_apk.py --bundle`.
   - Production graphic creatives: 512x512 PNG app icon (32-bit RGBA) & 1024x500 PNG feature graphic (24-bit RGB).
-  - Responsive dark-mode Privacy Policy ([`docs/privacy.html`](file:///C:/LastEdge/LastEdge%20App/docs/privacy.html) & `PRIVACY_POLICY.md`) with in-app settings link.
+  - Responsive dark-mode Privacy Policy (`docs/privacy.html` & `PRIVACY_POLICY.md`) with in-app settings link.
   - Direct founder contact strategy (`@imlast999`) complying with Google Play in-app billing rules.
 - [x] **Mobile Community Hub & Direct VIP Channel Access**:
   - Bento card in Home Dashboard (`COMUNIDAD & SEÑALES VIP` / `COMMUNITY & VIP SIGNALS`) with 3 direct links: Public Telegram Journal, Instagram broadcast, and featured VIP access button linking directly to `@imlast999`.
@@ -79,12 +99,12 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
   - Adaptive UI: auto-hiding inactive tabs and suppressing false offline alerts.
 - [x] **50 / 50 control plane, chart engine, and telegram adapter tests passed (100% Green).**
 
-### Phase 4: Remote Station & Multi-Device Accessibility
-- [x] Continuous 24/7 PM2 tunnel for Web Dashboard remote access (`http://bore.pub:54780`).
-- [x] Zero-trust encrypted point-to-point mesh via Tailscale VPN.
+### Phase 4: Remote Station & Multi-Device Accessibility *(being superseded by Phase 6)*
+- [x] ~~Continuous 24/7 PM2 public tunnel for remote access~~ → **Deprecated.** Public relay tunnels are being retired in favor of private-network-only access (see Phase 6 · Security).
+- [x] Zero-trust encrypted point-to-point mesh via Tailscale VPN (kept as the **only** remote access path going forward).
 - [x] Mobile SSH terminal integration (ConnectBot) supporting physical keyboards on tablets/phones.
 - [x] Strict `.gitignore` repository boundary isolating proprietary algorithms from public code.
-- [x] **24/7 Permanent Antigravity Daemon**: Registered native Windows scheduled task (`\AntigravityCliDaemon`) enabling zero-terminal browser access via `antigravity.google.com` without requiring an open SSH connection.
+- [x] **24/7 Permanent Antigravity Daemon**: Registered native Windows scheduled task (`\AntigravityCliDaemon`) enabling zero-terminal browser access without requiring an open SSH connection.
 
 ---
 
@@ -93,129 +113,184 @@ Central evolution, development phases, and monetization roadmap for the **LastEd
 
 ### 🌐 Global Internationalization (i18n & English Standardization)
 - [x] **All Repository READMEs**: 100% standardized in English across the 4 repositories.
-- [x] **Public Benchmark Strategies**: Documentation and code standardized in English ([`strategies/public/README.md`](file:///C:/LastEdge/LastEdge%20Strategy%20Lab/strategies/public/README.md)).
+- [x] **Public Benchmark Strategies**: Documentation and code standardized in English (`strategies/public/README.md`).
 - [x] **Web Dashboard**: 100% English default UI (Bento Positions, Overview, Trade Journal, and Research audit tools).
-- [x] **Mobile App Localization**:
-  - [x] English by default across all screens.
-  - [x] Settings Modal fully translated (English / Spanish reactive toggle).
-  - [x] Margin & Capital Telemetry card localized.
-  - [x] Risk Engine v2 & Broker Quality widgets localized.
-  - [x] Signal cards with dynamic TTL countdowns and actions localized.
-  - [x] Strategy Lab simulator, score cards, and 6 Pillars suite localized.
+- [x] **Mobile App Localization** (English default, ES/EN toggle, all screens and widgets localized).
 - [ ] **Core Engine Logs & Errors**: Complete migration of runtime log strings and API errors to standard English.
 - [x] **Account Milestone ($2,800 USD Cash Balance Broken)**: Net realized overnight profit of +$32.23 USD and +$48.67 USD total equity expansion under 100% autonomous hands-free execution.
 
 ### 📱 Visual Telegram & Discord Control Center
-- [x] **Technical Chart Generation Engine**: Dedicated dark-mode (`#090d16`) chart generator powered by `mplfinance` with candlestick volume, EMA50 / EMA200 overlays, and dynamic Risk/Reward zone boxes.
-- [x] **Unobstructed Live Candle Visibility**: Technical price level badges (`ENTRY`, `SL`, `TP`) anchored to the left flank (`ha='left'`), keeping right-side live price action 100% clean and visible.
-- [x] **Intelligent Break-Even Alignment**: Sub-millimeter horizontal contiguous badge placement (`[ SL ]` in red followed immediately by `[ ENTRY ]` in blue) rendered via canvas bounding box calculations, preventing overlapping text on Break-Even trades.
-- [x] **Dual Chart Modality**:
-  - *On-Demand Position Charts* (`/chart`, `/positions`, interactive buttons): Renders candles all the way to the right border without artificial empty space.
-  - *New Signal Execution Charts* (`autosignals` dispatch): Adds a ~10-12 bar right margin and TradingView-style projected Risk/Reward position box into the future.
-- [x] **Intelligent Y-Axis Scaling & Headroom**: Dynamic Y-axis limits with +18% top headroom, eliminating collisions between high Take Profit targets and header title / indicator legends.
-- [x] **80-Candle Extended Context**: Expanded H1 timeframe sample window for clear swing structure and market trend orientation.
-- [x] **Bilingual Interactive Control Center**: Complete `/start` interactive dashboard with inline buttons in English and Spanish, persistent language toggle stored in `data/telegram_prefs.json`.
-- [x] **Deep Linking & On-Demand Position Charts**: Direct bot link triggers (`t.me/LastEdgeBot?start=chart_{ticket}`) and instant `/chart_{ticket}` commands from position cards.
-- [x] **Native Slash Command Autocomplete (`setMyCommands`)**: Telegram API command palette suggestions registered for both English (`default`) and Spanish (`es`).
-- [x] **Web Dashboard Modal Integration**: Added `/api/positions/{ticket}/chart` endpoint and interactive visual chart viewer button (`📊 Chart`) directly in the Bento Grid positions table.
-- [x] **Independent Bot Switches**: Granular `.env` toggles (`ACTIVATE_DISCORD_BOT=on|off`, `ACTIVATE_TELEGRAM_BOT=on|off`) enabling decoupled deployment.
+- [x] **Technical Chart Generation Engine**: Dark-mode (`#090d16`) `mplfinance` generator with candlestick volume, EMA50 / EMA200 overlays, and dynamic Risk/Reward zone boxes.
+- [x] **Unobstructed Live Candle Visibility**, **Intelligent Break-Even Badge Alignment**, **Dual Chart Modality** (on-demand vs. new-signal projection), **Intelligent Y-Axis Headroom** and **80-Candle H1 Context**.
+- [x] **Bilingual Interactive Control Center** (`/start`), **Deep Linking** (`/chart_{ticket}`), **Native Slash Command Autocomplete** (EN/ES).
+- [x] **Web Dashboard Modal Integration**: `/api/positions/{ticket}/chart` endpoint and visual chart viewer in the positions table.
+- [x] **Independent Bot Switches**: `ACTIVATE_DISCORD_BOT=on|off`, `ACTIVATE_TELEGRAM_BOT=on|off`.
 
 ### 🎯 Signal Scoring & Auto-Execution Matrix
 - [x] **Unified 4-Tier Confluence Matrix**:
-  - `VERY_HIGH` (Score $\ge 0.85$): Auto-execution in MT5 (maximum confluency).
-  - `HIGH` (Score $0.67 - 0.84$): Auto-execution in MT5 (optimized threshold $\ge 0.67$ for higher trade capture).
-  - `MEDIUM` (Score $0.60 - 0.66$): Discretionary manual 1-click approval via Web Dashboard / Mobile App (active in Hybrid Mode).
-  - `LOW` (Score $< 0.60$): Absolute discard filter, eliminating all sub-par setups and market noise.
-- [x] **Dual-Mode Autonomous Operation Switch (100% Hands-Free vs. Hybrid Gate)**:
-  - Interactive on-the-fly mode toggle implemented across Web Dashboard header pill, Signal Stream card toggle, Telegram bot commands (`/autonomous`, `/autonomo`, `/modo`, `/handsfree`), and REST API (`/api/trading/autonomous-mode`).
-  - **100% Autonomous Mode (`ON` — Hands-Free)**: The system operates completely unattended. All `MEDIUM` signals ($0.60 - 0.66$) are automatically and silently filtered out to eliminate emotional second-guessing; only high-conviction signals ($\ge 0.67$) execute straight into MT5 without manual confirmation prompts.
-  - **Hybrid Mode (`OFF` — Discretionary Review)**: Enables the manual gate, queuing `MEDIUM` signals for 1-tap review and approval in Dashboard and Telegram.
-  - Full disk persistence across `rules_config.json` (`GLOBAL_SETTINGS.autonomous_mode`) and `autosignals_state.json`.
+  - `VERY_HIGH` (Score $\ge 0.85$): Auto-execution.
+  - `HIGH` (Score $0.67 - 0.84$): Auto-execution (optimized threshold $\ge 0.67$).
+  - `MEDIUM` (Score $0.60 - 0.66$): Discretionary 1-click approval (Hybrid Mode only).
+  - `LOW` (Score $< 0.60$): Discarded.
+- [x] **Dual-Mode Autonomous Operation Switch (100% Hands-Free vs. Hybrid Gate)** across Dashboard, Telegram (`/autonomous`, `/modo`…) and REST API, persisted in `rules_config.json` and `autosignals_state.json`.
 - [x] **Cross-Repository Parity**: Synchronized configuration across `rules_config.json`, `engine.py`, `scoring.py`, and ecosystem documentation.
 
 ### 🤖 Institutional CI/CD & Automated Ecosystem Pipelines
-- [x] **Ecosystem Orchestrator CI (`imlast999/LastEdge`)**: Lightweight root CI validating ecosystem CLI, batch setup scripts, and repository boundaries without submodule/tree pollution.
-- [x] **Semantic Release Notes & Changelog Drafter (`LastEdge App`)**: Automated git log parser classifying commits into 5 semantic categories (🚀 Features, 🛡️ Risk Safeguards, 🐛 Fixes, 🎨 UI & Fonts, ⚡ Infrastructure) and generating GitHub Releases with direct APK links.
-- [x] **Dynamic Version Sync & README Direct Download**: Automatic synchronizer updating `package.json`, `build.gradle`, `VERSION`, and direct `.apk` install links in `README.md`.
-- [x] **Multi-Channel CI/CD Broadcast (Telegram + Discord)**: Zero-dependency notification engine (`scripts/notify_bots.py`) broadcasting APK release announcements and instant CI failure alerts across all repositories.
-- [x] **Private Strategy Vault CI (`LastEdge-Private-Strategies`)**: Headless multi-python test runner verifying contract compliance, synthetic OHLCV indicator execution, and institutional risk bounds (RR >= 1.0, SL > 0) across all private strategies (52 automated checks).
-- [x] **Weekend Exposure Guard & Gap Protection**: Institutional safeguard closing traditional market positions prior to Friday market close, featuring granular strategy-level toggle (`weekend_exposure_guard: bool = True|False`).
-- [x] **Strict Pre-Push Git Hooks**: Active hooks across all ecosystem repositories enforcing 100% test pass rate prior to any remote push.
+- [x] **Ecosystem Orchestrator CI (`imlast999/LastEdge`)**.
+- [x] **Semantic Release Notes & Changelog Drafter (`LastEdge App`)**.
+- [x] **Dynamic Version Sync & README Direct Download**.
+- [x] **Multi-Channel CI/CD Broadcast (Telegram + Discord)** (`scripts/notify_bots.py`).
+- [x] **Private Strategy Vault CI (`LastEdge-Private-Strategies`)**: contract compliance and risk-bound checks (52 automated checks).
+- [x] **Strict Pre-Push Git Hooks** enforcing 100% test pass rate.
 
-### 🛡️ VPS Resilience & Hardening
-- [x] **MT5 Disconnect Watchdog**: Real-time heartbeat checking MT5 terminal state & process health every 30s; triggers emergency alerts to admin Telegram with auto-restart recovery (`lastedge-watchdog` active in PM2).
-- [x] **Automated Database Backups**: Scheduled daily cron backups (`0 4 * * *`) of `bot_state.db`, `research.db`, configs, and vault alpha with 14-day rolling retention and Telegram notifications (`scripts/backup_vps.py`).
-- [x] **OS Reboot Persistence**: Auto-startup configuration (PM2 dump saved) guaranteeing uninterrupted service recovery across VPS updates.
+### 🛡️ VPS Resilience & Hardening (Windows era)
+- [x] **MT5 Disconnect Watchdog** with Telegram alerts and auto-restart (PM2).
+- [x] **Automated Database Backups** (daily, 14-day rolling retention).
+- [x] **OS Reboot Persistence** (PM2 dump).
+- [ ] → All three are being re-implemented for Linux in Phase 6 (supervisord, off-site backups).
+
+### 📈 Verified Forward Testing & Track Record
+- [x] **Sandbox / incubation MT5 demo account** ($5,000 start): used as a zero-cost test bed while building and debugging LastEdge, including manual test trades. After testing it sat at ≈$2,700; it was then left **3 weeks fully autonomous** to see whether the bot could recover to $3,000 — it went beyond that (≈$3,100). Bot-only results since 2026-10-20 ≈ +$329 net over ~45 closing deals (PF ≈ 3.0). **Positive signal, but not enough evidence to justify a prop firm evaluation** → origin of the $10k / 2-month challenge.
+- [x] **Broker access incident (Nov 2026)**: after a weekend-long platform/dashboard migration by the demo broker, Google sign-in stopped working and previously created accounts no longer appeared under the same email. New-account creation and Myfxbook linking on that broker are therefore blocked.
+- [x] **Alternative broker search** (requirements below) did not produce a suitable MT5 option yet.
+- [⏸️] **60-Day $10k Verified Challenge** → **paused** and moved to **Phase 7** (dual-platform launch after the Linux migration).
+- [ ] **Gold (XAUUSD) Stop-Loss Multiplier Calibration**: evaluate ATR multiplier $1.5\times \rightarrow 2.0\times$ or dynamic volatility padding.
+- [x] **Vault Strategy Graduation & Audit**: 10,000-candle multi-pillar audit; consolidated 5-strategy challenge portfolio.
 
 ---
 
-## ⏳ Pending & Upcoming Tasks (In Progress / Next Sprints)
+## 🐧 Phase 6: Linux Migration & Dual-Platform Execution (ACTIVE)
+> **Goal**: Run the entire ecosystem on a single headless Linux server with two execution stacks — **MT5 (headless, Wine)** and **cTrader Open API (native)** — sharing the same strategies, risk engine, and journal. Work happens on the `linux-support` branches; production stays untouched until cut-over.
 
-### 📈 Verified Forward Testing & Track Record
-- [⏳] **14-30 Day Live Incubation**: Unattended continuous execution on MT5 demo/live raw spread account to build verified performance history (Week 1 underway).
-- [ ] **Gold (XAUUSD) Stop-Loss Multiplier Calibration**:
-  - Review weekend and weekly Gold volatility performance.
-  - Evaluate broadening Stop Loss ATR multiplier from $1.5\times$ to $2.0\times$ or dynamic volatility padding if drawdown approaches challenge thresholds, ensuring setups breathe during Asian/London liquidity surges without premature stop-outs.
-- [ ] **Third-Party Public Audit ($10,000 Demo Account)**:
-  - Launch dedicated $10k raw-spread demo account following incubation period.
-  - Connect directly to **Myfxbook** and **FXBlue** for third-party institutional performance verification.
-- [x] **Vault Strategy Graduation & Audit**: Complete 10,000-candle multi-pillar audit executed on all private strategies; eliminated inactive/substandard models and consolidated the institutional alpha portfolio.
+### 🖥️ Target Infrastructure
+- **Server**: dedicated headless Linux environment — **Debian 13 (trixie)**, x86_64, 4 vCPU / 8 GB RAM, persistent data volume. *(Minimum viable: 2 vCPU / 4 GB + swap.)*
+- **Access**: private mesh only (Tailscale), SSH key authentication, no public ports.
+- **Process management**: `supervisord` (the host environment does not allow nested containers, so Docker/Podman are not used; isolation is provided by the host container itself).
+- **Python**: 3.12 pinned (matching CI), dependencies managed with `uv`.
 
-### 🔍 Advanced CI/CD & Quality Automations (Future Roadmap)
-- [ ] **Nightly Market Data & Spread Quality Audit**:
-  - Scheduled GitHub Actions workflow downloading daily tick and M1 spread metrics from broker servers.
-  - Detects spread widening patterns, broker execution degradation, and slippage spikes before Monday market opens.
-- [ ] **Automated Dependency Vulnerability & Security Scanner**:
-  - Scheduled scanning workflow using Trivy, Bandit, and Dependabot across Python requirements and Node monorepo packages.
-  - Auto-flags outdated libraries or CVE security disclosures without manual intervention.
-- [ ] **Multi-Repository Semantic Tagging & Coordinated Releases**:
-  - Centralized orchestration workflow dispatching synchronized semantic tags (`vX.Y.Z`) across `Trading Engine` and `Strategy Lab` when a major ecosystem release is published.
+```
+Debian 13 (headless, SSH via private mesh only)
+└── supervisord
+    ├── xvfb            → virtual display :99
+    ├── mt5-terminal    → MT5 under Wine (auto-login via /config ini, Algo Trading enabled at start)
+    ├── mt5-bridge      → mt5linux RPyC bridge (localhost only)
+    ├── engine-mt5      → Trading Engine · MT5 backend
+    ├── engine-ctrader  → Trading Engine · cTrader Open API backend
+    ├── lab             → Strategy Lab API
+    ├── app             → Dashboard + Telegram/Discord bots
+    └── watchdog        → health monitoring & alerts
+```
 
-### 🖥️ Web Dashboard & Mobile Next-Gen Controls
-- [ ] **Weekend Guard Countdown Banner**:
-  - Visual status pill and real-time countdown widget in Bento Grid and Mobile App showing exact time remaining before Friday market liquidation window ($21:45\text{ UTC}$).
-- [ ] **Native Mobile Push Notifications (Expo / Firebase)**:
-  - Direct push notifications on iOS and Android when a trade is approved, trailing stop is modified, or position is liquidated.
-- [ ] **Telegram Interactive SL/TP Parameter Sliders**:
-  - Remote fine-tuning of trailing stop distances and risk percentages directly via inline keyboard buttons in the `/start` menu.
+### Workstream A — MT5 Headless on Linux *(owner: Last)*
+- [x] Linux server provisioned and verified (Debian 13, 4 vCPU / 8 GB, x86_64).
+- [x] Python 3.12 environment; Engine, Lab and App deployed (secrets excluded) — **test suites green on Linux**.
+- [x] Wine 10 prefix with **MetaTrader 5 installed** and Windows-side Python 3.12.
+- [x] `mt5linux` bridge installed on both sides; drop-in `MetaTrader5` shim so the Engine runs **unchanged** on Linux.
+- [x] **Cross-platform watchdog** (Wine process detection, supervised mode, Telegram alerts preserved).
+- [x] **supervisord configuration** with ordered startup (display → terminal → bridge → engine) and helper scripts.
+- [x] MT5 startup config template (`mt5.ini`) for unattended login with Algo Trading enabled.
+- [⏳] End-to-end bridge validation (terminal + bridge + Engine connectivity).
+- [ ] Dedicated **$10k MT5 demo account** (broker meeting the Phase 7 requirements) and unattended auto-login. Until then, stack validation can use a disposable demo account.
+- [ ] Boot persistence hook (start `supervisord` on host container restart).
+- [ ] 24–72 h stability soak test.
+
+### Workstream B — cTrader Open API *(owner: co-dev)*
+- [x] Platform research completed:
+  - Recommended demo broker: **Pepperstone (EU entity)** — only broker found with **EURUSD + XAUUSD + BTCEUR** on cTrader. Note: EU crypto leverage is 1:2 (affects BTCEUR sizing). Fallback: IC Markets (London LD5) with synthetic BTCEUR (BTCUSD ÷ EURUSD).
+  - Open API facts: demo/live endpoints (`*.ctraderapi.com:5035/5036`), 50 req/s general & 5 req/s historical limits, OAuth2 tokens (~30 days, refresh token rotation).
+- [x] `CTraderAdapter` skeleton with Open API message mapping (verified against official docs) and tested price/volume conversion helpers.
+- [ ] Register LastEdge application at `openapi.ctrader.com` (approval time not published — start early).
+- [ ] Open **$10k cTrader demo account** and verify BTCEUR availability via `ProtoOASymbolsListReq`.
+- [ ] Choose client: official `ctrader-open-api` (Twisted, stable but slow-moving) vs. community `ctrader-api-client` (asyncio, early-stage).
+- [ ] Full adapter implementation: auth, spot subscriptions, trendbars, orders, SL/TP amend, partial close, reconcile, heartbeat, token refresh, reconnection.
+- [ ] 24–72 h stability soak test.
+
+### Workstream C — Shared Core *(both)*
+- [x] **Broker abstraction layer (`core/broker/`)**: `BrokerAdapter` base with neutral data models, unified order path, symbol-precision rounding, `NO_CHANGE` short-circuit; `Mt5Adapter`, deterministic `SimBroker` (Parquet replay, intrabar SL/TP, partial closes, commissions, slippage) and factory `BROKER_BACKEND = mt5 | sim | ctrader`. **+92 tests.**
+- [x] Broker usage inventory and step-by-step migration plan (`docs/broker_adapter_inventory.md`, `docs/broker_adapter_migration.md`).
+- [ ] Migrate the 22 Engine modules from direct `MetaTrader5` calls to the adapter (risk modules first, trailing stops coordinated last).
+- [ ] Portable paths and configuration (`pathlib`, env-based), lockfile, `python-dotenv` added to requirements.
+- [ ] Off-site encrypted backups and structured (JSON) logs.
+- [ ] Freeze strategy/config release **`reto-v1`** (git tag) used by both stacks.
+
+### 🛡️ Security Hardening *(prerequisite for cut-over)*
+- [x] Control plane hardening implemented on `linux-support` (App + Engine API): localhost-only binding by default, real session authentication with expiring random tokens and login rate limiting, authentication enforced on all API routes, restricted CORS, request size limits, internal service token between App and Engine, input path validation. **App 61/61 tests green.**
+- [ ] Apply equivalent hardening to the Strategy Lab API.
+- [ ] Retire all public relay tunnels; private mesh access only.
+- [ ] Rotate operational secrets at cut-over.
+- [ ] Mobile app: send session token, remove offline PIN fallback, handle 401/429/503.
+
+### 🔧 Execution Correctness Fixes *(found during migration audit)*
+- [x] **Trailing-stop ratchet loop**: persisted SL with excess decimals vs. broker-rounded SL triggered endless modify requests → fixed (symbol-digit rounding + half-point tolerance) with regression test.
+- [x] Portable pytest temp directory (Windows/Linux).
+- [ ] Trailing minimum stop distance reads the wrong symbol field (`stops_level` vs `trade_stops_level`).
+- [ ] Hard-coded IOC filling in 5 modules (must follow symbol filling mode for broker portability).
+- [ ] SL/TP sent unrounded in order execution.
+- [ ] Lot size rounded to nearest instead of **down** (can exceed sized risk).
+- [ ] MT5 server time treated as UTC (impacts session-based strategies such as Asian/London windows).
+- [ ] MT5 `None` responses treated as "no positions" during micro-disconnects.
+- [ ] Candle fetch reconnects to MT5 on every call.
+- [ ] Align `rules_config.json` active strategies with the frozen 5-strategy challenge portfolio.
+
+### ✅ Test Status (linux-support)
+| Repository | Result |
+| :--- | :---: |
+| Trading Engine (incl. broker layer & Linux watchdog) | **231 / 231** ✅ |
+| LastEdge App (incl. security hardening) | **61 / 61** ✅ |
+| Strategy Lab | **56 / 56** ✅ |
+
+---
+
+## 🏁 Phase 7: Dual 60-Day Verified Challenge
+> **Model**: Two **$10,000 demo** accounts, **same frozen code (`reto-v1`)**, same symbols (EURUSD, XAUUSD, BTCEUR), same risk rules, **zero manual intervention for 60 days**, launched simultaneously once both stacks pass the soak test.
+
+- [ ] **Stack A — MT5** (headless Linux) · **Stack B — cTrader Open API** (Linux native).
+- [ ] **Challenge broker requirements** (both stacks):
+  - Free demo account with configurable **$10,000** balance and no expiry during the 60 days.
+  - **No KYC** required for demo accounts.
+  - **Crypto CFDs** — ideally **BTCEUR** (fallback: BTCUSD with synthetic BTCEUR = BTCUSD ÷ EURUSD).
+  - **Investor (read-only) password** available / changeable, or native platform support, so the account can be linked to **Myfxbook / FXBlue** and shared publicly.
+  - Stable account management (no loss of access after platform migrations).
+  - Candidates: cTrader → Pepperstone (EU) demo; MT5 → still open (re-evaluate once Stack A is ready).
+- [ ] Third-party verification on **Myfxbook / FXBlue** for both accounts.
+- [ ] Trade-by-trade comparison during the overlapping window (same signals, different execution).
+- [ ] **Go / No-Go criteria at day 60**:
+  - Profit Factor ≥ **1.30**
+  - Max drawdown < **6%**
+  - ≥ **60–80** trades
+  - Positive result in **both** months
+  - → **Go**: proceed to Phase 9 (funded accounts) on Linux infrastructure.
+  - → **No-Go**: return to Strategy Lab before any capital or infrastructure spend.
 
 ---
 
 ## 🚀 Future Milestones: Monetization & Capital Scaling
 
-### 🎯 Phase 6: Monetization Route 1 — Recurring VIP Signals Channel & Community (Active)
+### 🎯 Phase 8: Monetization Route 1 — Recurring VIP Signals Channel & Community (Active)
 > **Model**: Real-time algorithmic signal broadcast generated by the Trading Engine scanner to private VIP subscribers, **without exposing proprietary code, weights, or model architectures**.
 
-- [x] **Private VIP Signals Channel Infrastructure**:
-  - Dedicated private VIP channel support connected via `.env` (`TELEGRAM_VIP_CHANNEL_ID`).
-  - Dual broadcast dispatch engine in [`autosignals.py`](file:///C:/LastEdge/LastEdge%20Trading%20Engine/services/autosignals.py) and [`notification_dispatcher.py`](file:///C:/LastEdge/LastEdge%20Trading%20Engine/services/notification_dispatcher.py) replicating every trade to authorized operator chat (`TELEGRAM_CHAT_ID`) and the VIP channel simultaneously.
-  - Strict institutional English alert formatting (`ENTRY`, `STOP LOSS`, `TAKE PROFIT`, `R:R RATIO`, `STATUS: EXECUTED IN MT5 / AUTO-APPROVED`).
-- [x] **Unauthorized Visitor Landing on Bot**:
-  - Inbound messages from external users to `@LastEdgeBot` receive an institutional gate message with direct interactive buttons to the Public Trading Journal ([`@LastEdgeJournal`](https://t.me/LastEdgeJournal)) and founder direct VIP contact ([`@imlast999`](https://t.me/imlast999)).
-- [x] **Rich Visual Trading Alerts**:
-  - Automated high-definition technical chart generation attached to every executed signal with entry, SL, TP, and forward projection box.
-- [x] **Public Transparency & Audit Channels**:
-  - Public Telegram Journal active: [`t.me/LastEdgeJournal`](https://t.me/LastEdgeJournal).
-  - Instagram Broadcast Channel: [`https://ig.me/j/AbZrLKLRbIHnU-xw/`](https://ig.me/j/AbZrLKLRbIHnU-xw/).
-- [ ] **Automated Subscription Billing & Stripe Integration**:
-  - Dedicated checkout gateway for recurring automated membership access.
+- [x] **Private VIP Signals Channel Infrastructure** (dual broadcast to operator chat and VIP channel).
+- [x] **Unauthorized Visitor Landing on Bot** with links to the Public Trading Journal and founder contact (`@imlast999`).
+- [x] **Rich Visual Trading Alerts** with technical charts.
+- [x] **Public Transparency & Audit Channels**: [`t.me/LastEdgeJournal`](https://t.me/LastEdgeJournal), Instagram broadcast channel.
+- [ ] **Automated Subscription Billing & Stripe Integration**.
+- [ ] Launch only after a **verified** track record (Phase 7); review local regulatory requirements for selling signals.
 
 ---
 
-### 🏆 Phase 7: Monetization Route 3 — Prop Firm Funded Accounts ($200,000+ Allocation)
-> **Model**: Scale managed trading capital up to $200,000+ through professional prop firm evaluations (FTMO, FundedNext, Alpha Capital) and retain 80% to 90% of trading profits **with zero clients, zero customer support, and zero personal capital risk**.
+### 🏆 Phase 9: Monetization Route 2 — Prop Firm Funded Accounts ($200,000+ Allocation)
+> **Model**: Scale managed capital through prop firm evaluations and retain 80–90% of profits **with zero clients and zero personal capital risk**. Linux + broker abstraction enables **multiple funded accounts in parallel** across MT5 and cTrader.
 
+- [ ] **Prop firm shortlist (cTrader-compatible, automation allowed)**: **FTMO** (clearest algorithmic policy), **The5ers**, **E8 Markets**. Written confirmation required that an external Open API bot is permitted.
+  - Excluded: FundedNext (prohibits automated trading on cTrader), Maven (EAs prohibited / pre-approval only).
+- [ ] **Request budget compliance**: FTMO caps server requests (≈2,000/day) — audit trailing-stop polling (15 s cadence) and order modification frequency before any evaluation.
 - [ ] **Specialized Prop Firm Risk Profiles**:
-  - Calibrate *Risk Engine v2* with conservative limits:
-    - Maximum daily loss capped at 3.5% (safety buffer below the 5% firm limit).
-    - Maximum total drawdown capped at 8.0% (safety buffer below the 10% firm limit).
-    - Automatic weekend position squaring via *Weekend Exposure Guard*.
-- [ ] **Evaluation Challenge Execution**:
-  - Run validated vault strategies on firm demo challenge servers.
-  - Verify execution slippage and spread behavior under institutional server conditions.
-- [ ] **Capital Allocation & Scaling**:
-  - Complete Phase 1 and Phase 2 evaluation challenges to earn certified funded trader account.
-  - Systematic bi-weekly or monthly profit withdrawals.
+  - Maximum daily loss capped at 3.5% (buffer below the 5% firm limit).
+  - Maximum total drawdown capped at 8.0% (buffer below the 10% firm limit).
+  - Automatic weekend position squaring via *Weekend Exposure Guard*.
+- [ ] **Evaluation Challenge Execution** on validated vault strategies; verify slippage and spread behavior on firm servers.
+- [ ] **Capital Allocation & Scaling**: pass Phase 1/2 evaluations, systematic profit withdrawals, then multi-account scaling on Linux.
+- [ ] **Broker due diligence before any live capital**: prefer strongly regulated brokers/firms; the current MT5 demo broker should be re-evaluated for live use.
 
 ---
 
