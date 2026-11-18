@@ -13,8 +13,9 @@ Research • Walk-Forward Analysis • Monte Carlo • MT5 Execution • Risk En
 [![App](https://img.shields.io/badge/GitHub-App-green?logo=github)](https://github.com/imlast999/lastedge-app)
 [![Android APK](https://img.shields.io/badge/Download%20APK-Latest%20Release-brightgreen?logo=android)](https://github.com/imlast999/lastedge-app/releases/latest)
 [![Ecosystem Orchestrator CI](https://github.com/imlast999/LastEdge/actions/workflows/ecosystem-ci.yml/badge.svg?branch=main)](https://github.com/imlast999/LastEdge/actions/workflows/ecosystem-ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-236%2F236%20Passed-success)](https://github.com/imlast999/LastEdge)
 [![Architecture](https://img.shields.io/badge/Architecture-Decoupled%20REST%20Microservices-orange)](https://github.com/imlast999/LastEdge)
+
+> **Status:** In development — no strategy has passed validation yet
 
 </div>
 
@@ -58,11 +59,11 @@ The ecosystem consists of the following 3 standalone sub-repositories orchestrat
 
 | Repository | GitHub Link | Role | Ports | Test Suite |
 | :--- | :--- | :--- | :---: | :---: |
-| ⚡ **LastEdge Trading Engine** | [**`imlast999/lastedge-trading-engine`**](https://github.com/imlast999/lastedge-trading-engine) | Execution core, MetaTrader 5 driver, Risk Engine v2, dynamic strategy loader, Circuit Breakers. | `:8081` | **132 / 132 PASSED** ✅ |
-| 🧪 **LastEdge Strategy Lab** | [**`imlast999/lastedge-strategy-lab`**](https://github.com/imlast999/lastedge-strategy-lab) | Offline quantitative laboratory, WFA, 1,000 Monte Carlo runs, Deflated Sharpe, 6 quantitative gates. | `:8082` | **54 / 54 PASSED** ✅ |
-| 📱 **LastEdge App** | [**imlast999/lastedge-app**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo Android APK, Discord & Telegram bots with granular toggles. | :8080 | **50 / 50 PASSED** ✅ |
+| ⚡ **LastEdge Trading Engine** | [**`imlast999/lastedge-trading-engine`**](https://github.com/imlast999/lastedge-trading-engine) | Execution core, MetaTrader 5 driver, Risk Engine v2, dynamic strategy loader, Circuit Breakers. | `:8081` | see repo CI badge |
+| 🧪 **LastEdge Strategy Lab** | [**`imlast999/lastedge-strategy-lab`**](https://github.com/imlast999/lastedge-strategy-lab) | Offline quantitative laboratory, WFA, 1,000 Monte Carlo runs, Deflated Sharpe, 6 quantitative gates. | `:8082` | see repo CI badge |
+| 📱 **LastEdge App** | [**imlast999/lastedge-app**](https://github.com/imlast999/lastedge-app) | Web Dashboard (:8080), React Native / Expo Android APK, Discord & Telegram bots with granular toggles. | :8080 | see repo CI badge |
 
-> **Overall Test Suite**: **236 / 236 automated unit & integration tests passing** across the monorepo.
+> **Status:** In development — no strategy has passed validation yet. Test status is reported by each repository's CI badge.
 
 ---
 
